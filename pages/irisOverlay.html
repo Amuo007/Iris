@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Iris Action Marker</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+        pointer-events: none;
+      }
+
+      #marker {
+        position: absolute;
+        width: 0;
+        height: 0;
+        opacity: 0;
+        transition: opacity 180ms ease;
+      }
+
+      .ring,
+      .dot,
+      .cross-h,
+      .cross-v {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+      }
+
+      .dot {
+        width: 12px;
+        height: 12px;
+        margin: -6px 0 0 -6px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 30%, #b8a4ff, #7c3aed 60%, #4f46e5);
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 18px 4px rgba(124, 58, 237, 0.65);
+      }
+
+      .ring {
+        width: 44px;
+        height: 44px;
+        margin: -22px 0 0 -22px;
+        border-radius: 50%;
+        border: 2px solid rgba(168, 139, 255, 0.95);
+        animation: ripple 1.1s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+      }
+
+      .ring.delayed {
+        animation-delay: 0.35s;
+      }
+
+      .cross-h,
+      .cross-v {
+        background: rgba(168, 139, 255, 0.35);
+      }
+
+      .cross-h {
+        width: 100vw;
+        height: 1px;
+        margin-left: -50vw;
+      }
+
+      .cross-v {
+        width: 1px;
+        height: 100vh;
+        margin-top: -50vh;
+      }
+
+      #label {
+        position: absolute;
+        max-width: 320px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        font: 500 11.5px/1.35 -apple-system, "Space Grotesk", system-ui, sans-serif;
+        letter-spacing: 0.01em;
+        color: #fff;
+        background: rgba(28, 22, 48, 0.86);
+        border: 1px solid rgba(168, 139, 255, 0.45);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        transform: translate(-50%, -100%);
+      }
+
+      @keyframes ripple {
+        0% {
+          transform: scale(0.45);
+          opacity: 0.95;
+        }
+        100% {
+          transform: scale(1.9);
+          opacity: 0;
+        }
+      }
+
+      body.waiting .dot {
+        background: radial-gradient(circle at 35% 30%, #ffe1a8, #d97706 60%, #b45309);
+      }
+
+      body.typing .ring {
+        animation-duration: 0.7s;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="marker">
+      <div class="cross-h"></div>
+      <div class="cross-v"></div>
+      <div class="ring"></div>
+      <div class="ring delayed"></div>
+      <div class="dot"></div>
+    </div>
+    <div id="label" hidden></div>
+
+    <script>
+      const { ipcRenderer } = require('electron')
+
+      const marker = document.getElementById('marker')
+      const label = document.getElementById('label')
+      let hideTimer = null
+
+      ipcRenderer.on('iris-overlay', (event, payload) => {
+        if (!payload || !payload.anchor) {
+          return
+        }
+
+        clearTimeout(hideTimer)
+        document.body.className =
+          payload.action && payload.action.type === 'type'
+            ? 'typing'
+            : payload.kind === 'wait'
+            ? 'waiting'
+            : ''
+
+        marker.style.transform = `translate(${payload.anchor.x}px, ${payload.anchor.y}px)`
+        marker.style.opacity = '1'
+
+        if (payload.description) {
+          const pad = 16
+          let left = payload.anchor.x
+          let top = payload.anchor.y - 30
+          if (top < 26) {
+            top = payload.anchor.y + 42
+          }
+          label.hidden = false
+          label.style.left = Math.max(pad, Math.min(window.innerWidth - pad, left)) + 'px'
+          label.style.top = top + 'px'
+          label.textContent = payload.description
+        }
+
+        hideTimer = setTimeout(() => {
+          marker.style.opacity = '0'
+          label.hidden = true
+        }, 2200)
+      })
+
+      ipcRenderer.on('iris-overlay-hide', () => {
+        clearTimeout(hideTimer)
+        marker.style.opacity = '0'
+        label.hidden = true
+      })
+
+      window.addEventListener('resize', () => {
+        marker.style.transition = 'none'
+      })
+
+      // tell the main process we are ready to be positioned
+      ipcRenderer.send('iris-overlay-sync', { ready: true })
+    </script>
+  </body>
+</html>

@@ -177,9 +177,10 @@ function planInputEvents (action, opts) {
           add(Object.assign({ type: 'keyDown', keyCode: code }, mods ? { modifiers: mods } : {}))
           add(Object.assign({ type: 'keyUp', keyCode: code }, mods ? { modifiers: mods } : {}), 20)
         } else {
-          const code = keyCodeFor(ch)
-          if (!code) continue
-          // `char` is what actually inserts text into a focused field
+          // `char` is what actually inserts text into a focused field. Non-ASCII and
+          // astral-plane characters (emoji, CJK, accents) have no named keyCode, so the
+          // character itself is used as the keyCode.
+          const code = keyCodeFor(ch) || ch
           add(Object.assign({ type: 'char', keyCode: code, text: ch, unmodifiedText: ch.toLowerCase() }, mods ? { modifiers: mods } : {}), 16)
         }
       }

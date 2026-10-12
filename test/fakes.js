@@ -56,6 +56,7 @@ class FakeComputer {
     this.screenshots = 0
     this.pausedByUser = false
     this.takeover = null
+    this.takeoverCount = 0
     this.failScreenshotTimes = options.failScreenshotTimes || 0
   }
 
@@ -86,13 +87,20 @@ class FakeComputer {
   }
 
   state () {
-    return { pausedByUser: this.pausedByUser, takeover: this.takeover, url: this.url, loading: false }
+    return {
+      pausedByUser: this.pausedByUser,
+      takeover: this.takeover,
+      takeoverCount: this.takeoverCount,
+      url: this.url,
+      loading: false
+    }
   }
 
   /** Simulate the human grabbing the mouse. */
   userInteracts (kind, at) {
     this.pausedByUser = true
     this.takeover = { kind: kind || 'click', at: at || { x: 10, y: 10 } }
+    this.takeoverCount++
   }
 }
 

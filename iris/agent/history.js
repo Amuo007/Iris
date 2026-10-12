@@ -132,6 +132,7 @@ function createHistory (options) {
       return entries.map(e => ({
         kind: e.kind,
         text: e.thought || e.text,
+        thought: e.thought || null,
         action: e.action || null,
         hasImage: !!e.dataUrl,
         url: e.url || null

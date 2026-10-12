@@ -127,7 +127,7 @@ function mapActionToView (action, mapping, opts) {
   const isKind = f => (f === 'x' || f === 'fromX' || f === 'toX') ? 'x' : 'y'
 
   for (const f of COORD_FIELDS) {
-    if (typeof out[f] === 'number' && Number.isFinite(out[f])) {
+    if (typeof out[f] === 'number') {
       out[f] = imageToCssValue(out[f], space, mapping, isKind(f))
     }
   }

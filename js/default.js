@@ -166,6 +166,9 @@ require('taskOverlay/taskOverlay.js').initialize()
 require('sessionRestore.js').initialize()
 require('bookmarkConverter.js').initialize()
 require('newTabPage.js').initialize()
+require('iris/layout.js').initialize()
+require('iris/omnibox.js').initialize()
+require('iris/agentPanel.js').initialize()
 require('macHandoff.js').initialize()
 
 // default searchbar plugins

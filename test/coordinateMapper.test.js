@@ -130,7 +130,8 @@ test('actionAnchorCss returns where the marker goes', () => {
 test('fitDimensions downscales the long edge only', () => {
   assert.deepStrictEqual(fitDimensions(2880, 1800, 1568), { width: 1568, height: 980 })
   assert.deepStrictEqual(fitDimensions(1200, 900, 1568), { width: 1200, height: 900 })
-  assert.deepStrictEqual(fitDimensions(900, 1200, 1568), { width: 1176, height: 1568 })
+  assert.deepStrictEqual(fitDimensions(900, 1200, 1568), { width: 900, height: 1200 })
+  assert.deepStrictEqual(fitDimensions(900, 3000, 1500), { width: 450, height: 1500 })
 })
 
 test('invalid geometry is rejected loudly', () => {

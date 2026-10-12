@@ -161,7 +161,9 @@ const webviews = {
       if (!hasSeparateTitlebar && (window.platformType === 'linux' || window.platformType === 'windows') && !windowIsMaximized && !windowIsFullscreen) {
         var navbarHeight = 48
       } else {
-        var navbarHeight = 36
+        // Iris uses a two-row command bar (command row + tab-card row).
+        // Keep this in sync with --iris-navbar-height in css/iris.css.
+        var navbarHeight = window.IRIS_NAVBAR_HEIGHT || 36
       }
 
       const viewMargins = webviews.viewMargins

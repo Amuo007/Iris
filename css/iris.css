@@ -1,0 +1,721 @@
+/* ============================================================================
+   css/iris.css — the Iris design system.
+
+   Loaded last in dist/bundle.css, so it restyles everything Min ships. The goal is
+   that someone who knows Min does not recognise this: a two-row glass command bar with a
+   centred omnibox, floating card tabs, a violet "iris" accent gradient, bundled Space
+   Grotesk / Inter type, 8–20px radii, layered elevation and full light + dark themes.
+
+   Keep --iris-navbar-height in sync with window.IRIS_NAVBAR_HEIGHT (js/iris/layout.js).
+   ========================================================================= */
+
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("../ext/fonts/SpaceGrotesk-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("../ext/fonts/SpaceGrotesk-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("../ext/fonts/SpaceGrotesk-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("../ext/fonts/Inter-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("../ext/fonts/Inter-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: block;
+}
+
+:root {
+  --iris-navbar-height: 86px;
+
+  --iris-font-ui: "Space Grotesk", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --iris-font-text: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  --iris-r-xs: 8px;
+  --iris-r-sm: 11px;
+  --iris-r-md: 14px;
+  --iris-r-lg: 20px;
+  --iris-r-pill: 999px;
+
+  --iris-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --iris-fast: 130ms;
+  --iris-med: 220ms;
+
+  /* light theme (default) */
+  --iris-surface: #f4f3fa;
+  --iris-surface-2: #eceaf6;
+  --iris-card: #ffffff;
+  --iris-ink: #16131f;
+  --iris-ink-soft: #574f6b;
+  --iris-ink-faint: #8b84a1;
+  --iris-hairline: rgba(22, 19, 31, 0.09);
+  --iris-glass: rgba(252, 251, 255, 0.82);
+  --iris-accent: #6d28d9;
+  --iris-accent-2: #2563eb;
+  --iris-accent-soft: rgba(109, 40, 217, 0.1);
+  --iris-accent-ink: #ffffff;
+  --iris-gradient: linear-gradient(118deg, #7c3aed 0%, #6366f1 48%, #2563eb 100%);
+  --iris-aurora: radial-gradient(120% 160% at 12% -40%, rgba(124, 58, 237, 0.22), transparent 60%),
+    radial-gradient(90% 140% at 90% -30%, rgba(37, 99, 235, 0.16), transparent 62%);
+  --iris-shadow-1: 0 1px 2px rgba(19, 14, 35, 0.06), 0 2px 8px rgba(19, 14, 35, 0.05);
+  --iris-shadow-2: 0 8px 24px rgba(19, 14, 35, 0.1), 0 2px 6px rgba(19, 14, 35, 0.06);
+  --iris-shadow-3: 0 18px 48px rgba(19, 14, 35, 0.18);
+  --iris-ok: #0d9488;
+  --iris-warn: #b45309;
+  --iris-danger: #e11d48;
+}
+
+body.dark-mode {
+  --iris-surface: #0a0910;
+  --iris-surface-2: #121019;
+  --iris-card: #16131f;
+  --iris-ink: #ece9f7;
+  --iris-ink-soft: #a9a2c0;
+  --iris-ink-faint: #6d6685;
+  --iris-hairline: rgba(255, 255, 255, 0.08);
+  --iris-glass: rgba(19, 16, 29, 0.78);
+  --iris-accent: #a78bfa;
+  --iris-accent-2: #60a5fa;
+  --iris-accent-soft: rgba(167, 139, 250, 0.14);
+  --iris-accent-ink: #140f26;
+  --iris-gradient: linear-gradient(118deg, #a78bfa 0%, #818cf8 46%, #60a5fa 100%);
+  --iris-aurora: radial-gradient(120% 160% at 10% -40%, rgba(124, 58, 237, 0.3), transparent 62%),
+    radial-gradient(90% 140% at 92% -30%, rgba(37, 99, 235, 0.2), transparent 64%);
+  --iris-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 2px 10px rgba(0, 0, 0, 0.34);
+  --iris-shadow-2: 0 10px 28px rgba(0, 0, 0, 0.5);
+  --iris-shadow-3: 0 22px 60px rgba(0, 0, 0, 0.6);
+  --iris-ok: #2dd4bf;
+  --iris-warn: #fbbf24;
+  --iris-danger: #fb7185;
+}
+
+body {
+  font-family: var(--iris-font-text);
+  background: var(--iris-surface);
+  color: var(--iris-ink);
+  --theme-primary-color: var(--iris-accent);
+}
+
+.has-thin-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--iris-ink-faint);
+  border-radius: var(--iris-r-pill);
+}
+
+/* ----------------------------------------------------------------------------
+   Command bar: row 1 = brand · nav · omnibox · Ask Iris · menu, row 2 = tab cards
+   -------------------------------------------------------------------------- */
+
+#navbar {
+  align-content: flex-start;
+  height: calc(var(--iris-navbar-height) + var(--control-space-top));
+  padding: calc(6px + var(--control-space-top)) 12px 4px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  background: var(--iris-glass);
+  backdrop-filter: blur(28px) saturate(160%);
+  border-bottom: 1px solid var(--iris-hairline);
+  box-shadow: var(--iris-shadow-1);
+  z-index: 5;
+}
+
+#navbar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--iris-aurora);
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+#navbar::after {
+  content: "Iris";
+  position: absolute;
+  left: 14px;
+  top: calc(var(--control-space-top) + 34px);
+  font: 600 10px/1 var(--iris-font-ui);
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--iris-ink-faint);
+  pointer-events: none;
+}
+
+#mac-window-drag-area {
+  width: 74px;
+  height: 40px;
+  order: 0;
+}
+
+#iris-brand {
+  order: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 14px;
+  margin-right: 4px;
+}
+
+.iris-brand-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--iris-gradient);
+  position: relative;
+  box-shadow: 0 2px 10px rgba(109, 40, 217, 0.42), inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+  flex: none;
+}
+
+.iris-brand-mark::before {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: var(--iris-surface);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+
+.iris-brand-mark::after {
+  content: "";
+  position: absolute;
+  inset: 11px;
+  border-radius: 50%;
+  background: var(--iris-ink);
+}
+
+#toolbar-navigation-buttons {
+  order: 2;
+  width: auto;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 3px;
+  border-radius: var(--iris-r-pill);
+  background: var(--iris-surface-2);
+  border: 1px solid var(--iris-hairline);
+}
+
+#toolbar-navigation-buttons.can-go-forward:hover {
+  width: auto;
+}
+
+#back-button,
+#forward-button,
+#reload-button {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  color: var(--iris-ink-soft);
+  transition: background var(--iris-fast) var(--iris-ease), color var(--iris-fast);
+}
+
+#back-button:hover,
+#forward-button:hover,
+#reload-button:hover {
+  background: var(--iris-card);
+  color: var(--iris-ink);
+  box-shadow: var(--iris-shadow-1);
+}
+
+#menu-button {
+  order: 6;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--iris-r-sm);
+  color: var(--iris-ink-soft);
+  display: grid;
+  place-items: center;
+  transition: background var(--iris-fast), color var(--iris-fast);
+}
+
+#menu-button:hover {
+  background: var(--iris-accent-soft);
+  color: var(--iris-accent);
+}
+
+#switch-task-button {
+  order: 5;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--iris-r-sm);
+  display: grid;
+  place-items: center;
+  color: var(--iris-ink-soft);
+}
+#switch-task-button svg {
+  width: 15px;
+  height: 15px;
+}
+#switch-task-button:hover {
+  background: var(--iris-accent-soft);
+  color: var(--iris-accent);
+}
+
+/* --- Ask Iris button ---------------------------------------------------- */
+
+.iris-ask-button {
+  order: 4;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 14px 0 11px;
+  border: 1px solid transparent;
+  border-radius: var(--iris-r-pill);
+  background: var(--iris-gradient);
+  color: #fff;
+  font: 600 12.5px/1 var(--iris-font-ui);
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(109, 40, 217, 0.34);
+  transition: transform var(--iris-fast) var(--iris-ease), box-shadow var(--iris-fast), filter var(--iris-fast);
+}
+
+.iris-ask-button:hover {
+  transform: translateY(-1px);
+  filter: saturate(1.1);
+  box-shadow: 0 8px 22px rgba(109, 40, 217, 0.42);
+}
+.iris-ask-button:active {
+  transform: translateY(0);
+}
+.iris-ask-button svg {
+  flex: none;
+}
+
+body.iris-panel-open .iris-ask-button {
+  background: var(--iris-card);
+  color: var(--iris-accent);
+  border-color: var(--iris-accent);
+  box-shadow: var(--iris-shadow-1);
+}
+
+/* --- omnibox (row 1, centred) ------------------------------------------- */
+
+#iris-omnibox {
+  order: 3;
+  flex: 1 1 340px;
+  min-width: 200px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 14px;
+  margin: 0 6px;
+  box-sizing: border-box;
+  border-radius: var(--iris-r-pill);
+  border: 1px solid var(--iris-hairline);
+  background: var(--iris-card);
+  color: var(--iris-ink-soft);
+  font: 400 13px/1 var(--iris-font-text);
+  cursor: text;
+  box-shadow: var(--iris-shadow-1);
+  transition: box-shadow var(--iris-med) var(--iris-ease), border-color var(--iris-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+#iris-omnibox:hover {
+  border-color: rgba(109, 40, 217, 0.35);
+}
+
+#iris-omnibox .iris-omnibox-icon {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  opacity: 0.7;
+}
+
+#iris-omnibox .iris-omnibox-title {
+  font-weight: 600;
+  color: var(--iris-ink);
+  flex: none;
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#iris-omnibox .iris-omnibox-sep {
+  color: var(--iris-ink-faint);
+  flex: none;
+}
+
+#iris-omnibox .iris-omnibox-url {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.005em;
+}
+
+#iris-omnibox .iris-omnibox-url b {
+  color: var(--iris-ink);
+  font-weight: 600;
+}
+
+#iris-omnibox.secure .iris-omnibox-icon {
+  color: var(--iris-ok);
+}
+
+body.is-edit-mode #iris-omnibox {
+  /* display:none (not opacity) so the real address input can take this slot on row 1 */
+  display: none;
+}
+
+/* the real address input: lifted out of the tab strip onto row 1 */
+#tab-editor {
+  order: 3;
+  flex: 1 1 340px;
+  min-width: 200px;
+  height: 34px;
+  margin: 0 6px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+#tab-editor[hidden] {
+  display: none;
+}
+
+#tab-editor-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 16px;
+  box-sizing: border-box;
+  border-radius: var(--iris-r-pill);
+  border: 1px solid var(--iris-accent);
+  background: var(--iris-card);
+  color: var(--iris-ink);
+  font: 400 13.5px/1 var(--iris-font-text);
+  outline: none;
+  box-shadow: 0 0 0 4px var(--iris-accent-soft), var(--iris-shadow-2);
+}
+
+#tab-editor .tab-editor-button {
+  position: static;
+  margin-left: -34px;
+  color: var(--iris-ink-faint);
+}
+
+/* ----------------------------------------------------------------------------
+   Tab strip: floating rounded cards on their own row
+   -------------------------------------------------------------------------- */
+
+#navbar #tabs {
+  order: 9;
+  /* flex: 1 in Min's tabBar.css is two ids deep, so match that specificity */
+  flex: 0 0 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 34px;
+  margin-top: 2px;
+}
+
+body.mac:not(.is-edit-mode):not(.fullscreen):not(.separate-titlebar) #mac-window-drag-area {
+  margin-left: 0;
+  width: 74px;
+  height: 34px;
+}
+
+#tabs #tabs-inner {
+  gap: 6px;
+  padding: 0 2px;
+  overflow-y: hidden;
+}
+
+.tab-item {
+  flex: 0 1 208px;
+  min-width: 52px;
+  height: 30px;
+  line-height: 30px;
+  align-items: stretch;
+  gap: 6px;
+  padding: 0 8px;
+  border-radius: var(--iris-r-md);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--iris-ink-soft);
+  transition: background var(--iris-fast) var(--iris-ease), color var(--iris-fast),
+    box-shadow var(--iris-fast), border-color var(--iris-fast);
+}
+
+.tab-item:hover {
+  background: var(--iris-surface-2);
+  color: var(--iris-ink);
+}
+
+.tab-item.active {
+  min-width: 168px;
+  background: var(--iris-card);
+  border-color: var(--iris-hairline);
+  color: var(--iris-ink);
+  box-shadow: var(--iris-shadow-1);
+}
+
+/* Iris' "current tab" indicator: a gradient underline instead of Min's top bar */
+
+.tab-item.active::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 3px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--iris-gradient);
+}
+
+.tab-item .title-container {
+  min-width: 0;
+  flex: 1;
+  height: 30px;
+  padding: 0;
+  mask-image: none;
+}
+
+.tab-item .tab-icon-area {
+  align-self: center;
+}
+
+.tab-item .title,
+.tab-item .url-element {
+  font: 500 12.5px/30px var(--iris-font-ui);
+  letter-spacing: 0.005em;
+}
+
+.tab-item .tab-icon-area {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.tab-item .tab-close-button {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity var(--iris-fast), background var(--iris-fast), color var(--iris-fast);
+}
+
+.tab-item:hover .tab-close-button,
+.tab-item.active .tab-close-button {
+  opacity: 0.6;
+}
+
+.tab-item .tab-close-button:hover {
+  opacity: 1;
+  background: var(--iris-danger);
+  color: #fff;
+}
+
+#navbar .navbar-right-actions {
+  order: 10;
+  flex: none;
+  display: flex;
+  align-items: center;
+  margin-left: 2px;
+}
+
+#add-tab-button {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--iris-ink-faint);
+  transition: background var(--iris-fast), color var(--iris-fast);
+}
+
+#add-tab-button:hover {
+  background: var(--iris-accent-soft);
+  color: var(--iris-accent);
+}
+
+/* Min fades the tab strip out whenever the address field has focus, which on Iris leaves
+   an entire empty row. Iris keeps the tabs readable instead. */
+
+.is-edit-mode .tab-item {
+  opacity: 0.42;
+}
+
+.is-edit-mode .tab-item.active {
+  opacity: 1;
+}
+
+/* ----------------------------------------------------------------------------
+   Search / autocomplete dropdown
+   -------------------------------------------------------------------------- */
+
+#searchbar {
+  top: calc(var(--control-space-top) + var(--iris-navbar-height) - 6px);
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  width: min(760px, calc(100vw - 32px));
+  box-sizing: border-box;
+  border: 1px solid var(--iris-hairline);
+  border-radius: var(--iris-r-lg);
+  background: var(--iris-card);
+  color: var(--iris-ink);
+  box-shadow: var(--iris-shadow-3);
+  font-family: var(--iris-font-text);
+  overflow: hidden;
+}
+
+/* the autocomplete dropdown only exists while the address field is focused */
+#searchbar {
+  display: none;
+}
+
+body.is-edit-mode #searchbar:not([hidden]) {
+  display: block;
+}
+
+#searchbar .top-answer-area {
+  padding: 14px 18px;
+}
+
+.searchbar-item {
+  border-radius: var(--iris-r-sm);
+  margin: 2px 6px;
+  padding: 8px 12px;
+}
+
+.searchbar-item.selected {
+  background: var(--iris-accent-soft);
+  color: var(--iris-accent);
+}
+
+/* ----------------------------------------------------------------------------
+   Find in page, downloads, prompts
+   -------------------------------------------------------------------------- */
+
+#findinpage-bar {
+  top: calc(var(--control-space-top) + var(--iris-navbar-height) + 10px);
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  width: min(520px, calc(100vw - 32px));
+  box-sizing: border-box;
+  border: 1px solid var(--iris-hairline);
+  border-radius: var(--iris-r-pill);
+  background: var(--iris-card);
+  color: var(--iris-ink);
+  box-shadow: var(--iris-shadow-2);
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+}
+
+#findinpage-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--iris-ink);
+  font: 400 13px/1 var(--iris-font-text);
+}
+
+#download-bar {
+  bottom: 12px;
+  right: 12px;
+  left: auto;
+  width: auto;
+  max-width: min(560px, calc(100vw - 24px));
+  border: 1px solid var(--iris-hairline);
+  border-radius: var(--iris-r-md);
+  background: var(--iris-card);
+  color: var(--iris-ink);
+  box-shadow: var(--iris-shadow-3);
+  padding: 8px;
+}
+
+.download-item {
+  border-radius: var(--iris-r-sm);
+  background: var(--iris-surface-2);
+  border: none;
+}
+
+/* ----------------------------------------------------------------------------
+   Task overlay (spaces)
+   -------------------------------------------------------------------------- */
+
+#task-overlay {
+  background: color-mix(in srgb, var(--iris-surface) 88%, transparent);
+  backdrop-filter: blur(30px) saturate(150%);
+  font-family: var(--iris-font-text);
+}
+
+#task-overlay .task-search-input-container {
+  border-radius: var(--iris-r-pill);
+  background: var(--iris-card);
+  border: 1px solid var(--iris-hairline);
+  box-shadow: var(--iris-shadow-1);
+}
+
+.task-container {
+  border-radius: var(--iris-r-lg);
+  background: var(--iris-card);
+  border: 1px solid var(--iris-hairline);
+  box-shadow: var(--iris-shadow-2);
+}
+
+/* ----------------------------------------------------------------------------
+   Generic surfaces used by Min's manager pages (they share pagebase.css)
+   -------------------------------------------------------------------------- */
+
+.modal,
+.page-body {
+  font-family: var(--iris-font-text);
+}
+
+.modal {
+  border-radius: var(--iris-r-lg);
+  border: 1px solid var(--iris-hairline);
+  background: var(--iris-card);
+  color: var(--iris-ink);
+  box-shadow: var(--iris-shadow-3);
+}
+
+/* the page area must start under the two-row command bar, or the body overflows and the
+   whole chrome scrolls out of view */
+
+#webviews {
+  height: calc(100vh - var(--iris-navbar-height) - var(--control-space-top));
+}
+
+/* text selection in the chrome uses the accent */
+::selection {
+  background: var(--iris-accent-soft);
+}

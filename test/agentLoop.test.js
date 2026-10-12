@@ -224,7 +224,7 @@ test('user takeover pauses the agent and tells the model what happened', async (
 
 test('a repeated ineffective action parks the agent for the human', async () => {
   const same = json('same', { type: 'click', x: 100, y: 100 })
-  const h = harness([same, same, same, same, same, json('done', { type: 'done' })], null, {
+  const h = harness([same, same, same, json('different approach', { type: 'click', x: 700, y: 300 }), json('done', { type: 'done' })], null, {
     safety: { repeatActionLimit: 2 }
   })
   const running = h.agent.run('stuck')

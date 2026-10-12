@@ -54,6 +54,7 @@ function createAgent (opts) {
   const computer = opts.computer
   const model = opts.model
   const emit = typeof opts.onEvent === 'function' ? opts.onEvent : function () {}
+  const log = typeof opts.log === 'function' ? opts.log : function () {}
   const delay = opts.delay || wait
   const now = opts.now || Date.now
 
@@ -78,7 +79,7 @@ function createAgent (opts) {
     if (resumeDeferred) {
       const d = resumeDeferred
       resumeDeferred = null
-      d.resolve()
+      d.resolve(!stopRequested)
     }
   }
 
@@ -102,14 +103,26 @@ function createAgent (opts) {
     return new Promise(function (resolve) { resumeDeferred = { resolve } })
   }
 
-  async function modelNext (messages, step) {
+  async function modelNext (messages, step, obs) {
     const timeoutMs = safety.config.maxModelMsPerStep || cfg.maxModelMsPerStep
     let timer = null
     const timeout = new Promise((resolve, reject) => {
       timer = setTimeout(() => reject(new Error('model did not respond within ' + timeoutMs + ' ms')), timeoutMs)
     })
     try {
-      return await Promise.race([Promise.resolve(model.next({ messages, step, history: history.transcript() })), timeout])
+      return await Promise.race([
+        Promise.resolve(model.next({
+          messages: messages,
+          step: step,
+          history: history.transcript(),
+          lastObservation: {
+            width: obs.width, height: obs.height,
+            viewWidth: obs.viewWidth, viewHeight: obs.viewHeight,
+            url: obs.url, loading: obs.loading
+          }
+        })),
+        timeout
+      ])
     } finally {
       if (timer) clearTimeout(timer)
     }
@@ -161,6 +174,7 @@ function createAgent (opts) {
     emit('run:start', { task })
 
     let autoWaits = 0
+    let lastTakeoverCount = 0
 
     /* eslint-disable no_constant_condition */
     while (true) {
@@ -175,8 +189,12 @@ function createAgent (opts) {
       emit('step:start', { step: state.step, remaining: safety.config.maxSteps - state.step })
 
       // a real human touched the page → pause and tell the model why
+      log('phase:readPageState')
       const pageState = await readPageState()
-      if (pageState.pausedByUser && !state.pausedByUser) {
+      log('phase:readPageState done')
+      const takeoverCount = pageState.takeoverCount || 0
+      if (takeoverCount > lastTakeoverCount) {
+        lastTakeoverCount = takeoverCount
         state.pausedByUser = true
         state.takeover = pageState.takeover || null
         history.addTakeover(state.takeover)
@@ -186,7 +204,9 @@ function createAgent (opts) {
       }
 
       // ---- 2. perceive -------------------------------------------------------
+      log('phase:screenshot')
       const shot = await screenshotSafe()
+      log('phase:screenshot done ok=' + shot.ok)
       if (!shot.ok) {
         safety.noteRetry('screenshot failed: ' + shot.error)
         emit('error', { step: state.step, where: 'screenshot', error: shot.error })
@@ -230,7 +250,7 @@ function createAgent (opts) {
       let raw
       safety.beforeModelCall()
       try {
-        raw = await modelNext(history.messages(), state.step)
+        raw = await modelNext(history.messages(), state.step, obs)
       } catch (err) {
         const gate = safety.noteRetry(err.message)
         emit('error', { step: state.step, where: 'model', error: err.message })
@@ -283,7 +303,7 @@ function createAgent (opts) {
       }
 
       // ---- 7. stop gate on the action itself ---------------------------------
-      const actionGate = safety.beforeAction(mapped, { pausedByUser: pauseRequested || pageState.pausedByUser })
+      const actionGate = safety.beforeAction(mapped, { pausedByUser: pauseRequested, url: pageState.url })
       if (!actionGate.allow) {
         emit('blocked', { step: state.step, kind: actionGate.kind, reason: actionGate.reason, action: parsed.action })
         if (actionGate.kind === 'loop') {
