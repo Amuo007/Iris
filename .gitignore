@@ -4,3 +4,6 @@ main.build.js
 build/
 .DS_Store
 *.log
+
+# generated icon sources
+/build/

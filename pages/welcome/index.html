@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Welcome to Iris</title>
+    <style>
+      @font-face {
+        font-family: "Space Grotesk";
+        src: url("../../ext/fonts/SpaceGrotesk-400.woff2") format("woff2");
+        font-weight: 400;
+      }
+      @font-face {
+        font-family: "Space Grotesk";
+        src: url("../../ext/fonts/SpaceGrotesk-600.woff2") format("woff2");
+        font-weight: 600;
+      }
+      @font-face {
+        font-family: "Space Grotesk";
+        src: url("../../ext/fonts/SpaceGrotesk-700.woff2") format("woff2");
+        font-weight: 700;
+      }
+      @font-face {
+        font-family: "Inter";
+        src: url("../../ext/fonts/Inter-400.woff2") format("woff2");
+        font-weight: 400;
+      }
+      @font-face {
+        font-family: "Inter";
+        src: url("../../ext/fonts/Inter-500.woff2") format("woff2");
+        font-weight: 500;
+      }
+
+      :root {
+        --ink: #ece9fb;
+        --ink-soft: #b9b3d6;
+        --ink-faint: #8c86ad;
+        --accent: #8f7bff;
+        --accent-2: #4fd0e0;
+        --surface: rgba(255, 255, 255, 0.045);
+        --hairline: rgba(255, 255, 255, 0.09);
+      }
+
+      @media (prefers-color-scheme: light) {
+        :root {
+          --ink: #1d1733;
+          --ink-soft: #4b4468;
+          --ink-faint: #6f6890;
+          --surface: rgba(28, 20, 60, 0.04);
+          --hairline: rgba(28, 20, 60, 0.1);
+        }
+        body {
+          background: #f4f2fd !important;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(1100px 620px at 12% -10%, #2a1f5c 0%, rgba(42, 31, 92, 0) 62%),
+          radial-gradient(900px 620px at 96% 8%, #123a58 0%, rgba(18, 58, 88, 0) 58%),
+          #0c0a17;
+        color: var(--ink);
+        font: 400 16px/1.65 "Inter", system-ui, sans-serif;
+        display: flex;
+        justify-content: center;
+        padding: clamp(28px, 7vh, 84px) 24px 80px;
+      }
+
+      main {
+        width: min(720px, 100%);
+      }
+
+      .mark {
+        width: 68px;
+        height: 68px;
+        margin-bottom: 22px;
+      }
+
+      h1 {
+        font: 700 clamp(34px, 5vw, 52px)/1.1 "Space Grotesk", system-ui, sans-serif;
+        letter-spacing: -0.025em;
+        margin: 0 0 12px;
+        background: linear-gradient(96deg, var(--ink) 20%, var(--accent) 62%, var(--accent-2) 96%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      .lede {
+        font-size: 18px;
+        color: var(--ink-soft);
+        margin: 0 0 34px;
+        max-width: 56ch;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 14px;
+        margin-bottom: 34px;
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--hairline);
+        border-radius: 16px;
+        padding: 18px 18px 20px;
+      }
+
+      .card h2 {
+        font: 600 15px/1.3 "Space Grotesk", system-ui, sans-serif;
+        margin: 0 0 8px;
+        letter-spacing: -0.01em;
+      }
+
+      .card p {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--ink-faint);
+      }
+
+      kbd {
+        display: inline-block;
+        min-width: 1.5em;
+        padding: 1px 6px;
+        border: 1px solid var(--hairline);
+        border-bottom-width: 2px;
+        border-radius: 6px;
+        background: var(--surface);
+        font: 500 12.5px/1.6 "Inter", system-ui, sans-serif;
+        color: var(--ink);
+        text-align: center;
+      }
+
+      .keys {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        color: var(--ink-faint);
+      }
+
+      .safety {
+        border-left: 3px solid var(--accent);
+        padding-left: 18px;
+        margin: 0 0 30px;
+      }
+
+      .safety h2 {
+        font: 600 15px/1.3 "Space Grotesk", system-ui, sans-serif;
+        margin: 0 0 6px;
+      }
+
+      .safety p {
+        margin: 0;
+        font-size: 14.5px;
+        color: var(--ink-faint);
+        max-width: 62ch;
+      }
+
+      button {
+        appearance: none;
+        border: 0;
+        border-radius: 999px;
+        padding: 13px 26px;
+        font: 600 15px/1 "Space Grotesk", system-ui, sans-serif;
+        letter-spacing: -0.01em;
+        cursor: pointer;
+      }
+
+      .primary {
+        color: #fff;
+        background: linear-gradient(96deg, #6d4dff, #4f9be8);
+        box-shadow: 0 10px 26px rgba(109, 77, 255, 0.35);
+      }
+
+      .primary:hover {
+        filter: brightness(1.08);
+      }
+
+      .ghost {
+        background: transparent;
+        color: var(--ink-soft);
+        border: 1px solid var(--hairline);
+        margin-left: 10px;
+      }
+
+      .ghost:hover {
+        color: var(--ink);
+        border-color: var(--accent);
+      }
+
+      footer {
+        margin-top: 34px;
+        font-size: 13px;
+        color: var(--ink-faint);
+      }
+
+      footer a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <svg class="mark" viewBox="0 0 1024 1024" aria-hidden="true">
+        <defs>
+          <radialGradient id="i" cx="0.42" cy="0.36" r="0.75">
+            <stop offset="0" stop-color="#b9a4ff" />
+            <stop offset="0.5" stop-color="#7c5cff" />
+            <stop offset="1" stop-color="#2ec5d6" />
+          </radialGradient>
+        </defs>
+        <circle cx="512" cy="512" r="420" fill="url(#i)" />
+        <circle cx="512" cy="512" r="150" fill="#0c0a17" />
+        <ellipse
+          cx="450"
+          cy="452"
+          rx="46"
+          ry="30"
+          fill="#fff"
+          opacity="0.9"
+          transform="rotate(-28 450 452)"
+        />
+      </svg>
+
+      <h1>Welcome to Iris</h1>
+
+      <p class="lede">
+        Iris is a browser you can use, and an assistant you can delegate to. Everything you expect
+        from a browser is here; when a task is tedious, describe it and Iris drives the page for you.
+      </p>
+
+      <div class="grid">
+        <div class="card">
+          <h2>Ask, don't click</h2>
+          <p>
+            Press <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>Space</kbd> to open the Iris panel, describe the
+            outcome you want, then watch it work step by step.
+          </p>
+        </div>
+        <div class="card">
+          <h2>Everything is shown</h2>
+          <p>
+            Every step lists what Iris saw, what it decided and what it did, with the screenshot it
+            acted on. Pause, stop, or just take over at any moment.
+          </p>
+        </div>
+        <div class="card">
+          <h2>Your model, your machine</h2>
+          <p>
+            Point Iris at any OpenAI-compatible vision model in
+            <strong>Settings → Iris AI</strong>. Nothing about the model leaves your network unless
+            you send it there.
+          </p>
+        </div>
+      </div>
+
+      <div class="safety">
+        <h2>How Iris looks and acts</h2>
+        <p>
+          Iris only ever sees screenshots of the page and sends real mouse and keyboard events, the
+          same as you. It never reads a page's markup or runs code inside the sites you visit, so a
+          site can only show Iris the same thing it shows you. Purchases, payments and form
+          submissions are refused unless you turn them on in settings.
+        </p>
+      </div>
+
+      <div class="keys">
+        <button class="primary" id="start">Start browsing</button>
+        <button class="ghost" id="settings">Configure Iris AI</button>
+      </div>
+
+      <footer>
+        Iris is built on the excellent
+        <a href="https://github.com/minbrowser/min">Min browser</a> (Apache-2.0), which remains the
+        foundation for tabs, history, bookmarks, search and privacy protection.
+      </footer>
+    </main>
+
+    <script>
+      // The page runs inside a normal tab, so hand control back to the browser chrome.
+      document.getElementById('start').addEventListener('click', function () {
+        location.href = 'min://app/index.html'
+      })
+      document.getElementById('settings').addEventListener('click', function () {
+        location.href = 'min://app/pages/settings/index.html#iris-ai'
+      })
+    </script>
+  </body>
+</html>

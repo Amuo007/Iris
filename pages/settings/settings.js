@@ -1,4 +1,4 @@
-document.title = l('settingsPreferencesHeading') + ' | Min'
+document.title = l('settingsPreferencesHeading') + ' | Iris'
 
 var contentTypeBlockingContainer = document.getElementById('content-type-blocking')
 var banner = document.getElementById('restart-required-banner')

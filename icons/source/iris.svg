@@ -1,0 +1,61 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b1440"/>
+      <stop offset="0.5" stop-color="#3b2a86"/>
+      <stop offset="1" stop-color="#0f4a70"/>
+    </linearGradient>
+    <radialGradient id="iris" cx="0.42" cy="0.36" r="0.75">
+      <stop offset="0" stop-color="#b9a4ff"/>
+      <stop offset="0.45" stop-color="#7c5cff"/>
+      <stop offset="0.8" stop-color="#4f7fe8"/>
+      <stop offset="1" stop-color="#2ec5d6"/>
+    </radialGradient>
+    <radialGradient id="pupil" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#0a0618"/>
+      <stop offset="0.7" stop-color="#140b30"/>
+      <stop offset="1" stop-color="#241a4d"/>
+    </radialGradient>
+    <linearGradient id="blade" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.02"/>
+    </linearGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+
+  <!-- app tile -->
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#tile)"/>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="none" stroke="#8f7bff" stroke-opacity="0.35" stroke-width="4"/>
+
+  <!-- glow behind the iris -->
+  <circle cx="512" cy="512" r="286" fill="#7c5cff" opacity="0.35" filter="url(#soft)"/>
+
+  <!-- iris: six aperture blades -->
+  <g transform="translate(512 512)">
+    <circle r="286" fill="url(#iris)"/>
+    <g>
+      <g transform="rotate(0)"><path d="M0 -286 A286 286 0 0 1 247.7 -143 L62 -35.8 A71.6 71.6 0 0 0 0 -71.6 Z" fill="url(#blade)"/></g>
+      <g transform="rotate(60)"><path d="M0 -286 A286 286 0 0 1 247.7 -143 L62 -35.8 A71.6 71.6 0 0 0 0 -71.6 Z" fill="url(#blade)"/></g>
+      <g transform="rotate(120)"><path d="M0 -286 A286 286 0 0 1 247.7 -143 L62 -35.8 A71.6 71.6 0 0 0 0 -71.6 Z" fill="url(#blade)"/></g>
+      <g transform="rotate(180)"><path d="M0 -286 A286 286 0 0 1 247.7 -143 L62 -35.8 A71.6 71.6 0 0 0 0 -71.6 Z" fill="url(#blade)"/></g>
+      <g transform="rotate(240)"><path d="M0 -286 A286 286 0 0 1 247.7 -143 L62 -35.8 A71.6 71.6 0 0 0 0 -71.6 Z" fill="url(#blade)"/></g>
+      <g transform="rotate(300)"><path d="M0 -286 A286 286 0 0 1 247.7 -143 L62 -35.8 A71.6 71.6 0 0 0 0 -71.6 Z" fill="url(#blade)"/></g>
+    </g>
+    <!-- aperture seams -->
+    <g stroke="#1b1440" stroke-opacity="0.45" stroke-width="7" stroke-linecap="round">
+      <line x1="0" y1="-102" x2="0" y2="-286"/>
+      <line x1="0" y1="-102" x2="0" y2="-286" transform="rotate(60)"/>
+      <line x1="0" y1="-102" x2="0" y2="-286" transform="rotate(120)"/>
+      <line x1="0" y1="-102" x2="0" y2="-286" transform="rotate(180)"/>
+      <line x1="0" y1="-102" x2="0" y2="-286" transform="rotate(240)"/>
+      <line x1="0" y1="-102" x2="0" y2="-286" transform="rotate(300)"/>
+    </g>
+    <circle r="102" fill="url(#pupil)"/>
+    <!-- glint -->
+    <ellipse cx="-38" cy="-46" rx="30" ry="20" fill="#ffffff" opacity="0.85" transform="rotate(-28)"/>
+    <circle r="102" fill="none" stroke="#0a0618" stroke-opacity="0.55" stroke-width="6"/>
+    <circle r="286" fill="none" stroke="#0a0618" stroke-opacity="0.30" stroke-width="8"/>
+  </g>
+</svg>

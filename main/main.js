@@ -19,6 +19,13 @@ const {
   WebContentsView
 } = electron
 
+/*
+ * In a packaged build electron-builder sets the product name from package.json.
+ * In development Electron is still "Electron", so name the app here as well - this is
+ * what the macOS menu bar, the About panel and the user-data directory use.
+ */
+app.setName('Iris')
+
 crashReporter.start({
   submitURL: 'https://minbrowser.org/',
   uploadToServer: false,
@@ -26,7 +33,7 @@ crashReporter.start({
 })
 
 if (process.argv.some(arg => arg === '-v' || arg === '--version')) {
-  console.log('Min: ' + app.getVersion())
+  console.log('Iris: ' + app.getVersion())
   console.log('Chromium: ' + process.versions.chrome)
   process.exit()
 }

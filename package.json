@@ -1,9 +1,9 @@
 {
-  "name": "min",
-  "productName": "Min",
+  "name": "iris-browser",
+  "productName": "Iris",
   "author": "PalmerAL",
-  "version": "1.35.7",
-  "description": "A fast, minimal browser that protects your privacy",
+  "version": "0.1.0",
+  "description": "Iris - an agentic web browser for macOS. Browse normally, or hand a task to Iris and watch it work.",
   "electronVersion": "43.4.1",
   "main": "main.build.js",
   "standard": {
@@ -71,7 +71,7 @@
     "buildBrowser": "node ./scripts/buildBrowser.js",
     "buildBrowserStyles": "node ./scripts/buildBrowserStyles.js",
     "buildPreload": "node ./scripts/buildPreload.js",
-    "build": "npm run buildMain && npm run buildBrowser && npm run buildBrowserStyles && npm run buildPreload",
+    "build": "npm run buildLocalization && npm run buildMain && npm run buildBrowser && npm run buildBrowserStyles && npm run buildPreload",
     "buildWindows": "npm run build && node ./scripts/buildWindows.js",
     "buildMacIntel": "npm run build && node ./scripts/buildMac.js --platform=x86",
     "buildMacArm": "npm run build && node ./scripts/buildMac.js --platform=arm64",
@@ -82,7 +82,9 @@
     "updateFilters": "node ./ext/filterLists/updateEasylist.js",
     "updateHttpsList": "node ./ext/httpsUpgrade/updateHttpsList.js",
     "updateSuffixes": "node ./ext/publicSuffixes/updateSuffixes.js",
-    "lint": "prettier --write **/**/*.css **/**/*.md **/**/*.html **/**/*.json && standard --fix js/**/*.js main/*.js | snazzy"
+    "lint": "prettier --write **/**/*.css **/**/*.md **/**/*.html **/**/*.json && standard --fix js/**/*.js main/*.js | snazzy",
+    "buildLocalization": "node ./scripts/buildLocalization.js",
+    "icons": "node ./scripts/buildIcons.js"
   },
   "repository": {
     "type": "git",

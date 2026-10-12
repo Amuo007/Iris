@@ -102,6 +102,7 @@ module.exports = function (platform, extraOptions) {
       icon: 'icons/icon256.ico'
     },
     mac: {
+      appId: 'org.irisbrowser.iris',
       icon: 'icons/icon.icns',
       target: 'dir',
       darkModeSupport: true,
