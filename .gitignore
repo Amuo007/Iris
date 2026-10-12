@@ -1,9 +1,6 @@
-/node_modules
-/.vscode
-/.idea
-.npm
-dist
+node_modules/
+dist/
 main.build.js
+build/
 .DS_Store
-package-lock.json
-yarn.lock
+*.log

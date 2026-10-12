@@ -1,0 +1,608 @@
+'use strict'
+
+/*
+ * iris/agent/actionSchema.js
+ *
+ * The strict action grammar used by the Iris agent, plus a recovery parser that can
+ * tolerate sloppy model framing (markdown fences, leading prose, single quotes,
+ * trailing commas, flat "thought + action + x + y" layouts) while remaining strict
+ * about semantics: an action that cannot be proven safe and well-formed is rejected.
+ *
+ * This module is pure: no Electron, no DOM, no network.
+ */
+
+const COORD_TYPES = new Set(['click', 'double_click', 'right_click', 'drag', 'scroll'])
+
+const SCROLL_DIRECTIONS = ['up', 'down', 'left', 'right']
+
+/*
+ * Required/optional fields per action type. `coords` are expressed in *screenshot
+ * pixels* (device px of the image the model was shown) and are validated against the
+ * image size by validateAction().
+ */
+const SPEC = {
+  click: { required: ['x', 'y'], optional: ['button'] },
+  double_click: { required: ['x', 'y'], optional: ['button'] },
+  right_click: { required: ['x', 'y'], optional: [] },
+  drag: { required: ['fromX', 'fromY', 'toX', 'toY'], optional: [] },
+  scroll: { required: ['direction'], optional: ['x', 'y', 'amount'] },
+  type: { required: ['text'], optional: [] },
+  key: { required: ['key'], optional: ['modifiers'] },
+  shortcut: { required: ['keys'], optional: [] },
+  wait: { required: [], optional: ['ms'] },
+  navigate: { required: ['url'], optional: [] },
+  move: { required: ['x', 'y'], optional: [] },
+  done: { required: [], optional: ['answer'] },
+  fail: { required: [], optional: ['reason'] }
+}
+
+const TERMINAL = new Set(['done', 'fail'])
+
+/* Synonyms that small models emit constantly. Map them before validating. */
+const TYPE_ALIASES = {
+  left_click: 'click',
+  single_click: 'click',
+  tap: 'click',
+  press: 'click',
+  click_on: 'click',
+  dblclick: 'double_click',
+  dbl_click: 'double_click',
+  rightclick: 'right_click',
+  leftclick: 'click',
+  doubleclick: 'double_click',
+  'double-click': 'double_click',
+  contextmenu: 'right_click',
+  'right-click': 'right_click',
+  secondary_click: 'right_click',
+  keystroke: 'key',
+  keypress: 'key',
+  press_key: 'key',
+  key_press: 'key',
+  hotkey: 'shortcut',
+  keyboard_shortcut: 'shortcut',
+  key_combo: 'shortcut',
+  scroll_down: 'scroll',
+  scroll_up: 'scroll',
+  swipe: 'scroll',
+  hover: 'move',
+  mouse_move: 'move',
+  move_mouse: 'move',
+  mouseover: 'move',
+  input: 'type',
+  write: 'type',
+  enter_text: 'type',
+  type_text: 'type',
+  open_url: 'navigate',
+  goto: 'navigate',
+  go_to_url: 'navigate',
+  wait_: 'wait',
+  sleep: 'wait',
+  pause: 'wait',
+  complete: 'done',
+  finish: 'done',
+  task_complete: 'done',
+  answer: 'done',
+  error: 'fail',
+  abort: 'fail',
+  give_up: 'fail'
+}
+
+function isPlainObject (v) {
+  return v !== null && typeof v === 'object' && !Array.isArray(v)
+}
+
+/* ------------------------------------------------------------------ *
+ * JSON extraction
+ * ------------------------------------------------------------------ */
+
+/**
+ * Pull every plausible JSON object string out of a raw model message, best first.
+ * Order matters: fenced blocks win, then the whole message, then balanced-brace slices.
+ */
+function extractJsonCandidates (text) {
+  const out = []
+  const seen = new Set()
+  const push = (s) => {
+    if (typeof s !== 'string') return
+    const t = s.trim()
+    if (!t || seen.has(t)) return
+    seen.add(t)
+    out.push(t)
+  }
+
+  // 1. ```json ... ``` or ``` ... ```
+  const fence = /```(?:json|JSON)?\s*([\s\S]*?)```/g
+  let m
+  while ((m = fence.exec(text)) !== null) push(m[1])
+
+  // 2. the whole message
+  push(text)
+
+  // 3. every balanced top-level {...} slice (string- and escape-aware)
+  let depth = 0
+  let start = -1
+  let inStr = false
+  let esc = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (inStr) {
+      if (esc) esc = false
+      else if (c === '\\') esc = true
+      else if (c === '"') inStr = false
+      continue
+    }
+    if (c === '"') { inStr = true; continue }
+    if (c === '{') {
+      if (depth === 0) start = i
+      depth++
+    } else if (c === '}') {
+      if (depth > 0) {
+        depth--
+        if (depth === 0 && start >= 0) push(text.slice(start, i + 1))
+      }
+    }
+  }
+
+  return out
+}
+
+/** Repair the framing mistakes LLMs make that JSON.parse refuses. */
+function repairJson (s) {
+  let t = s.trim()
+
+  // trailing comma before } or ]
+  t = t.replace(/,\s*([}\]])/g, '$1')
+
+  // Python-ish literals
+  t = t.replace(/\bTrue\b/g, 'true').replace(/\bFalse\b/g, 'false').replace(/\bNone\b/g, 'null')
+
+  // smart quotes used as string delimiters
+  t = t.replace(/[\u2018\u2019\u201A]/g, "'")
+
+  return t
+}
+
+/**
+ * Convert a single-quoted pseudo-JSON object into real JSON. Only used as a last resort,
+ * and only when the value contains no double quotes inside single-quoted strings.
+ */
+function singleQuoteToJson (s) {
+  let out = ''
+  let inDouble = false
+  let inSingle = false
+  let esc = false
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (esc) { out += c; esc = false; continue }
+    if (c === '\\') { out += c; esc = true; continue }
+    if (inDouble) {
+      if (c === '"') inDouble = false
+      out += c
+      continue
+    }
+    if (inSingle) {
+      if (c === "'") { inSingle = false; out += '"' } else if (c === '"') { out += '\\"' } else { out += c }
+      continue
+    }
+    if (c === '"') { inDouble = true; out += c; continue }
+    if (c === "'") { inSingle = true; out += '"'; continue }
+    out += c
+  }
+  return out
+}
+
+function tryParseObject (candidate) {
+  const attempts = [candidate, repairJson(candidate)]
+  const sq = singleQuoteToJson(attempts[attempts.length - 1])
+  if (sq !== attempts[attempts.length - 1]) attempts.push(sq, repairJson(sq))
+
+  for (const a of attempts) {
+    try {
+      const v = JSON.parse(a)
+      if (isPlainObject(v)) return v
+      // some models return [ {...} ]
+      if (Array.isArray(v) && isPlainObject(v[0])) return v[0]
+    } catch (e) { /* try next */ }
+  }
+  return null
+}
+
+/* ------------------------------------------------------------------ *
+ * Field coercion
+ * ------------------------------------------------------------------ */
+
+function toNumber (v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null
+  if (typeof v === 'string') {
+    const cleaned = v.replace(/[,\s]/g, '')
+    if (cleaned === '') return null
+    const n = Number(cleaned)
+    return Number.isFinite(n) ? n : null
+  }
+  return null
+}
+
+function toInteger (v) {
+  const n = toNumber(v)
+  return n === null ? null : Math.round(n)
+}
+
+function toNonNegative (v, max) {
+  const n = toInteger(v)
+  if (n === null || n < 0) return null
+  if (typeof max === 'number' && n > max) return null
+  return n
+}
+
+function toStringValue (v) {
+  if (typeof v === 'string') return v
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
+  return null
+}
+
+function normalizeType (raw) {
+  if (typeof raw !== 'string') return null
+  let t = raw.trim().toLowerCase().replace(/\s+/g, '_')
+  if (TYPE_ALIASES[t]) t = TYPE_ALIASES[t]
+  return SPEC[t] ? t : null
+}
+
+const MODIFIER_ALIASES = {
+  cmd: 'command', command: 'command', meta: 'command', super: 'command', win: 'command', windows: 'command',
+  ctrl: 'control', control: 'control',
+  alt: 'option', option: 'option', opt: 'option',
+  shift: 'shift', shiftkey: 'shift'
+}
+
+function normalizeModifiers (v) {
+  if (v == null) return []
+  const list = Array.isArray(v) ? v : String(v).split(/[+\-\s|,]+/)
+  const out = []
+  for (const m of list) {
+    const s = String(m).trim().toLowerCase()
+    if (!s) continue
+    const mapped = MODIFIER_ALIASES[s]
+    if (mapped && !out.includes(mapped)) out.push(mapped)
+  }
+  return out
+}
+
+function normalizeKeyName (v) {
+  const s = toStringValue(v)
+  if (s === null) return null
+  const t = s.trim()
+  if (!t) return null
+  const lower = t.toLowerCase()
+  const map = {
+    enter: 'enter', return: 'enter', returnkey: 'enter',
+    escape: 'escape', esc: 'escape',
+    space: 'space', spacebar: 'space', ' ': 'space',
+    tab: 'tab', backspace: 'backspace', delete: 'delete', del: 'delete',
+    up: 'up', down: 'down', left: 'left', right: 'right',
+    pageup: 'pageup', page_up: 'pageup', pagedown: 'pagedown', page_down: 'pagedown',
+    home: 'home', end: 'end',
+    f1: 'f1', f2: 'f2', f3: 'f3', f4: 'f4', f5: 'f5', f6: 'f6',
+    f7: 'f7', f8: 'f8', f9: 'f9', f10: 'f10', f11: 'f11', f12: 'f12'
+  }
+  if (map[lower]) return map[lower]
+  if (/^[a-z0-9]$/.test(lower)) return lower
+  if (/^[a-z]$/.test(t)) return lower
+  return t
+}
+
+/* ------------------------------------------------------------------ *
+ * Validation
+ * ------------------------------------------------------------------ */
+
+/**
+ * Validate + normalize an already-extracted action object.
+ *
+ * @param {object} obj candidate action ({ type, ...fields } )
+ * @param {object} [limits] { imageWidth, imageHeight } when the action's coordinates are
+ *        known to be expressed in screenshot pixels.
+ * @returns {{ok: true, action: object}|{ok: false, error: string}}
+ */
+function validateAction (obj, limits) {
+  if (!isPlainObject(obj)) return { ok: false, error: 'action is not an object' }
+
+  const type = normalizeType(obj.type)
+  if (!type) {
+    return { ok: false, error: 'unknown or missing action type: ' + JSON.stringify(obj.type === undefined ? null : obj.type) }
+  }
+
+  const spec = SPEC[type]
+  const action = { type }
+  const errors = []
+
+  const get = (field) => {
+    if (Object.prototype.hasOwnProperty.call(obj, field)) return obj[field]
+    // look inside a nested "args"/"parameters"/"input" object
+    for (const k of ['args', 'parameters', 'params', 'input', 'arguments']) {
+      if (isPlainObject(obj[k]) && Object.prototype.hasOwnProperty.call(obj[k], field)) return obj[k][field]
+    }
+    return undefined
+  }
+
+  const inRange = (n, max) => {
+    if (n === null) return false
+    if (typeof max !== 'number') return true
+    return n >= 0 && n <= max
+  }
+
+  const coordError = (name, value, max) => {
+    const n = toInteger(value)
+    if (n === null) { errors.push(`${name} must be a finite number (got ${JSON.stringify(value)})`); return null }
+    if (!inRange(n, max)) { errors.push(`${name}=${n} is outside the screenshot (0..${max})`); return null }
+    return n
+  }
+
+  const w = limits && typeof limits.imageWidth === 'number' ? limits.imageWidth : undefined
+  const h = limits && typeof limits.imageHeight === 'number' ? limits.imageHeight : undefined
+
+  for (const field of spec.required.concat(spec.optional)) {
+    const value = get(field)
+    const isRequired = spec.required.includes(field)
+    if (value === undefined || value === null || value === '') {
+      if (isRequired) errors.push(`missing required field "${field}" for action "${type}"`)
+      continue
+    }
+
+    switch (field) {
+      case 'x': {
+        const n = coordError('x', value, w)
+        if (n !== null) action.x = n
+        break
+      }
+      case 'y': {
+        const n = coordError('y', value, h)
+        if (n !== null) action.y = n
+        break
+      }
+      case 'fromX': {
+        const n = coordError('fromX', value, w)
+        if (n !== null) action.fromX = n
+        break
+      }
+      case 'fromY': {
+        const n = coordError('fromY', value, h)
+        if (n !== null) action.fromY = n
+        break
+      }
+      case 'toX': {
+        const n = coordError('toX', value, w)
+        if (n !== null) action.toX = n
+        break
+      }
+      case 'toY': {
+        const n = coordError('toY', value, h)
+        if (n !== null) action.toY = n
+        break
+      }
+      case 'amount': {
+        const n = toInteger(value)
+        if (n === null || n < 1 || n > 40) errors.push(`amount must be 1..40 (got ${JSON.stringify(value)})`)
+        else action.amount = n
+        break
+      }
+      case 'ms': {
+        const n = toNonNegative(value, 30000)
+        if (n === null) errors.push(`ms must be 0..30000 (got ${JSON.stringify(value)})`)
+        else action.ms = n
+        break
+      }
+      case 'direction': {
+        const d = toStringValue(value)
+        const dl = d === null ? null : d.trim().toLowerCase()
+        if (!dl || !SCROLL_DIRECTIONS.includes(dl)) errors.push(`direction must be one of ${SCROLL_DIRECTIONS.join('|')}`)
+        else action.direction = dl
+        break
+      }
+      case 'text': {
+        const s = toStringValue(value)
+        if (s === null) errors.push('text must be a string')
+        else if (s.length === 0) errors.push('text must not be empty')
+        else if (s.length > 4000) errors.push('text is too long (max 4000 characters)')
+        else action.text = s
+        break
+      }
+      case 'key': {
+        const k = normalizeKeyName(value)
+        if (!k) errors.push('key must be a key name')
+        else action.key = k
+        break
+      }
+      case 'keys': {
+        // "cmd+shift+l" -> modifiers + key, kept as a canonical string
+        const s = toStringValue(value)
+        const parts = Array.isArray(value) ? value.map(p => String(p).trim().toLowerCase()).filter(Boolean)
+          : s.toLowerCase().split(/[+\- ]+/).filter(Boolean)
+        if (!parts.length) { errors.push('keys must name at least one key'); break }
+        const mods = []
+        let main = null
+        for (const p of parts) {
+          const m = MODIFIER_ALIASES[p]
+          if (m) { if (!mods.includes(m)) mods.push(m) } else main = p
+        }
+        if (!main) { errors.push('keys must include a non-modifier key'); break }
+        action.key = main
+        action.modifiers = mods
+        action.keys = mods.concat(main).join('+')
+        break
+      }
+      case 'modifiers': {
+        action.modifiers = normalizeModifiers(value)
+        break
+      }
+      case 'button': {
+        const b = toStringValue(value)
+        const bl = b === null ? '' : b.trim().toLowerCase()
+        if (['left', 'right', 'middle'].includes(bl)) action.button = bl
+        else if (/^[0-2]$/.test(bl)) action.button = ['left', 'middle', 'right'][Number(bl)]
+        else errors.push(`button must be left|middle|right (got ${JSON.stringify(value)})`)
+        break
+      }
+      case 'url': {
+        const s = toStringValue(value)
+        if (!s || !/\S/.test(s)) errors.push('url must be a non-empty string')
+        else action.url = s.trim()
+        break
+      }
+      case 'answer':
+      case 'reason': {
+        const s = toStringValue(value)
+        if (s !== null) action[field] = s
+        break
+      }
+      default:
+        break
+    }
+  }
+
+  if (type === 'shortcut' && !action.keys) {
+    errors.push('shortcut requires "keys"')
+  }
+
+  if (errors.length) return { ok: false, error: errors.join('; ') }
+
+  // defaults that the injector relies on
+  if (COORD_TYPES.has(type) || type === 'move') {
+    if (action.type === 'scroll') {
+      action.direction = action.direction || 'down'
+      action.amount = action.amount || 3
+    }
+    if (action.button === undefined) action.button = type === 'right_click' ? 'right' : 'left'
+  }
+  if (type === 'wait' && action.ms === undefined) action.ms = 800
+  if (type === 'scroll' && (action.x === undefined || action.y === undefined)) {
+    // scrolling with no anchor means "scroll the viewport centre"
+    if (w && h) { action.x = Math.round(w / 2); action.y = Math.round(h / 2) }
+  }
+
+  // semantic sanity checks
+  if (type === 'drag' && action.fromX === action.toX && action.fromY === action.toY) {
+    return { ok: false, error: 'drag start and end are the same point' }
+  }
+
+  return { ok: true, action }
+}
+
+/* ------------------------------------------------------------------ *
+ * Public entry point
+ * ------------------------------------------------------------------ */
+
+/**
+ * Parse a raw model message into a well-formed action.
+ *
+ * @param {string} rawText full assistant message content
+ * @param {object} [limits] { imageWidth, imageHeight } of the screenshot that was shown
+ * @returns {{ok: true, action: object, thought: string|null}|{ok: false, error: string}}
+ */
+function parseAction (rawText, limits) {
+  if (typeof rawText !== 'string') return { ok: false, error: 'model returned no text' }
+  if (!rawText.trim()) return { ok: false, error: 'model returned empty text' }
+
+  const candidates = extractJsonCandidates(rawText)
+  if (!candidates.length) return { ok: false, error: 'no JSON object found in model output' }
+
+  const errors = []
+  for (const c of candidates) {
+    const obj = tryParseObject(c)
+    if (!obj) { errors.push('unparseable JSON: ' + c.slice(0, 120)); continue }
+
+    let thought = null
+
+    // Shape A (canonical): { "thought": "...", "action": { "type": ... } }
+    // Shape B (flat):      { "thought": "...", "action": "click", "x": 1, "y": 2 }
+    // Shape C (bare):      { "type": "click", "x": 1, "y": 2 }
+    let actionObj = null
+    if (isPlainObject(obj.action)) {
+      actionObj = obj.action
+      thought = toStringValue(obj.thought ?? obj.reasoning ?? obj.reason ?? obj.explanation)
+    } else if (typeof obj.action === 'string' && SPEC[normalizeType(obj.action)]) {
+      actionObj = Object.assign({}, obj, { type: obj.action })
+      thought = toStringValue(obj.thought ?? obj.reasoning ?? obj.reason ?? obj.explanation)
+    } else if (obj.type !== undefined) {
+      actionObj = obj
+      thought = toStringValue(obj.thought ?? obj.reasoning ?? obj.reason ?? obj.explanation)
+    }
+
+    if (!actionObj) { errors.push('no "action" field'); continue }
+
+    const res = validateAction(actionObj, limits)
+    if (!res.ok) { errors.push(res.error); continue }
+
+    return { ok: true, action: res.action, thought: thought }
+  }
+
+  return { ok: false, error: errors[errors.length - 1] || 'could not extract a valid action' }
+}
+
+/** Human-readable one-liner for the step timeline. */
+function describeAction (action) {
+  if (!action || !action.type) return 'invalid action'
+  switch (action.type) {
+    case 'click': return `Click at (${action.x}, ${action.y})`
+    case 'double_click': return `Double-click at (${action.x}, ${action.y})`
+    case 'right_click': return `Right-click at (${action.x}, ${action.y})`
+    case 'move': return `Move pointer to (${action.x}, ${action.y})`
+    case 'drag': return `Drag (${action.fromX}, ${action.fromY}) \u2192 (${action.toX}, ${action.toY})`
+    case 'scroll': return `Scroll ${action.direction}${action.x !== undefined ? ` at (${action.x}, ${action.y})` : ''} \u00d7${action.amount}`
+    case 'type': return `Type "${action.text.length > 40 ? action.text.slice(0, 40) + '\u2026' : action.text}"`
+    case 'key': return `Press ${((action.modifiers || []).join('+') ? (action.modifiers.join('+') + '+') : '') + action.key}`
+    case 'shortcut': return `Shortcut ${action.keys}`
+    case 'wait': return `Wait ${action.ms} ms`
+    case 'navigate': return `Navigate to ${action.url}`
+    case 'done': return action.answer ? `Done \u2014 ${action.answer}` : 'Done'
+    case 'fail': return action.reason ? `Stopped \u2014 ${action.reason}` : 'Stopped'
+    default: return action.type
+  }
+}
+
+function isTerminal (action) {
+  return !!(action && TERMINAL.has(action.type))
+}
+
+/** The spec text handed to the model. Kept next to the parser so they cannot drift. */
+const ACTION_SPEC_TEXT = [
+  'You control a real web browser ONLY through the pixels you see and real input events.',
+  'Reply with EXACTLY ONE JSON object and nothing else. No prose, no markdown fences, no comments.',
+  '',
+  'Schema:',
+  '{"thought":"<one short sentence about what you see and why>","action":{"type":"<type>",...}}',
+  '',
+  'Allowed "type" values and their fields (x/y are pixel coordinates in the screenshot you were',
+  'given, measured from its top-left corner, at the screenshot\'s own resolution):',
+  '  click        {"x":int,"y":int}',
+  '  double_click {"x":int,"y":int}',
+  '  right_click  {"x":int,"y":int}',
+  '  move         {"x":int,"y":int}',
+  '  drag         {"fromX":int,"fromY":int,"toX":int,"toY":int}',
+  '  scroll       {"direction":"up|down","amount":int?,"x":int?,"y":int?}',
+  '  type         {"text":string}              (types at the current cursor position)',
+  '  key          {"key":string,"modifiers":[string]?}',
+  '  shortcut     {"keys":"cmd+l"}',
+  '  wait         {"ms":int?}                 (use when the page is still loading)',
+  '  navigate     {"url":string}',
+  '  done         {"answer":string?}          (task complete)',
+  '  fail         {"reason":string}           (task impossible)',
+  '',
+  'Rules:',
+  '- Before clicking a text field, click it, then use "type" in the NEXT step.',
+  '- If a screenshot shows a blank, half-rendered or loading page, answer with "wait".',
+  '- Never invent coordinates outside the screenshot. Never claim to have done something',
+  '  you have not verified in a screenshot.',
+  '- One action per message. If your previous action did not work, change something.'
+].join('\n')
+
+module.exports = {
+  parseAction,
+  validateAction,
+  describeAction,
+  isTerminal,
+  extractJsonCandidates,
+  normalizeModifiers,
+  normalizeKeyName,
+  ACTION_SPEC_TEXT,
+  ACTION_TYPES: Object.keys(SPEC),
+  TERMINAL_TYPES: Array.from(TERMINAL)
+}
