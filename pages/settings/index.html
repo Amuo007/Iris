@@ -17,6 +17,77 @@
       </div>
     </div>
 
+    <div class="settings-container" id="iris-ai-settings-container">
+      <h3>Iris AI</h3>
+      <div class="setting-secondary-label">
+        Iris only ever looks at screenshots of the page and sends real mouse and keyboard
+        events. It never reads the DOM and no script is injected into the sites you visit.
+      </div>
+
+      <div class="setting-section iris-setting">
+        <label for="iris-base-url">Model server (OpenAI-compatible base URL)</label>
+        <input type="text" id="iris-base-url" spellcheck="false" />
+      </div>
+
+      <div class="setting-section iris-setting">
+        <label for="iris-model">Model name</label>
+        <input type="text" id="iris-model" spellcheck="false" />
+      </div>
+
+      <div class="setting-section iris-setting">
+        <label for="iris-api-key">API key (optional, stored locally)</label>
+        <input type="password" id="iris-api-key" spellcheck="false" autocomplete="off" />
+      </div>
+
+      <div class="setting-section iris-setting">
+        <label for="iris-max-steps">Maximum steps per task</label>
+        <input type="number" id="iris-max-steps" min="1" max="200" />
+      </div>
+
+      <div class="setting-section iris-setting">
+        <label for="iris-temperature">Temperature</label>
+        <input type="number" id="iris-temperature" min="0" max="2" step="0.1" />
+      </div>
+
+      <div class="setting-section iris-setting">
+        <label for="iris-screenshot-size">Screenshot longest edge (px)</label>
+        <input type="number" id="iris-screenshot-size" min="512" max="3072" step="16" />
+      </div>
+
+      <div class="setting-section iris-setting">
+        <label for="iris-screenshot-quality">Screenshot JPEG quality</label>
+        <input type="number" id="iris-screenshot-quality" min="20" max="100" />
+      </div>
+
+      <div class="setting-section iris-setting">
+        <label for="iris-keep-images">Screenshots kept in model context</label>
+        <input type="number" id="iris-keep-images" min="1" max="12" />
+      </div>
+
+      <div class="setting-section">
+        <input type="checkbox" id="checkbox-iris-marker" />
+        <label for="checkbox-iris-marker">Show the on-page marker where Iris clicks</label>
+      </div>
+
+      <div class="setting-section">
+        <input type="checkbox" id="checkbox-iris-takeover" />
+        <label for="checkbox-iris-takeover">Pause the agent when you touch the page</label>
+      </div>
+
+      <div class="setting-section">
+        <input type="checkbox" id="checkbox-iris-sensitive" />
+        <label for="checkbox-iris-sensitive"
+          >Let Iris confirm purchases, payments and form submissions without asking first</label
+        >
+      </div>
+
+      <div class="setting-section">
+        <button class="button-border" id="iris-reset-defaults" type="button">
+          Reset Iris defaults
+        </button>
+      </div>
+    </div>
+
     <div class="settings-container" id="privacy-settings-container">
       <h3 data-string="settingsPrivacyHeading"></h3>
 

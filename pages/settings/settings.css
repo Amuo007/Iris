@@ -187,3 +187,47 @@ html {
   vertical-align: middle;
   margin-bottom: 0.2em;
 }
+
+/* ------------------------------------------------------------------ *
+ * Iris identity + the "Iris AI" section
+ * ------------------------------------------------------------------ */
+
+:root {
+  --iris-accent: #7c5cff;
+  --iris-accent-2: #4fb0e8;
+}
+
+.short-hero.blue-gradient-background {
+  background: linear-gradient(120deg, #241a4d 0%, #5b3fd6 52%, #2f7fbf 100%);
+}
+
+#iris-ai-settings-container {
+  border-left: 3px solid var(--iris-accent);
+}
+
+#iris-ai-settings-container .iris-setting {
+  font-size: 0.9rem;
+  padding: 0.35rem 0 0.5rem;
+}
+
+#iris-ai-settings-container .iris-setting label {
+  display: block;
+  padding: 0 0 0.3rem;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+#iris-ai-settings-container input[type='text'],
+#iris-ai-settings-container input[type='password'],
+#iris-ai-settings-container input[type='number'] {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 520px;
+  padding: 0.5em 0.7em;
+  font-size: 0.9rem;
+  border-radius: 8px;
+}
+
+#iris-ai-settings-container input[type='number'] {
+  max-width: 140px;
+}

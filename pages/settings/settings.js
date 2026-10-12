@@ -676,3 +676,120 @@ function createBang (bang, snippet, redirect) {
 
   return li
 }
+
+/* Iris AI settings */
+
+var IRIS_AI_DEFAULTS = {
+  baseUrl: 'http://192.168.1.252:13305/v1',
+  model: 'Qwen3.8-Flash-Next-GGUF-IQ4_NL',
+  apiKey: '',
+  maxSteps: 25,
+  temperature: 0.2,
+  maxTokens: 700,
+  modelTimeoutMs: 90000,
+  keepImages: 2,
+  screenshotMaxDimension: 1568,
+  screenshotQuality: 72,
+  markerEnabled: true,
+  autoPauseOnUserInput: true,
+  allowSensitiveActions: false
+}
+
+var irisAI = Object.assign({}, IRIS_AI_DEFAULTS)
+
+var irisFields = [
+  { key: 'baseUrl', id: 'iris-base-url', type: 'string' },
+  { key: 'model', id: 'iris-model', type: 'string' },
+  { key: 'apiKey', id: 'iris-api-key', type: 'string' },
+  { key: 'maxSteps', id: 'iris-max-steps', type: 'int' },
+  { key: 'temperature', id: 'iris-temperature', type: 'float' },
+  { key: 'screenshotMaxDimension', id: 'iris-screenshot-size', type: 'int' },
+  { key: 'screenshotQuality', id: 'iris-screenshot-quality', type: 'int' },
+  { key: 'keepImages', id: 'iris-keep-images', type: 'int' }
+]
+
+var irisMarkerCheckbox = document.getElementById('checkbox-iris-marker')
+var irisTakeoverCheckbox = document.getElementById('checkbox-iris-takeover')
+var irisSensitiveCheckbox = document.getElementById('checkbox-iris-sensitive')
+
+function irisRenderField (field, input) {
+  var value = irisAI[field.key]
+  input.value = value === undefined || value === null ? '' : value
+}
+
+function irisSave () {
+  // settings.set() is forwarded to the main process, which notifies the agent
+  settings.set('irisAI', irisAI)
+}
+
+function irisRenderAll () {
+  irisFields.forEach(function (field) {
+    irisRenderField(field, document.getElementById(field.id))
+  })
+  irisMarkerCheckbox.checked = irisAI.markerEnabled !== false
+  irisTakeoverCheckbox.checked = irisAI.autoPauseOnUserInput !== false
+  irisSensitiveCheckbox.checked = irisAI.allowSensitiveActions === true
+}
+
+irisFields.forEach(function (field) {
+  var input = document.getElementById(field.id)
+
+  input.addEventListener('change', function () {
+    var raw = input.value.trim()
+
+    if (field.type === 'int' || field.type === 'float') {
+      var parsed = field.type === 'int' ? parseInt(raw, 10) : parseFloat(raw, 10)
+      if (isNaN(parsed) || raw === '') {
+        // never let a blank or bogus number reach the agent: fall back to the default
+        parsed = IRIS_AI_DEFAULTS[field.key]
+      }
+      var min = parseFloat(input.getAttribute('min'))
+      var max = parseFloat(input.getAttribute('max'))
+      if (!isNaN(min)) { parsed = Math.max(min, parsed) }
+      if (!isNaN(max)) { parsed = Math.min(max, parsed) }
+      irisAI[field.key] = parsed
+      input.value = parsed
+    } else {
+      irisAI[field.key] = raw
+    }
+
+    irisSave()
+  })
+})
+
+irisMarkerCheckbox.addEventListener('change', function () {
+  irisAI.markerEnabled = this.checked
+  irisSave()
+})
+
+irisTakeoverCheckbox.addEventListener('change', function () {
+  irisAI.autoPauseOnUserInput = this.checked
+  irisSave()
+})
+
+irisSensitiveCheckbox.addEventListener('change', function () {
+  irisAI.allowSensitiveActions = this.checked
+  irisSave()
+})
+
+document.getElementById('iris-reset-defaults').addEventListener('click', function () {
+  irisAI = Object.assign({}, IRIS_AI_DEFAULTS)
+  irisRenderAll()
+  irisSave()
+})
+
+settings.listen('irisAI', function (value) {
+  // only re-read what the agent and the browser agree on, keep defaults for anything missing
+  var stored = value || {}
+  Object.keys(IRIS_AI_DEFAULTS).forEach(function (key) {
+    if (stored[key] !== undefined) {
+      irisAI[key] = stored[key]
+    }
+  })
+  irisRenderAll()
+})
+
+// "AI settings" in the agent panel deep-links here
+if (location.hash === '#iris-ai') {
+  document.getElementById('iris-ai-settings-container').scrollIntoView()
+}

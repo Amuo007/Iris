@@ -112,7 +112,7 @@ function buildPanel () {
   const footer = el('div', 'iris-panel-footer')
   const settingsLink = el('button', 'iris-link', 'AI settings')
   settingsLink.addEventListener('click', function () {
-    tabs.enterData('min://app/pages/settings/index.html', { focus: true })
+    tabs.enterData('min://app/pages/settings/index.html#iris-ai', { focus: true })
   })
   footer.appendChild(settingsLink)
   const takeoverNote = el('span', 'iris-takeover-note', 'Click or type in the page to take over')

@@ -574,3 +574,8 @@ ipc.on('iris-overlay-sync', function (e, data) {
 ipc.on('iris-agent-settings-changed', function (event) {
   broadcast('iris-agent-settings', irisSettings())
 })
+
+/* the model config can change while a run is idle; pick it up immediately */
+settings.listen('irisAI', function () {
+  broadcast('iris-agent-settings', irisSettings())
+})
