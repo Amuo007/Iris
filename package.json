@@ -84,7 +84,8 @@
     "updateSuffixes": "node ./ext/publicSuffixes/updateSuffixes.js",
     "lint": "prettier --write **/**/*.css **/**/*.md **/**/*.html **/**/*.json && standard --fix js/**/*.js main/*.js | snazzy",
     "buildLocalization": "node ./scripts/buildLocalization.js",
-    "icons": "node ./scripts/buildIcons.js"
+    "icons": "node ./scripts/buildIcons.js",
+    "test:agent": "node --test test/*.test.js"
   },
   "repository": {
     "type": "git",

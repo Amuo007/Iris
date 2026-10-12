@@ -345,12 +345,13 @@ function positionOverlay (tabId, fallbackBounds) {
 
 function showOverlay (tabId, fallbackBounds) {
   const cfg = irisSettings()
-  if (!cfg.markerEnabled) return
+  if (!cfg.markerEnabled) { DBUG('overlay: markers disabled in settings'); return }
   const bounds = positionOverlay(tabId, fallbackBounds)
-  if (!bounds) return
+  if (!bounds) { DBUG('overlay: no bounds for tab ' + tabId); return }
   const overlay = ensureOverlay()
   overlay.setBounds(bounds)
   if (!overlay.isVisible()) overlay.showInactive()
+  DBUG('overlay: shown ' + JSON.stringify(bounds) + ' destroyed=' + overlay.isDestroyed())
 }
 
 function hideOverlay () {
@@ -360,9 +361,13 @@ function hideOverlay () {
 }
 
 function overlaySend (payload) {
-  if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.webContents) {
-    overlayWindow.webContents.send('iris-overlay', payload)
+  if (!overlayWindow || overlayWindow.isDestroyed() || !overlayWindow.webContents) {
+    DBUG('overlay: send dropped, no window')
+    return
   }
+  // the page must have finished loading the marker page or the message is lost
+  overlayWindow.webContents.send('iris-overlay', payload)
+  DBUG('overlay: sent ' + (payload && payload.kind) + ' anchor=' + JSON.stringify(payload && payload.anchor))
 }
 
 /* ------------------------------------------------------------------ *

@@ -1,115 +1,200 @@
-# Min
+# Iris
 
-Min is a fast, minimal browser that protects your privacy. It includes an interface designed to minimize distractions, and features such as:
+**Iris is an agentic web browser for macOS.** You can use it as a normal browser, and when
+something is tedious you describe the outcome you want and Iris drives the page for you —
+step by step, in a side panel you can watch, pause, or take over at any time.
 
-- Full-text search for visited pages
-- Ad and tracker blocking
-- Automatic reader view
-- Tasks (tab groups)
-- Bookmark tagging
-- Password manager integration
-- Dark theme
+Iris is built on [Min](https://github.com/minbrowser/min) (Apache-2.0), which provides tabs,
+tasks, history, bookmarks, search, content blocking and settings. Everything above that layer —
+the visual identity, the agent, the panel, the safety gates — is new.
 
-Download Min from the [releases page](https://github.com/minbrowser/min/releases), or learn more on the [website](https://minbrowser.org/).
+![Iris running an agent task](docs/screenshots/agent-panel.png)
 
-[![Downloads][DownloadsBadge]][DownloadsUrl]
-[![Discord][DiscordBadge]][DiscordUrl]
+---
 
-Min is made possible by these sponsors:
+## Quick start
 
-| [<img src="https://avatars.githubusercontent.com/u/6592155?v=4" width="40">](https://github.com/blackgwe) | [<img src="https://avatars.githubusercontent.com/u/49724477?v=4" width="40">](https://github.com/rafel-ioli) |[<img src="https://avatars.githubusercontent.com/u/237596?v=4" width="40">](https://github.com/idoru) |     |
-| ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |--------------------------------------------------------------------------------------------------------------- | --- |
-| [@blackgwe](https://github.com/blackgwe)                                                                            | [@rafel-ioli](https://github.com/rafel-ioli)                                                                        |[@idoru](https://github.com/idoru)                                                                        ||
+### Run from source (development)
 
-[Become a sponsor](https://github.com/sponsors/PalmerAL)
+```bash
+# Node 22 is required to install dependencies (Node 20 breaks @electron/get's ESM install)
+export PATH=~/.nvm/versions/node/v22.19.0/bin:$PATH
 
-## Screenshots
+npm install
+npm run build
+npx electron . --development-mode
+```
 
-<img alt="The search bar, showing information from DuckDuckGo" src="http://minbrowser.org/tour/img/searchbar_duckduckgo_answers.png" width="650"/>
+### Run the packaged app
 
-<img alt="The Tasks Overlay" src="http://minbrowser.org/tour/img/tasks.png" width="650"/>
+```bash
+npm run buildMacArm           # -> dist/app/mac-arm64/Iris.app  (+ dist/app/iris-v<version>-mac-arm64.zip)
+open dist/app/mac-arm64/Iris.app     # or drag it into /Applications and launch from the Dock
+```
 
-<img alt="Reader View" src="https://user-images.githubusercontent.com/10314059/53312382-67ca7d80-387a-11e9-9ccc-88ac592c9b1c.png" width="650"/>
+The package is ad-hoc signed (`codesign -s -`), which is fine for your own machine. It is not
+notarised, so if you copy it to another Mac, allow it once in *System Settings → Privacy &
+Security*.
 
-## Installing
+### Watch the agent work without a model server
 
-You can find prebuilt binaries for Min [here](https://github.com/minbrowser/min/releases). Alternatively, skip to the section below for instructions on how to build Min directly from source.
+Iris ships a scripted model so the whole pipeline can be exercised offline:
 
-### Installation on Linux
+```bash
+IRIS_FAKE_MODEL=1 IRIS_AUTODEMO=1 IRIS_AGENT_DEBUG=/tmp/iris-agent.log \
+  npx electron . --development-mode
+```
 
-- To install the .deb file, use `sudo dpkg -i /path/to/download`
-- To install the RPM build, use `sudo rpm -i /path/to/download --ignoreos`
-- On Arch Linux install from [AUR](https://aur.archlinux.org/packages/min-browser-bin).
-- On Raspberry Pi, you can install Min from [Pi-Apps](https://github.com/Botspot/pi-apps).
+`IRIS_FAKE_MODEL=1` swaps the HTTP client for `iris/agent/fakeModel.js`, which performs the same
+`observe → think → act` conversation a real vision model would have. `IRIS_AUTODEMO=1` starts a
+demo task ("click the middle of the page, scroll down, then stop") on launch so you can see the
+timeline without typing. The real model server is never contacted by any test.
 
-## Getting Started
+---
 
-* The [wiki](https://github.com/minbrowser/min/wiki) provides an overview of the the features available in Min, a list of available keyboard shortcuts, and answers to some [frequently asked questions](https://github.com/minbrowser/min/wiki/FAQ).
-* Min supports installing userscripts to extend its functionality. See the [userscript documentation](https://github.com/minbrowser/min/wiki/userscripts) for instructions on writing userscripts, as well as a collection of scripts written by the community.
-* If you have questions about using Min, need help getting started with development, or want to talk about what we're working on, join our [Discord server](https://discord.gg/bRpqjJ4).
+## Using Iris
 
-## Developing
+| What | How |
+| --- | --- |
+| Open the Iris panel | `⌘⇧Space`, or the **Ask Iris** button |
+| Run a task | Type the outcome you want, press **Run** (or `⌘↵`) |
+| Pause / resume / stop | Buttons in the panel, mid-run |
+| Take over | Click or type in the page — the agent notices and yields |
+| Where it will click | A pulsing marker appears on the page at the target point |
+| Point Iris at your model | **Settings → Iris AI** (or *AI settings* at the bottom of the panel) |
 
-If you want to develop Min:
+Every step in the panel shows what Iris saw (the screenshot it used), what it decided, and what
+it did — including the translation from image pixels to real CSS-pixel input coordinates.
 
-- Install [Node](https://nodejs.org).
-- Run `npm install` to install dependencies.
-- Start Min in development mode by running `npm run start`.
-- After you make changes, press `alt+ctrl+r` (or `opt+cmd+r` on Mac) to reload the browser UI.
+The marker is a separate transparent, click-through window, so it can never steal a click from you:
 
-### Building binaries
+![On-page action marker](docs/screenshots/marker.png)
 
-In order to build Min from source, follow the installation instructions above, then use one of the following commands to create binaries:
+![Command bar and tabs](docs/screenshots/command-bar.png)
 
-- `npm run buildWindows`
-- `npm run buildMacIntel`
-- `npm run buildMacArm`
-- `npm run buildDebian`
-- `npm run buildRaspi` (for 32-bit Raspberry Pi)
-- `npm run buildLinuxArm64` (for 64-bit Raspberry Pi or other ARM Linux)
-- `npm run buildRedhat`
+### Configuring the model
 
-Depending on the platform you are building for, you may need to install additional dependencies:
+**Settings → Iris AI** holds everything the loop needs, persisted in the browser's settings store
+under the `irisAI` key and broadcast to open panels on change:
 
-- If you are building a macOS package, you'll need to install Xcode and the associated command-line tools. You may also need to set your default SDK to macOS 11.0 or higher, which you can do by running `export SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX11.1.sdk`. The exact command will depend on where Xcode is installed and which SDK version you're using.
-- To build on Windows, you'll need to install Visual Studio. Once it's installed, you may also need to run `npm config set msvs_version 2019` (or the appropriate version).
+- model server base URL (any OpenAI-compatible `/v1` endpoint) and model name, optional API key
+- max steps per task, temperature, max tokens, per-request timeout
+- screenshot longest edge, JPEG quality, how many screenshots stay in the model's context
+- on-page marker, auto-pause when you touch the page, and whether Iris may confirm purchases,
+  payments and form submissions
 
-## Contributing to Min
+Numbers are clamped to their `min`/`max`, and blank or unparseable values fall back to defaults,
+so a typo in a text box can never wedge the agent.
 
-Thanks for taking the time to contribute to Min!
+![Iris AI settings](docs/screenshots/settings.png)
 
-### Getting Help
+---
 
-If you're experiencing a bug or have a suggestion for how to improve Min, please open a [new issue](https://github.com/minbrowser/min/issues/new/choose).
+## How the agent works
 
-### Contributing Code
+Iris is deliberately **vision-only**. The model gets screenshots and nothing else; actions are
+real operating-system input events, not DOM calls.
 
-- Start by following the development instructions listed above.
-- The wiki has an [overview of Min's architecture](https://github.com/minbrowser/min/wiki/Architecture).
-- Min uses the [Standard](https://github.com/feross/standard) code style; [most editors](https://standardjs.com/#are-there-text-editor-plugins) have plugins available to auto-format your code.
-- If you see something that's missing, or run into any problems, please open an issue!
+```
+                 ┌──────────────────────────────────────────────┐
+                 │                  agent loop                  │
+  goal ────────▶ │  1. OBSERVE   screenshot + page state         │
+                 │  2. THINK     model call (vision in, JSON out)│
+                 │  3. ACT       strict parse → input events     │
+                 │  4. VERIFY    did the page change as claimed? │
+                 └──────────────────────────────────────────────┘
+                          │            │            │
+                     safety gate   marker overlay  timeline → panel
+```
 
-### Contributing Translations
+**See.** `webContents.capturePage()` for the tab; on macOS that is unreliable for a
+`WebContentsView` (it can hang or reject with a viz error before first paint), so Iris falls back
+to grabbing the window's composited image through `desktopCapturer` and cropping it to the tab's
+bounds. Screenshots are downscaled to the configured longest edge and encoded as JPEG.
 
-#### Adding a new language
+**Think.** One OpenAI-compatible `chat/completions` request per step with the current screenshot,
+the page URL/title, a compact history of prior steps, and the instruction. `keepImages` bounds how
+many screenshots remain in context; older steps keep their text.
 
-- Find the language code that goes with your language from [this list](https://source.chromium.org/chromium/chromium/src/+/main:ui/base/l10n/l10n_util.cc;l=68-259) (line 68 - 259).
-- In the `localization/languages` directory, create a new file, and name it "[your language code].json".
-- Open your new file, and copy the contents of the <a href="https://github.com/minbrowser/min/blob/master/localization/languages/en-US.json">localization/languages/en-US.json</a> file into your new file.
-- Change the "identifier" field in the new file to the language code from step 1.
-- Inside the file, replace each English string in the right-hand column with the equivalent translation.
-- (Optional) See your translations live by following the [development instructions](#installing) above. Min will display in the same language as your operating system, so make sure your computer is set to the same language that you're translating.
-- That's it! Make a pull request with your changes.
+**Act.** Model output is parsed against a strict action grammar (`actionSchema.js`) — unknown keys,
+malformed coordinates, or an out-of-range value are rejected with a specific reason, and the parser
+can also recover the intent from sloppier prose-ish output. Actions: `navigate`, `click`,
+`double_click`, `right_click`, `hover`, `type`, key press, hotkey, `scroll`, `drag`, `wait`,
+`answer`, `done`. Each becomes a sequence of native `mouseMouseUp/mouseDown/mouseMove/keyDown/
+keyUp` events (`inputPlan.js`), including modifier spellings and key codes.
 
-#### Updating an existing language
+**Coordinates are never guessed.** Image pixels and view CSS pixels are carried as independent
+sizes (`coordinateMapper.js`), so 2×/3× Retina captures, downscaled images, and a panel that
+shifts the page all map correctly. Values are clamped to the viewport, and the panel reports both
+the image point and the CSS point it turned it into.
 
-- Find the language file for your language in the `localization/languages` directory.
-- Look through the file for any items that have a value of "null", or that have a comment saying "missing translation".
-- For each of these items, look for the item with the same name in the `en-US.json` file.
-- Translate the value from the English file, replace "null" with your translation, and remove the "missing translation" comment.
-- Make a pull request with the updated file.
+**Stop conditions.** `safety.js` answers "why did the agent stop?" with one of: step budget, wall
+clock budget, per-step model timeout, retries for a step, consecutive failures, a repeated-action
+loop, a blocked URL scheme/host, or a sensitive action that needs your approval. Money, credential
+and destruction phrasings (`purchase`, `pay`, `checkout`, `delete`, `sign out`, `submit … otp`) are
+refused by default.
 
-[DiscordBadge]: https://img.shields.io/discord/764269005195968512.svg?label=Discord&logo=discord&logoColor=white
-[DiscordUrl]: https://discord.gg/bRpqjJ4
-[DownloadsBadge]: https://img.shields.io/github/downloads/minbrowser/min/total.svg
-[DownloadsUrl]: https://github.com/minbrowser/min/releases
+**Takeover.** Input events injected by the agent are timestamped; any real user input in the page
+outside that window increments a takeover counter, which pauses the run instead of fighting you.
+
+---
+
+## Layout of the code
+
+| Path | What it is |
+| --- | --- |
+| `iris/agent/actionSchema.js` | Strict action grammar + recovery parser, human-readable summaries |
+| `iris/agent/coordinateMapper.js` | Image px ⇄ view CSS px, per-axis, clamping, fit dimensions |
+| `iris/agent/agentLoop.js` | observe → think → act → verify, pause/stop/resume, auto-wait on loading |
+| `iris/agent/safety.js` | All stop conditions and the sensitive-action gate |
+| `iris/agent/inputPlan.js` | Actions → native mouse/keyboard event sequences |
+| `iris/agent/history.js` | Step history with an image budget |
+| `iris/agent/prompts.js` | System/user prompt construction |
+| `iris/agent/modelClient.js` | OpenAI-compatible client (fetch), timeouts, error normalisation |
+| `iris/agent/fakeModel.js` | Scripted model for tests and the offline demo |
+| `main/irisAgent.js` | The only Electron-facing part: `IrisComputer`, capture, injection, IPC, overlay |
+| `js/iris/layout.js` | Brand, two-row command bar, shortcut, heights shared with the webview layer |
+| `js/iris/omnibox.js` | Title + URL pill that focuses Min's real address input |
+| `js/iris/agentPanel.js` | Side panel: goal box, controls, step timeline, settings link |
+| `css/iris.css`, `css/irisAgent.css` | Design tokens and all Iris chrome styling |
+| `pages/irisOverlay.html` | Transparent click-through marker window |
+| `pages/welcome/index.html` | First-run welcome page |
+| `test/*.test.js` | 90 unit tests for the Electron-free core |
+
+The agent core is Electron-free on purpose: it is pure logic, so it is unit-testable in seconds and
+reusable outside this browser. Only `main/irisAgent.js` touches Electron.
+
+---
+
+## Tests
+
+```bash
+node --test test/*.test.js      # 90 tests, no Electron, no network
+npm run test:agent              # same thing, as an npm script
+```
+
+Covered: the action grammar (valid, malformed, recovered), coordinate mapping on 1×/2×/3× and
+after downscaling, every safety stop, input planning for clicks/typing/keys/scrolls/drags, the
+fake model, and the loop itself (happy path, pause, stop, retry, verification, blocked actions).
+No test ever talks to a real model server; `test/fakes.js` supplies scripted computer and model
+doubles.
+
+---
+
+## Branding and attribution
+
+Iris' look is independent: its own icon (`icons/source/iris.svg`, rasterised by Chromium via
+`scripts/renderIcon.js`, assembled by `scripts/buildIcons.js`), its own typography (Space Grotesk +
+Inter, bundled in `ext/fonts/`), a violet-to-cyan token palette (`--iris-*`), a two-row glass
+command bar, card tabs, and an Iris-specific welcome and settings surface. Min's `LICENSE`,
+copyright notices and attribution remain in place, and the welcome page credits Min as the
+foundation.
+
+## Known limitations
+
+See [REPORT.md](REPORT.md) for the honest status list: what is verified on a real Mac, what is
+verified only by unit tests (because it needs a real vision model), and what is queued next.
+
+## License
+
+Apache-2.0, same as Min. See `LICENSE` and `docs/UPSTREAM.md`.
