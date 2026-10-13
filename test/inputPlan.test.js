@@ -120,15 +120,25 @@ test('planDuration sums the delays', () => {
   assert.ok(planDuration(plan) > 0)
 })
 
-test('type with a target clicks first; clear triple-clicks; enter sends a keypress char', () => {
-  const plan = planInputEvents({ type: 'type', text: 'hi', x: 10, y: 20, clear: true, enter: true })
-  const types = plan.map(p => p.event.type)
-  assert.deepStrictEqual(types.slice(0, 7), ['mouseMove', 'mouseDown', 'mouseUp', 'mouseDown', 'mouseUp', 'mouseDown', 'mouseUp'])
-  assert.deepStrictEqual(plan.filter(p => p.event.type === 'mouseDown').map(p => p.event.clickCount), [1, 2, 3])
+test('type with a target clicks, selects all (replacing the old text), types, then Enter', () => {
+  const plan = planInputEvents({ type: 'type', text: 'hi', x: 10, y: 20, enter: true })
+  assert.deepStrictEqual(plan.slice(0, 4).map(p => p.event ? p.event.type : p.command), ['mouseMove', 'mouseDown', 'mouseUp', 'selectAll'])
   const tail = plan.slice(-3).map(p => p.event)
   assert.deepStrictEqual(tail.map(e => e.type), ['keyDown', 'char', 'keyUp'])
   assert.strictEqual(tail[1].keyCode, '\r')
-  assert.deepStrictEqual(plan.filter(p => p.event.type === 'char' && p.event.keyCode !== '\r').map(p => p.event.keyCode), ['h', 'i'])
+  assert.deepStrictEqual(plan.filter(p => p.event && p.event.type === 'char' && p.event.keyCode !== '\r').map(p => p.event.keyCode), ['h', 'i'])
+})
+
+test('clear:false appends instead of replacing', () => {
+  const plan = planInputEvents({ type: 'type', text: 'x', x: 1, y: 1, clear: false })
+  assert.ok(!plan.some(p => p.command === 'selectAll'))
+})
+
+test('command+a and friends become Edit-menu commands', () => {
+  assert.deepStrictEqual(planInputEvents({ type: 'key', key: 'a', modifiers: ['command'] }).map(p => p.command), ['selectAll'])
+  assert.deepStrictEqual(planInputEvents({ type: 'key', key: 'v', modifiers: ['control'] }).map(p => p.command), ['paste'])
+  assert.deepStrictEqual(planInputEvents({ type: 'shortcut', keys: 'cmd+shift+z' }).map(p => p.command), ['redo'])
+  assert.strictEqual(planInputEvents({ type: 'key', key: 'a', modifiers: ['shift'] })[0].event.type, 'keyDown')
 })
 
 test('pressing enter also sends the char event forms need', () => {

@@ -94,6 +94,21 @@ function mouseUp (x, y, button, clickCount) {
   return { type: 'mouseUp', x, y, button: button || 'left', clickCount: clickCount || 1 }
 }
 
+/*
+ * Cmd/Ctrl+A, C, V, X, Z, Y are menu shortcuts on macOS: a synthetic key press never reaches
+ * the Edit menu, so they would silently do nothing. Iris runs the same Edit-menu command
+ * instead — exactly what a person gets by pressing the shortcut.
+ */
+const EDIT_COMMANDS = { A: 'selectAll', C: 'copy', V: 'paste', X: 'cut', Z: 'undo', Y: 'redo' }
+
+function editCommandFor (code, mods) {
+  if (!mods || !EDIT_COMMANDS[code]) return null
+  const primary = mods.includes('meta') || mods.includes('control')
+  if (!primary || mods.includes('alt')) return null
+  if (code === 'Z' && mods.includes('shift')) return 'redo'
+  return mods.length === 1 ? EDIT_COMMANDS[code] : null
+}
+
 function glideTarget (action) {
   if (!action) return null
   if (action.type === 'drag') return { x: action.fromX, y: action.fromY }
@@ -132,7 +147,11 @@ function planInputEvents (action, opts) {
   if (!action || typeof action !== 'object') throw new TypeError('inputPlan: action is required')
   const cfg = Object.assign({ dragSteps: 12, wheelStepPx: 120, betweenEventMs: 12, glideSteps: 5, glideMs: 12, from: null }, opts || {})
   const out = []
-  const add = (event, delayMs) => out.push({ event, delayMs: delayMs === undefined ? cfg.betweenEventMs : delayMs })
+  const add = (event, delayMs) => {
+    const d = delayMs === undefined ? cfg.betweenEventMs : delayMs
+    // { command: 'selectAll' } is a browser Edit-menu command, everything else an input event
+    out.push(event.command ? { command: event.command, delayMs: d } : { event, delayMs: d })
+  }
 
   // a real pointer travels to its target: glide from where it was (hover menus, :hover styles)
   const target = glideTarget(action)
@@ -215,17 +234,17 @@ function planInputEvents (action, opts) {
     case 'type': {
       if (typeof action.text !== 'string') throw new Error('type requires text')
       const mods = modifiersFor(action.modifiers)
+      // Typing replaces what is in the field (the usual intent), unless clear:false says append.
+      const replace = action.clear !== false
       if (action.x !== undefined && action.y !== undefined) {
-        // focus the field first; three clicks select whatever is already in it
+        // focus the field first
         add(mouseMove(action.x, action.y))
-        const clicks = action.clear ? 3 : 1
-        for (let c = 1; c <= clicks; c++) {
-          add(mouseDown(action.x, action.y, 'left', c), 20)
-          add(mouseUp(action.x, action.y, 'left', c), c === clicks ? 120 : 30)
-        }
-      } else if (action.clear) {
-        add({ type: 'keyDown', keyCode: 'A', modifiers: ['meta'] })
-        add({ type: 'keyUp', keyCode: 'A', modifiers: ['meta'] }, 40)
+        add(mouseDown(action.x, action.y, 'left', 1), 20)
+        add(mouseUp(action.x, action.y, 'left', 1), 120)
+      }
+      if (replace && (action.x !== undefined || action.clear === true)) {
+        // Edit ▸ Select All, then the typed text replaces the selection
+        add({ command: 'selectAll' }, 40)
       }
       for (const ch of action.text) {
         if (isWhitespaceChar(ch)) {
@@ -250,6 +269,11 @@ function planInputEvents (action, opts) {
       const code = keyCodeFor(action.key)
       if (!code) throw new Error('unknown key name: ' + action.key)
       const mods = modifiersFor(action.modifiers)
+      const command = editCommandFor(code, mods)
+      if (command) {
+        add({ command: command }, 60)
+        break
+      }
       if (code === 'Return' && !mods) {
         enterEvents(add)
         break
@@ -264,6 +288,11 @@ function planInputEvents (action, opts) {
       const main = keyCodeFor(parts[parts.length - 1])
       if (!main) throw new Error('shortcut has no usable key: ' + action.keys)
       const mods = modifiersFor(parts.slice(0, -1))
+      const command = editCommandFor(main, mods)
+      if (command) {
+        add({ command: command }, 60)
+        break
+      }
       add(Object.assign({ type: 'keyDown', keyCode: main }, mods ? { modifiers: mods } : {}))
       add(Object.assign({ type: 'keyUp', keyCode: main }, mods ? { modifiers: mods } : {}), 60)
       break

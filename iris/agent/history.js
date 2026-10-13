@@ -23,8 +23,9 @@ const DEFAULTS = {
   keepImages: 1,
   maxMessages: 40,
   maxSteps: 0,
-  maxNotes: 60,
-  maxDigest: 40
+  maxNotes: 120,
+  maxDigest: 40,
+  maxFiles: 400
 }
 
 function imagePart (dataUrl) {
@@ -41,6 +42,7 @@ function createHistory (options) {
   const cfg = Object.assign({}, DEFAULTS, options || {})
   let entries = []
   let notes = []
+  let files = [] // every file downloaded in this chat, kept compactly for long runs
   let digest = [] // one line per step that fell out of the window
   let digestDropped = 0
   let observationCount = 0
@@ -58,11 +60,17 @@ function createHistory (options) {
   function push (entry) {
     entries.push(entry)
     // keep the array bounded: drop the oldest step entries, never the task or follow-ups
-    while (entries.length > cfg.maxMessages) {
-      const dropIndex = entries.findIndex(e => !KEEP_KINDS.has(e.kind))
-      if (dropIndex < 0) break
-      remember(entries[dropIndex])
-      entries.splice(dropIndex, 1)
+    // Compact in one chunk, down to half the window. Dropping one entry per step would
+    // change the start of the prompt every time and defeat the server's prompt cache; a
+    // chunk keeps the prefix byte-identical for the next maxMessages/2 steps.
+    if (entries.length > cfg.maxMessages) {
+      const target = Math.floor(cfg.maxMessages / 2)
+      while (entries.length > target) {
+        const dropIndex = entries.findIndex(e => !KEEP_KINDS.has(e.kind))
+        if (dropIndex < 0) break
+        remember(entries[dropIndex])
+        entries.splice(dropIndex, 1)
+      }
     }
     return entry
   }
@@ -73,6 +81,7 @@ function createHistory (options) {
     start (task) {
       entries = []
       notes = []
+      files = []
       digest = []
       digestDropped = 0
       observationCount = 0
@@ -109,6 +118,17 @@ function createHistory (options) {
 
     notes () {
       return notes.slice()
+    },
+
+    addFile (name) {
+      const n = String(name || '').trim()
+      if (!n || files.includes(n)) return
+      files.push(n)
+      if (files.length > cfg.maxFiles) files.shift()
+    },
+
+    files () {
+      return files.slice()
     },
 
     addObservation (obs, step) {
@@ -173,6 +193,7 @@ function createHistory (options) {
           if (e === newest) {
             if (e.tabs && e.tabs.length > 1) text += '\n' + prompts.tabsText(e.tabs)
             if (digest.length) text += '\n' + prompts.digestText(digest, digestDropped)
+            if (files.length) text += '\n' + prompts.filesText(files)
             if (notes.length) text += '\n' + prompts.notesText(notes)
           }
           const parts = [textPart(text)]
@@ -194,6 +215,7 @@ function createHistory (options) {
       return {
         entries: entries.map(e => Object.assign({}, e, { dataUrl: e.dataUrl ? 'omitted' : null })),
         notes: notes.slice(),
+        files: files.slice(),
         digest: digest.slice(),
         digestDropped,
         observationCount
@@ -205,6 +227,7 @@ function createHistory (options) {
       entries = data.entries.map(e => Object.assign({}, e))
       notes = Array.isArray(data.notes) ? data.notes.slice() : []
       digest = Array.isArray(data.digest) ? data.digest.slice() : []
+      files = Array.isArray(data.files) ? data.files.slice() : []
       digestDropped = data.digestDropped || 0
       observationCount = data.observationCount || entries.filter(e => e.kind === 'observation').length
       return this

@@ -33,6 +33,7 @@ const IRIS_DEFAULT_SETTINGS = {
   model: 'Qwen3.8-Flash-Next-GGUF-IQ4_NL',
   apiKey: '',
   thinking: 'low', // off | low | medium | full
+  accountMode: 'signup', // login: log in only · signup: log in, or create an account with My info
   maxSteps: 40,
   maxMinutes: 20,
   temperature: 0.2,
@@ -434,7 +435,7 @@ function irisAttachEvents (computer, obs) {
       : 'The download of "' + d.name + '" failed (' + d.state + ').'
   })
   obs.note = (obs.note ? obs.note + '\n' : '') + lines.join('\n')
-  obs.memos = events.filter(function (d) { return d.state === 'completed' }).map(function (d) { return 'Downloaded: ' + d.name })
+  obs.files = events.filter(function (d) { return d.state === 'completed' }).map(function (d) { return d.name })
   return obs
 }
 
@@ -529,7 +530,8 @@ IrisComputer.prototype.act = async function (action) {
   this.injecting = true
   try {
     for (const step of plan) {
-      wc.sendInputEvent(step.event)
+      if (step.command) wc[step.command]() // Edit-menu command: selectAll / copy / paste / cut / undo / redo
+      else wc.sendInputEvent(step.event)
       if (step.delayMs) await sleep(step.delayMs)
     }
   } finally {
@@ -537,6 +539,12 @@ IrisComputer.prototype.act = async function (action) {
     self.injectingUntil = Date.now() + 400
   }
   this.pointer = irisInputPlan.pointerAfter(action) || this.pointer
+  if (action.type === 'type') {
+    // say exactly what went in, so a box that merely looks cut off is not "fixed" by mistake
+    const secret = action.text.indexOf('{{') !== -1
+    this.notes = (this.notes || []).concat('Typed ' + (secret ? action.text + ' (' + real.text.length + ' characters, filled in from My info)' : '"' + action.text + '"') +
+      (action.clear === false ? ' (added to the existing text).' : ' (replacing what was in the field).'))
+  }
   return { ok: true, events: plan.length }
 }
 
@@ -615,7 +623,9 @@ IrisComputer.prototype.state = function () {
  * Native <select> pop-ups are drawn by macOS outside the page, where a screenshot cannot see
  * them; a user-level style asks Chromium to draw them inside the page instead.
  */
-const IRIS_SELECT_CSS = 'select, ::picker(select) { appearance: base-select; }'
+const IRIS_SELECT_CSS = 'select, ::picker(select) { appearance: base-select; }' +
+  // the browser's "please fill in this field" bubble is native too: mark invalid fields visibly
+  ' :user-invalid { outline: 3px solid #e11d48 !important; outline-offset: 1px !important; }'
 
 IrisComputer.prototype.watch = function (wc) {
   const self = this
@@ -987,6 +997,12 @@ function irisSystemExtra (mode) {
   if (profile) parts.push(profile)
   const modeText = irisPrompts.modeText(mode)
   if (modeText) parts.push(modeText)
+  const accountMode = irisSettings().accountMode
+  if (irisProfileForPrompt().length) {
+    parts.push(accountMode === 'login'
+      ? 'When a site needs an account, log in with the user\'s saved email or username and password. Never create new accounts; if logging in fails, use ask_user.'
+      : 'When a site needs an account, first log in with the user\'s saved email or username and password. If the user has no account there, sign up with their saved details (name, email, password, and anything else the form asks that you know), accept the usual terms, then continue the task. If a sign-up asks for something you do not know, or sends a verification code or email link, use ask_user.')
+  }
   const rules = String(settings.get('irisRules') || '').trim()
   if (rules) parts.push('Rules from the user. Always follow these, they override everything else:\n' + rules)
   return parts.join('\n\n')
@@ -1065,7 +1081,7 @@ function startAgent (task, options) {
   const agent = irisLoop.createAgent({
     model: model,
     computer: computer,
-    config: { systemExtra: function () { return irisSystemExtra(mode) } },
+    config: { systemExtra: function () { return irisSystemExtra(mode) }, maxServerWaitMs: unlimited ? 0 : 10 * 60 * 1000 },
     safety: {
       maxSteps: unlimited ? 0 : cfg.maxSteps,
       maxModelMsPerStep: cfg.modelTimeoutMs + 5000,
@@ -1074,7 +1090,7 @@ function startAgent (task, options) {
       maxConsecutiveFailures: unlimited ? 12 : 4,
       maxRetriesPerStep: unlimited ? 8 : 3
     },
-    history: { keepImages: cfg.keepImages, maxMessages: unlimited ? 60 : 40 },
+    history: { keepImages: cfg.keepImages, maxMessages: unlimited ? 30 : 40 },
     log: DBUG,
     onEvent: function (type, payload) {
       if (type === 'thought' && payload.usage) {
@@ -1112,6 +1128,18 @@ function startAgent (task, options) {
     irisAgentState.answer = result.answer
     irisAgentState.reason = result.reason
     if (mode === 'repeat' && result.status !== 'stopped') irisScheduleRepeat(task, options)
+    // a non-stop run that hit trouble overnight picks itself back up (only Stop ends it)
+    if (mode === 'continuous' && result.status === 'failed' && (session.autoResumes || 0) < 50) {
+      session.autoResumes = (session.autoResumes || 0) + 1
+      broadcastEvent({ type: 'repeat:scheduled', at: Date.now() + 60000, minutes: 1, sessionId: session.id, resume: true })
+      irisRepeatTimer = setTimeout(function () {
+        irisRepeatTimer = null
+        const tabId = irisComputer ? irisComputer.tabId : options.tabId
+        const again = startAgent('Something went wrong (' + String(result.reason || '').slice(0, 160) + '). Continue the task from where you left off: ' + task,
+          Object.assign({}, options, { tabId: tabId, sessionId: session.id }))
+        if (!again.ok) DBUG('auto-resume failed: ' + again.error)
+      }, 60000)
+    }
   }).catch(function (err) {
     DBUG('run rejected ' + err.stack)
     irisAgentState.status = 'failed'

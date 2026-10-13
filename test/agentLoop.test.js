@@ -475,24 +475,32 @@ test('steps that fall out of the window are kept as a one-line summary', async (
   for (let i = 0; i < 30; i++) replies.push(json('reading item ' + i, { type: 'scroll', direction: 'down', amount: 1, x: 10, y: 10 + i }))
   replies.push((ctx) => { h.last = ctx.messages[ctx.messages.length - 1].content[0].text; h.count = ctx.messages.length; return json('done', { type: 'done' }) })
   const h = harness(replies, null, { history: { maxMessages: 12 }, safety: { maxSteps: 100 } })
+  const sizes = []
+  const next = h.model.next.bind(h.model)
+  h.model.next = function (ctx) { sizes.push(ctx.messages.length); return next(ctx) }
   await h.agent.run('long research')
   assert.match(h.last, /Earlier steps \(summary/)
   assert.match(h.last, /Scroll down/)
-  assert.ok(h.count <= 14, 'the conversation itself stays small: ' + h.count)
+  assert.ok(Math.max.apply(null, sizes) <= 14, 'the conversation itself stays small: ' + Math.max.apply(null, sizes))
+  // compaction happens in chunks, so most steps keep the same prefix (prompt cache hits)
+  let shrinks = 0
+  for (let i = 1; i < sizes.length; i++) if (sizes[i] < sizes[i - 1]) shrinks++
+  assert.ok(shrinks <= sizes.length / 3, 'compacted in chunks, not every step: ' + shrinks + ' of ' + sizes.length)
 })
 
-test('finished downloads become permanent notes', async () => {
+test('finished downloads are listed on every later step', async () => {
   const h = harness([json('download', { type: 'click', x: 10, y: 10 }), (ctx) => { h.last = ctx.messages[ctx.messages.length - 1].content[0].text; return json('done', { type: 'done' }) }])
   let n = 0
   const shot = h.computer.screenshot.bind(h.computer)
   h.computer.screenshot = function () {
     const o = shot()
-    if (++n === 2) { o.note = 'Downloaded "paper.pdf" (1.2 MB) to the Downloads folder.'; o.memos = ['Downloaded: paper.pdf'] }
+    if (++n === 2) { o.note = 'Downloaded "paper.pdf" (1.2 MB) to the Downloads folder.'; o.files = ['paper.pdf'] }
     return o
   }
   await h.agent.run('get the paper')
   assert.match(h.last, /Downloaded "paper.pdf"/)
-  assert.deepStrictEqual(h.agent.notes(), ['Downloaded: paper.pdf'])
+  assert.match(h.last, /Files already downloaded in this chat \(1, never download these again\): paper.pdf/)
+  assert.deepStrictEqual(h.agent.exportHistory().files, ['paper.pdf'])
 })
 
 test('ask_user pauses with the question and the answer reaches the model', async () => {

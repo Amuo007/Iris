@@ -280,6 +280,7 @@ function createAgent (opts) {
           emit('remember', { step: state.step, note: m, automatic: true })
         })
       }
+      if (Array.isArray(obs.files)) obs.files.forEach(function (f) { history.addFile(f) })
 
       // did the last action visibly do anything? (cheap, pixel-level)
       const unchanged = !!(lastActed && obs.fingerprint && lastFingerprint && obs.fingerprint === lastFingerprint)

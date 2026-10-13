@@ -43,6 +43,12 @@ function digestText (lines, dropped) {
   return 'Earlier steps (summary' + (dropped ? ', plus ' + dropped + ' older ones' : '') + '):\n' + lines.join('\n')
 }
 
+function filesText (files) {
+  const shown = files.slice(-200)
+  return 'Files already downloaded in this chat (' + files.length + ', never download these again): ' +
+    (files.length > shown.length ? '… ' : '') + shown.join(', ')
+}
+
 function notesText (notes) {
   return 'Your notes so far:\n' + notes.map(function (n) { return '- ' + n }).join('\n')
 }
@@ -118,6 +124,7 @@ module.exports = {
   followUpMessage,
   digestLine,
   digestText,
+  filesText,
   tabsText,
   notesText,
   profileText,

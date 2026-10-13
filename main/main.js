@@ -64,7 +64,7 @@ if (process.platform === 'win32') {
 }
 
 if (isDevelopmentMode) {
-  app.setPath('userData', app.getPath('userData') + '-development')
+  app.setPath('userData', process.env.IRIS_USER_DATA || (app.getPath('userData') + '-development'))
 }
 
 // workaround for flicker when focusing app (https://github.com/electron/electron/issues/17942)
