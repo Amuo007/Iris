@@ -22,6 +22,73 @@ function taskMessage (task) {
   return 'Task: ' + task
 }
 
+/**
+ * The deeper-thinking call before a "Plan first" run. No screenshot: just the request.
+ * It may ask the user a few multiple-choice questions first (once), then it plans.
+ */
+function planMessages (task, extra, opts) {
+  const o = opts || {}
+  const lines = [
+    'You plan tasks for Iris, an AI agent that uses a web browser like a person (screenshots, mouse, keyboard).',
+    'The user may describe what they want loosely. Work out what they most likely need, then write a short plan.'
+  ]
+  if (o.allowQuestions) {
+    lines.push(
+      'If the request could mean quite different things and the answer would change what Iris looks for,',
+      'ask first: reply with JSON only, {"questions":[{"q":"<short question>","options":["<a>","<b>","<c>"]}]},',
+      'at most 4 questions with 2-4 options each. If it is clear enough, do not ask: write the plan.'
+    )
+  }
+  lines.push(
+    'The plan is plain text, at most 12 short lines, exactly these parts:',
+    'Goal: <one line>',
+    'Good result means: <2-4 short criteria Iris can check by reading a page>',
+    'How: <2-5 steps: where to look, which searches to try>',
+    'Done when: <one line, e.g. a number of kept results>'
+  )
+  const user = ['Request: ' + task]
+  if (o.answers) user.push('The user answered your questions:\n' + o.answers + '\nNow write the plan (no more questions).')
+  if (o.current) user.push('The current plan, to revise rather than restart:\n' + o.current)
+  return [
+    { role: 'system', content: lines.join('\n') + (extra ? '\n\n' + extra : '') },
+    { role: 'user', content: user.join('\n\n') }
+  ]
+}
+
+/** {"questions":[...]} from a planner reply, cleaned up; null if it is a plan. */
+function parseQuestions (text) {
+  const m = /\{[\s\S]*"questions"[\s\S]*\}/.exec(String(text || ''))
+  if (!m) return null
+  try {
+    const obj = JSON.parse(m[0])
+    const qs = (obj.questions || []).slice(0, 4).map(function (q) {
+      return { q: String(q.q || q.question || '').slice(0, 200), options: (q.options || []).slice(0, 4).map(function (x) { return String(x).slice(0, 120) }) }
+    }).filter(function (q) { return q.q })
+    return qs.length ? qs : null
+  } catch (e) {
+    return null
+  }
+}
+
+function planText (plan) {
+  return 'Your plan (made before starting; follow it and adjust when you learn something new):\n' + plan +
+    '\nJudge each candidate (open it and read enough) before you keep, download or report it.'
+}
+
+function finishCheckNote () {
+  return 'Not finished yet: you have not judged any candidate. Open each one you want to report, read enough of it ' +
+    '(abstract, description), and record judge. Your final answer must list only what you kept with judge, each with the reason.'
+}
+
+function reviewNote () {
+  return 'Check-in: compare your progress with the plan. What is done, what is left, and does the approach need to change? Then continue.'
+}
+
+function decisionsText (kept, skipped) {
+  const shown = kept.slice(-10)
+  return 'Your decisions so far: kept ' + kept.length + (shown.length ? ' (' + shown.join('; ') + ')' : '') + ', skipped ' + skipped + '. Use recall to check one.'
+}
+
 function followUpMessage (text) {
   return 'New message from the user (continue from where you are; earlier steps above are context): ' + text
 }
@@ -127,6 +194,12 @@ module.exports = {
   systemPrompt,
   taskMessage,
   followUpMessage,
+  planMessages,
+  parseQuestions,
+  planText,
+  reviewNote,
+  finishCheckNote,
+  decisionsText,
   digestLine,
   digestText,
   filesText,

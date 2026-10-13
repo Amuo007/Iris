@@ -196,6 +196,160 @@ function irisSessionMemory (session) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Projects: chats that share one plan and one memory (notes, decisions, downloads).
+ * A new chat in a project starts where the others left off, so resetting a long
+ * conversation loses nothing important. Only a short summary goes into the prompt.
+ * ------------------------------------------------------------------ */
+
+function irisProjectsPath () {
+  return path.join(userDataPath, 'iris-projects.json')
+}
+
+function irisProjectsLoad () {
+  try { return JSON.parse(fs.readFileSync(irisProjectsPath(), 'utf8')).projects || [] } catch (e) { return [] }
+}
+
+function irisProjectsSave (list) {
+  fs.writeFileSync(irisProjectsPath(), JSON.stringify({ projects: list }, null, 1))
+}
+
+function irisProject (id) {
+  return id ? irisProjectsLoad().find(function (p) { return p.id === id }) || null : null
+}
+
+function irisProjectUpdate (id, patch) {
+  const list = irisProjectsLoad()
+  const p = list.find(function (x) { return x.id === id })
+  if (!p) return
+  Object.assign(p, patch, { updated: Date.now() })
+  try { irisProjectsSave(list) } catch (e) { DBUG('project save: ' + e.message) }
+}
+
+var irisProjectStores = {}
+var irisProjectSaveTimers = {}
+
+function irisProjectMemory (id) {
+  if (!id) return null
+  if (!irisProjectStores[id]) {
+    let items = []
+    try { items = JSON.parse(fs.readFileSync(path.join(userDataPath, 'iris-project-' + id.replace(/[^a-z0-9-]/gi, '') + '.json'), 'utf8')).items || [] } catch (e) { /* new project */ }
+    irisProjectStores[id] = irisMemoryLib.createMemory(items)
+  }
+  return irisProjectStores[id]
+}
+
+function irisProjectMemoryAdd (id, kind, text, extra) {
+  const store = irisProjectMemory(id)
+  if (!store) return
+  store.add(kind, text, extra)
+  if (!irisProjectSaveTimers[id]) {
+    irisProjectSaveTimers[id] = setTimeout(function () {
+      irisProjectSaveTimers[id] = null
+      try {
+        fs.writeFileSync(path.join(userDataPath, 'iris-project-' + id.replace(/[^a-z0-9-]/gi, '') + '.json'), JSON.stringify({ items: store.items().slice(-8000) }))
+      } catch (e) { DBUG('project memory: ' + e.message) }
+    }, 2000)
+  }
+}
+
+/** What every chat in the project knows up front: plan, latest notes, decisions so far. */
+function irisProjectBrief (id) {
+  const p = irisProject(id)
+  if (!p) return ''
+  const store = irisProjectMemory(id)
+  const items = store ? store.items() : []
+  const lines = ['Project "' + p.name + '" — shared by all chats in this project. Continue its work; do not redo what is already done.']
+  if (p.plan) lines.push('Project plan (update_plan changes it for every chat):\n' + p.plan)
+  const notes = items.filter(function (it) { return it.kind === 'note' }).slice(-8).map(function (it) { return '- ' + it.text })
+  if (notes.length) lines.push('Latest project notes:\n' + notes.join('\n'))
+  const verdicts = items.filter(function (it) { return it.kind === 'verdict' })
+  const kept = verdicts.filter(function (it) { return /^Kept: /.test(it.text) }).map(function (it) { return it.text.replace(/^Kept: /, '').split(' — ')[0] })
+  if (verdicts.length) lines.push('Project decisions: kept ' + kept.length + (kept.length ? ' (' + kept.slice(-15).join('; ') + ')' : '') + ', skipped ' + (verdicts.length - kept.length) + '.')
+  const downloads = items.filter(function (it) { return it.kind === 'download' }).length
+  if (downloads) lines.push('Files downloaded in this project: ' + downloads + '.')
+  lines.push('Use recall to search everything this project has saved.')
+  return lines.join('\n')
+}
+
+ipc.on('iris-projects', function (event) {
+  event.reply('iris-projects-reply', { projects: irisProjectsLoad() })
+})
+
+ipc.on('iris-project-create', function (event, data) {
+  const name = String((data && data.name) || '').trim().slice(0, 80)
+  if (!name) return event.reply('iris-projects-reply', { projects: irisProjectsLoad() })
+  const list = irisProjectsLoad()
+  const project = { id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6), name: name, created: Date.now(), updated: Date.now(), plan: '' }
+  list.push(project)
+  try { irisProjectsSave(list) } catch (e) { DBUG('project create: ' + e.message) }
+  event.reply('iris-projects-reply', { projects: list, created: project.id })
+})
+
+/* ------------------------------------------------------------------ *
+ * Bookmarks: the browser UI owns them (Min's places); main asks it, and reads Chrome's file
+ * ------------------------------------------------------------------ */
+
+var irisBookmarkWaiters = {}
+ipc.on('iris-agent-bookmarks-reply', function (e, data) {
+  const w = data && irisBookmarkWaiters[data.id]
+  if (w) { delete irisBookmarkWaiters[data.id]; w(data) }
+})
+
+function irisAskBookmarks (query) {
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+  return new Promise(function (resolve) {
+    irisBookmarkWaiters[id] = resolve
+    broadcast('iris-agent-bookmarks-query', { id: id, query: query })
+    setTimeout(function () {
+      if (irisBookmarkWaiters[id]) { delete irisBookmarkWaiters[id]; resolve({ bookmarks: [], total: 0 }) }
+    }, 3000)
+  })
+}
+
+/* Google Chrome keeps bookmarks as JSON; folders become tags, the bar keeps its order. */
+function irisChromeBookmarksFile () {
+  const base = path.join(app.getPath('home'), 'Library', 'Application Support', 'Google', 'Chrome')
+  let file = path.join(base, 'Default', 'Bookmarks')
+  if (!fs.existsSync(file)) {
+    let profiles = []
+    try { profiles = fs.readdirSync(base).filter(function (n) { return /^Profile \d+$/.test(n) }) } catch (e) { /* no Chrome */ }
+    const found = profiles.map(function (n) { return path.join(base, n, 'Bookmarks') }).find(function (f) { return fs.existsSync(f) })
+    if (!found) throw new Error('Google Chrome bookmarks were not found on this Mac')
+    file = found
+  }
+  return file
+}
+
+function irisReadChromeBookmarks (file) {
+  return { bookmarks: require('./iris/agent/chromeBookmarks.js').parseChromeBookmarks(JSON.parse(fs.readFileSync(file, 'utf8'))), source: file }
+}
+
+ipc.on('iris-chrome-bookmarks', async function (event, data) {
+  const tabId = data && data.tabId
+  let file = null
+  try {
+    file = irisChromeBookmarksFile()
+    return event.reply('iris-chrome-bookmarks-data', Object.assign({ tabId: tabId }, irisReadChromeBookmarks(file)))
+  } catch (err) {
+    if (err.code !== 'EPERM' && err.code !== 'EACCES') return event.reply('iris-chrome-bookmarks-data', { tabId: tabId, error: err.message })
+  }
+  // macOS protects other apps' data: a file the user picks themselves is allowed
+  try {
+    const pick = await dialog.showOpenDialog(windows.getCurrent(), {
+      title: 'Import bookmarks from Chrome',
+      message: 'macOS needs your OK: select Chrome\'s "Bookmarks" file (it is already highlighted) and click Import.',
+      buttonLabel: 'Import',
+      defaultPath: file,
+      properties: ['openFile', 'showHiddenFiles']
+    })
+    if (pick.canceled || !pick.filePaths[0]) return event.reply('iris-chrome-bookmarks-data', { tabId: tabId, error: 'Import cancelled. You can also allow Iris in System Settings → Privacy & Security → Full Disk Access.' })
+    event.reply('iris-chrome-bookmarks-data', Object.assign({ tabId: tabId }, irisReadChromeBookmarks(pick.filePaths[0])))
+  } catch (err) {
+    event.reply('iris-chrome-bookmarks-data', { tabId: tabId, error: err.message })
+  }
+})
+
+/* ------------------------------------------------------------------ *
  * Accounts Iris created, so the user can find them later (Settings → Accounts)
  * ------------------------------------------------------------------ */
 
@@ -677,10 +831,23 @@ IrisComputer.prototype.act = async function (action) {
         if (!seen.has(line)) { seen.add(line); found.push(line) }
       }
       if (this.memory) this.memory.search(action.query, 8).forEach(add)
+      if (this.projectMemory) this.projectMemory.search(action.query, 8).forEach(add)
       irisDownloads().search(action.query, 5).forEach(add)
       this.notes = (this.notes || []).concat(found.length
         ? 'Recall "' + action.query + '":\n' + found.slice(0, 10).join('\n')
         : 'Recall "' + action.query + '": nothing saved matches that.')
+      return { ok: true }
+    }
+    case 'bookmark':
+      broadcast('iris-agent-bookmark', { url: wc.getURL(), title: action.title || wc.getTitle() })
+      this.notes = (this.notes || []).concat('Bookmarked "' + (action.title || wc.getTitle()) + '" on the bookmarks bar.')
+      return { ok: true }
+    case 'bookmarks': {
+      const found = await irisAskBookmarks(action.query || '')
+      this.notes = (this.notes || []).concat(found.bookmarks.length
+        ? 'Bookmarks' + (action.query ? ' matching "' + action.query + '"' : '') + ' (' + found.total + ' in all):\n' +
+          found.bookmarks.map(function (b) { return '- ' + (b.title || b.url) + ' — ' + b.url }).join('\n')
+        : 'No bookmarks match "' + (action.query || '') + '" (' + found.total + ' bookmarks in all).')
       return { ok: true }
     }
     case 'save_account':
@@ -1083,7 +1250,7 @@ function irisSessionList () {
     try {
       const s = JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8'))
       const results = (s.items || []).filter(function (i) { return i.kind === 'result' })
-      list.push({ id: s.id, title: s.title, created: s.created, updated: s.updated, status: s.status, runs: results.length })
+      list.push({ id: s.id, title: s.title, created: s.created, updated: s.updated, status: s.status, runs: results.length, projectId: s.projectId || null })
     } catch (e) { /* skip broken file */ }
   })
   list.sort(function (a, b) { return b.updated - a.updated })
@@ -1115,6 +1282,11 @@ function irisRecord (session, type, p) {
     stepItem(p.step).error = p.error
   } else if (type === 'remember') {
     items.push({ kind: 'note', text: p.note })
+  } else if (type === 'plan') {
+    items.push({ kind: 'plan', text: p.text })
+  } else if (type === 'verdict') {
+    items.push({ kind: 'verdict', item: p.item, keep: p.keep, why: p.why })
+    irisSessionMemory(session).add('verdict', (p.keep ? 'Kept: ' : 'Skipped: ') + p.item + (p.why ? ' — ' + p.why : ''))
   } else if (type === 'run:end') {
     items.push({ kind: 'result', status: p.status, answer: p.answer, reason: p.reason, steps: p.steps, ms: p.stats && p.stats.elapsedMs })
     session.status = p.status
@@ -1204,8 +1376,10 @@ function irisBindInput (tabId, cfg) {
   }
 }
 
-function irisSystemExtra (mode, task) {
+function irisSystemExtra (mode, task, projectId) {
   const parts = []
+  const brief = irisProjectBrief(projectId)
+  if (brief) parts.push(brief)
   const now = new Date()
   parts.push('Today is ' + now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + '.')
   const profile = irisPrompts.profileText(irisProfileForPrompt())
@@ -1256,7 +1430,10 @@ function startAgent (task, options) {
   } else {
     irisSession = null
   }
-  if (!irisSession) irisSession = irisNewSession(task)
+  if (!irisSession) {
+    irisSession = irisNewSession(task)
+    if (options.projectId && irisProject(options.projectId)) irisSession.projectId = options.projectId
+  }
   const session = irisSession
   session.run = (session.run || 0) + 1
   session.items.push({ kind: 'user', text: task, mode: options.mode || 'once', run: session.run })
@@ -1272,6 +1449,8 @@ function startAgent (task, options) {
     }
   }, options.viewBounds)
   computer.memory = irisSessionMemory(session)
+  computer.projectId = session.projectId || null
+  computer.projectMemory = irisProjectMemory(session.projectId)
   irisComputer = computer
   irisBindInput(tabId, cfg)
 
@@ -1302,7 +1481,11 @@ function startAgent (task, options) {
   const agent = irisLoop.createAgent({
     model: model,
     computer: computer,
-    config: { systemExtra: function () { return irisSystemExtra(mode, session.title + '\n' + task) }, maxServerWaitMs: unlimited ? 0 : 10 * 60 * 1000 },
+    config: {
+      systemExtra: function () { return irisSystemExtra(mode, session.title + '\n' + task, session.projectId) },
+      maxServerWaitMs: unlimited ? 0 : 10 * 60 * 1000,
+      planThinking: cfg.thinking === 'full' ? 'full' : 'medium'
+    },
     safety: {
       maxSteps: unlimited ? 0 : cfg.maxSteps,
       maxModelMsPerStep: cfg.modelTimeoutMs + 5000,
@@ -1315,7 +1498,12 @@ function startAgent (task, options) {
     log: DBUG,
     onEvent: function (type, payload) {
       if (type === 'run:start') { irisUsageRecord('task'); session.runUrls = [] }
-      if (type === 'remember' && payload.note && !payload.automatic) irisSessionMemory(session).add('note', payload.note)
+      if (type === 'remember' && payload.note && !payload.automatic) {
+        irisSessionMemory(session).add('note', payload.note)
+        if (session.projectId) irisProjectMemoryAdd(session.projectId, 'note', payload.note)
+      }
+      if (session.projectId && type === 'verdict') irisProjectMemoryAdd(session.projectId, 'verdict', (payload.keep ? 'Kept: ' : 'Skipped: ') + payload.item + (payload.why ? ' — ' + payload.why : ''))
+      if (session.projectId && type === 'plan' && payload.text) irisProjectUpdate(session.projectId, { plan: payload.text })
       // remember direct URLs that led to a successful answer: next time they are the shortcut
       if (type === 'action' && payload.action && payload.action.type === 'navigate') {
         const resolved = irisResolveUrl(payload.action.url)
@@ -1382,7 +1570,8 @@ function startAgent (task, options) {
   if (previousHistory) agent.importHistory(previousHistory)
   irisAgent = agent
 
-  agent.run(task, { followUp: !!previousHistory }).then(function (result) {
+  const project = irisProject(session.projectId)
+  agent.run(task, { followUp: !!previousHistory, plan: !!options.plan, projectPlan: project && project.plan }).then(function (result) {
     irisAgentState.status = result.status
     irisAgentState.answer = result.answer
     irisAgentState.reason = result.reason
@@ -1521,6 +1710,38 @@ ipc.on('iris-agent-settings-changed', function () {
   broadcast('iris-agent-settings', irisSettings())
 })
 
+/* Settings page actions that need the main process */
+ipc.on('iris-settings-action', async function (event, data) {
+  const reply = function (result) { event.reply('iris-settings-action-reply', { tabId: data.tabId, action: data.action, result: result }) }
+  try {
+    switch (data.action) {
+      case 'defaultStatus':
+        return reply({ isDefault: app.isDefaultProtocolClient('https') })
+      case 'makeDefault':
+        app.setAsDefaultProtocolClient('http')
+        app.setAsDefaultProtocolClient('https')
+        return reply({ isDefault: app.isDefaultProtocolClient('https') })
+      case 'downloadDir':
+        return reply({ dir: settings.get('irisDownloadDir') || app.getPath('downloads') })
+      case 'chooseDownloadDir': {
+        const pick = await dialog.showOpenDialog(windows.getCurrent(), { properties: ['openDirectory', 'createDirectory'], defaultPath: settings.get('irisDownloadDir') || app.getPath('downloads') })
+        if (!pick.canceled && pick.filePaths[0]) settings.set('irisDownloadDir', pick.filePaths[0])
+        return reply({ dir: settings.get('irisDownloadDir') || app.getPath('downloads') })
+      }
+      case 'clearData': {
+        const ses = session.fromPartition('persist:webcontent')
+        if (data.args && data.args.cookies) await ses.clearStorageData({ storages: ['cookies', 'localstorage', 'indexdb', 'serviceworkers', 'cachestorage', 'websql'] })
+        if (data.args && data.args.cache) await ses.clearCache()
+        return reply({ ok: true })
+      }
+      default:
+        return reply({ error: 'unknown action' })
+    }
+  } catch (err) {
+    reply({ error: err.message })
+  }
+})
+
 ipc.on('iris-accounts-get', function (event, data) {
   event.reply('iris-accounts-data', { tabId: data && data.tabId, accounts: irisAccountsForPage() })
 })
@@ -1559,8 +1780,24 @@ settings.listen('irisAI', function () {
  * (a native dialog is invisible to a screenshot-driven agent)
  * ------------------------------------------------------------------ */
 
+/* Normal browsing: like Chrome, save straight to the downloads folder unless the user asks to choose. */
+function irisSaveDownload (item) {
+  const dir = settings.get('irisDownloadDir') || app.getPath('downloads')
+  const name = (item.getFilename() || 'download').replace(/[/\\:]/g, '_')
+  const ext = path.extname(name)
+  const base = path.basename(name, ext)
+  let target = path.join(dir, name)
+  for (let i = 1; fs.existsSync(target) && i < 500; i++) target = path.join(dir, base + ' (' + i + ')' + ext)
+  item.setSavePath(target)
+}
+
 function irisOnDownload (event, item) {
-  if (!irisIsBusy() || !irisComputer) return
+  if (!irisIsBusy() || !irisComputer) {
+    if (settings.get('irisDownloadAsk') !== true) {
+      try { irisSaveDownload(item) } catch (e) { DBUG('download path: ' + e.message) }
+    }
+    return
+  }
   const computer = irisComputer
   // already have it? Checked by code (paper IDs, DOIs, cleaned-up URLs), so the model never has to
   const earlier = irisDownloads().findDownload(item.getURL(), item.getFilename())
@@ -1591,6 +1828,7 @@ function irisOnDownload (event, item) {
       irisDownloads().add('download', 'Downloaded ' + rec.name, entry)
       irisDownloadsSave()
       if (computer.memory) computer.memory.add('download', 'Downloaded ' + rec.name, entry)
+      if (computer.projectId) irisProjectMemoryAdd(computer.projectId, 'download', 'Downloaded ' + rec.name, entry)
     }
     computer.downloads = (computer.downloads || []).concat(rec)
     DBUG('download ' + state + ': ' + rec.path)

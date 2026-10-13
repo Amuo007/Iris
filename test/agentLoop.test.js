@@ -538,3 +538,86 @@ test('only the latest notes are shown; older ones are left to recall', async () 
   assert.ok(!/fact number 0\b/.test(h.last))
   assert.match(h.last, /fact number 19/)
 })
+
+/* ---------- plan first, judge, check-ins ------------------------------- */
+
+test('plan first: one planning call, the plan stays at the top, then normal steps', async () => {
+  const plan = 'Goal: find good papers\nGood result means: about harness generation\nHow: search arXiv\nDone when: 3 kept'
+  const h = harness([
+    (ctx) => { h.planCtx = ctx; return plan },
+    (ctx) => { h.firstStep = ctx.messages; return JSON.stringify({ thought: 'look', actions: [{ type: 'judge', item: 'P', keep: true, why: 'fits' }, { type: 'done', answer: 'ok' }] }) }
+  ])
+  const result = await h.agent.run('find me a few good papers on harnesses', { plan: true })
+  assert.strictEqual(result.status, 'done')
+  assert.strictEqual(h.planCtx.thinking, 'medium')
+  assert.ok(!JSON.stringify(h.planCtx.messages).includes('image_url'), 'the plan call has no screenshot')
+  assert.strictEqual(ev(h.events, 'plan')[0].text, plan)
+  assert.match(h.firstStep[2].content, /Your plan[\s\S]*Done when: 3 kept/)
+  assert.strictEqual(result.steps, 1, 'planning is not a step')
+})
+
+test('judge records decisions without touching the page and shows a running tally', async () => {
+  const h = harness([
+    JSON.stringify({ thought: 'read it', actions: [
+      { type: 'judge', item: 'Paper A', keep: true, why: 'about fuzz harnesses' },
+      { type: 'judge', item: 'Paper B', keep: false, why: 'unrelated' }
+    ] }),
+    (ctx) => { h.last = ctx.messages[ctx.messages.length - 1].content[0].text; return json('done', { type: 'done' }) }
+  ])
+  await h.agent.run('choose papers')
+  assert.strictEqual(h.computer.actions.length, 0)
+  assert.deepStrictEqual(ev(h.events, 'verdict').map(v => [v.item, v.keep]), [['Paper A', true], ['Paper B', false]])
+  assert.match(h.last, /kept 1 \(Paper A\), skipped 1/)
+})
+
+test('a planned run gets a check-in every reviewEvery steps', async () => {
+  const replies = ['Goal: x\nHow: y\nDone when: z']
+  for (let i = 0; i < 6; i++) replies.push(json('s' + i, { type: 'scroll', direction: 'down', amount: 1, x: 5, y: 5 + i }))
+  replies.push(json('done', { type: 'done' }))
+  const h = harness(replies, null, { config: { settleDelayMs: 0, markerDwellMs: 0, reviewEvery: 3 } })
+  const seen = []
+  const next = h.model.next.bind(h.model)
+  h.model.next = function (ctx) { seen.push(JSON.stringify(ctx.messages)); return next(ctx) }
+  await h.agent.run('loose task', { plan: true })
+  assert.ok(seen.some(m => /Check-in: compare your progress with the plan/.test(m)))
+})
+
+test('a planned run that tries to finish without judging anything is sent back once', async () => {
+  const h = harness([
+    'Goal: x\nGood result means: y\nHow: z\nDone when: 2 kept',
+    json('done already', { type: 'done', answer: 'from memory' }),
+    (ctx) => { h.msgs = JSON.stringify(ctx.messages); return JSON.stringify({ thought: 'read it', actions: [{ type: 'judge', item: 'Paper A', keep: true, why: 'fits' }, { type: 'done', answer: 'Paper A' }] }) }
+  ])
+  const result = await h.agent.run('find good papers', { plan: true })
+  assert.strictEqual(result.status, 'done')
+  assert.strictEqual(result.answer, 'Paper A')
+  assert.match(h.msgs, /Not finished yet: you have not judged any candidate/)
+  assert.strictEqual(ev(h.events, 'finish:check').length, 1)
+})
+
+test('planning may ask a short quiz first; the answers shape the plan', async () => {
+  const quiz = JSON.stringify({ questions: [{ q: 'Which kind of harness?', options: ['Fuzzing harnesses', 'Test harnesses', 'LLM eval harnesses'] }] })
+  const h = harness([
+    quiz,
+    (ctx) => { h.second = JSON.stringify(ctx.messages); return 'Goal: fuzzing harness papers\nGood result means: generates harnesses\nHow: arXiv\nDone when: 5 kept' },
+    JSON.stringify({ thought: 'ok', actions: [{ type: 'judge', item: 'A', keep: true, why: 'fits' }, { type: 'done', answer: 'A' }] })
+  ])
+  const running = h.agent.run('papers for generating harnesses', { plan: true })
+  await until(() => ev(h.events, 'questions').length === 1 && h.agent.status().status === 'paused', 'quiz to be shown')
+  assert.strictEqual(ev(h.events, 'questions')[0].questions[0].options.length, 3)
+  h.agent.answer('Which kind of harness? → Fuzzing harnesses')
+  const result = await running
+  assert.strictEqual(result.status, 'done')
+  assert.match(h.second, /The user answered your questions:[\s\S]*Fuzzing harnesses/)
+  assert.match(ev(h.events, 'plan')[0].text, /The user said: Which kind of harness\? → Fuzzing harnesses/)
+})
+
+test('update_plan replaces the plan in place and it survives compaction', async () => {
+  const replies = ['Goal: old plan\nDone when: 1 kept', JSON.stringify({ thought: 'learned more', action: { type: 'update_plan', plan: 'Goal: NEW plan\nDone when: 2 kept' } })]
+  for (let i = 0; i < 12; i++) replies.push(json('s' + i, { type: 'scroll', direction: 'down', amount: 1, x: 5, y: 5 + i }))
+  replies.push((ctx) => { h.msgs = JSON.stringify(ctx.messages); return JSON.stringify({ thought: 'k', actions: [{ type: 'judge', item: 'X', keep: true }, { type: 'done', answer: 'X' }] }) })
+  const h = harness(replies, null, { history: { maxMessages: 8 }, safety: { maxSteps: 100 } })
+  await h.agent.run('loose task', { plan: true })
+  assert.match(h.msgs, /Goal: NEW plan/)
+  assert.ok(!/Goal: old plan/.test(h.msgs))
+})

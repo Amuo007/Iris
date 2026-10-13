@@ -813,6 +813,73 @@ settings.listen('irisAI', function (value) {
   irisRenderAll()
 })
 
+/* --- General, Bookmarks, Clear data --------------------------------------- */
+
+function irisAction (action, args) {
+  postMessage({ message: 'irisSettingsAction', action: action, args: args || {} })
+}
+
+window.addEventListener('message', function (e) {
+  if (!e.data) return
+  if (e.data.message === 'irisSettingsActionResult') {
+    var d = e.data.data || {}
+    var r = d.result || {}
+    if (d.action === 'defaultStatus' || d.action === 'makeDefault') {
+      document.getElementById('iris-default-status').textContent = r.isDefault ? 'Iris is your default browser.' : 'Open links from other apps in Iris.'
+      document.getElementById('iris-make-default').hidden = !!r.isDefault
+    } else if (d.action === 'downloadDir' || d.action === 'chooseDownloadDir') {
+      document.getElementById('iris-download-dir').textContent = (r.dir || '').replace(/^\/Users\/[^/]+/, '~')
+    } else if (d.action === 'clearData') {
+      document.getElementById('iris-clear-status').textContent = r.error ? 'Could not clear: ' + r.error : 'Cleared.'
+    }
+  } else if (e.data.message === 'irisImportResult') {
+    var res = e.data.data || {}
+    document.getElementById('iris-import-status').textContent = res.error ? res.error : 'Imported ' + res.count + ' bookmarks from Chrome.'
+    document.getElementById('iris-import-chrome').disabled = false
+  }
+})
+
+document.getElementById('iris-make-default').addEventListener('click', function () { irisAction('makeDefault') })
+document.getElementById('iris-download-change').addEventListener('click', function () { irisAction('chooseDownloadDir') })
+irisAction('defaultStatus')
+irisAction('downloadDir')
+
+var irisDownloadAsk = document.getElementById('checkbox-iris-download-ask')
+settings.get('irisDownloadAsk', function (v) { irisDownloadAsk.checked = v === true })
+irisDownloadAsk.addEventListener('change', function () { settings.set('irisDownloadAsk', this.checked) })
+
+var irisBarCheckbox = document.getElementById('checkbox-iris-bookmarks-bar')
+settings.get('irisBookmarksBar', function (v) { irisBarCheckbox.checked = v !== false })
+irisBarCheckbox.addEventListener('change', function () { settings.set('irisBookmarksBar', this.checked) })
+
+document.getElementById('iris-import-chrome').addEventListener('click', function () {
+  this.disabled = true
+  document.getElementById('iris-import-status').textContent = 'Importing…'
+  postMessage({ message: 'irisImportChrome' })
+})
+
+document.getElementById('iris-clear-data').addEventListener('click', function () {
+  var args = {
+    history: document.getElementById('iris-clear-history').checked,
+    cookies: document.getElementById('iris-clear-cookies').checked,
+    cache: document.getElementById('iris-clear-cache').checked
+  }
+  if (!args.history && !args.cookies && !args.cache) return
+  document.getElementById('iris-clear-status').textContent = 'Clearing…'
+  irisAction('clearData', args)
+})
+
+/* sidebar: highlight the section in view */
+var irisNavLinks = Array.prototype.slice.call(document.querySelectorAll('#iris-settings-nav a'))
+var irisSections = irisNavLinks.map(function (a) { return document.querySelector(a.getAttribute('href')) }).filter(Boolean)
+var irisSpy = new IntersectionObserver(function (entries) {
+  entries.forEach(function (en) {
+    if (!en.isIntersecting) return
+    irisNavLinks.forEach(function (a) { a.classList.toggle('is-current', a.getAttribute('href') === '#' + en.target.id) })
+  })
+}, { rootMargin: '-8% 0px -88% 0px' })
+irisSections.forEach(function (sec) { irisSpy.observe(sec) })
+
 /* --- Usage ------------------------------------------------------------- */
 
 function irisFormatCount (n) {

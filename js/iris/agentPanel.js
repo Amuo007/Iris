@@ -26,6 +26,7 @@ const SUGGESTIONS = [
 ]
 
 const THINKING_LABELS = { off: 'Fast', low: 'Balanced', medium: 'Careful', full: 'Deep' }
+const THINKING_HELP = 'How long Iris thinks before each action. Fast is quickest; Deep is slowest but most careful.'
 
 const RUN_MODES = [
   { value: 'once', label: 'Once' },
@@ -37,6 +38,8 @@ const RUN_MODES = [
 ]
 
 const ICONS = {
+  bolt: '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6L13 3z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+  loop: '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8.5M20 4v4.5h-4.5M20 12a8 8 0 0 1-13.7 5.6L4 15.5M4 20v-4.5h4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   close: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
   gear: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.5-2-3.4-2.3.9a7.5 7.5 0 0 0-2.6-1.5L14.1 2.5h-4.2l-.4 2.5a7.5 7.5 0 0 0-2.6 1.5l-2.3-.9-2 3.4 2 1.5a7.6 7.6 0 0 0 0 3l-2 1.5 2 3.4 2.3-.9a7.5 7.5 0 0 0 2.6 1.5l.4 2.5h4.2l.4-2.5a7.5 7.5 0 0 0 2.6-1.5l2.3.9 2-3.4-2-1.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
   plus: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
@@ -69,6 +72,7 @@ const ACTION_LABELS = {
   find: 'Find',
   save_account: 'Saved account',
   recall: 'Recall',
+  judge: 'Judge',
   dialog: 'Answer dialog',
   upload: 'Upload',
   ask_user: 'Asking you',
@@ -85,6 +89,11 @@ let taskInput = null
 let sendButton = null
 let thinkingSelect = null
 let modeSelect = null
+let planToggle = null
+let projectSelect = null
+let projectNewRow = null
+let projects = []
+let currentProjectId = null
 let streamEl = null
 let historyEl = null
 let statusBar = null
@@ -161,6 +170,46 @@ function buildPanel () {
   header.appendChild(closeBtn)
   panelEl.appendChild(header)
 
+  // project: chats in a project share one plan and one memory
+  const projectBar = el('div', 'iris-projectbar')
+  projectBar.appendChild(el('span', 'iris-projectbar-label', 'Project'))
+  projectSelect = document.createElement('select')
+  projectSelect.className = 'iris-project-select'
+  projectSelect.title = 'Chats in a project share their plan, notes, decisions and downloads'
+  projectSelect.addEventListener('change', function () {
+    if (projectSelect.value === '__new') {
+      projectNewRow.hidden = false
+      projectNewRow.querySelector('input').focus()
+      projectSelect.value = currentProjectId || ''
+      return
+    }
+    setProject(projectSelect.value || null)
+  })
+  projectBar.appendChild(projectSelect)
+  panelEl.appendChild(projectBar)
+  projectNewRow = el('div', 'iris-project-new')
+  projectNewRow.hidden = true
+  const nameInput = document.createElement('input')
+  nameInput.placeholder = 'Project name, e.g. "Harness research"'
+  const createBtn = el('button', 'iris-btn-primary', 'Create')
+  createBtn.type = 'button'
+  const cancelBtn = el('button', 'iris-btn-quiet', 'Cancel')
+  cancelBtn.type = 'button'
+  const create = function () {
+    const name = nameInput.value.trim()
+    if (!name) return
+    ipc.send('iris-project-create', { name })
+    nameInput.value = ''
+    projectNewRow.hidden = true
+  }
+  createBtn.addEventListener('click', create)
+  nameInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') create(); if (e.key === 'Escape') projectNewRow.hidden = true })
+  cancelBtn.addEventListener('click', function () { projectNewRow.hidden = true })
+  projectNewRow.appendChild(nameInput)
+  projectNewRow.appendChild(cancelBtn)
+  projectNewRow.appendChild(createBtn)
+  panelEl.appendChild(projectNewRow)
+
   // live status (while a task runs or waits to repeat)
   statusBar = el('div', 'iris-statusbar')
   statusBar.hidden = true
@@ -211,14 +260,25 @@ function buildPanel () {
   composer.appendChild(box)
 
   const meta = el('div', 'iris-composer-meta')
-  thinkingSelect = selectControl('Thinking', Object.keys(THINKING_LABELS).map(function (k) { return { value: k, label: THINKING_LABELS[k] } }),
-    'How much Iris thinks before each action. Fast is quickest; Deep is slowest.')
+  thinkingSelect = selectControl(ICONS.bolt, Object.keys(THINKING_LABELS).map(function (k) { return { value: k, label: THINKING_LABELS[k] } }),
+    THINKING_HELP)
   thinkingSelect.select.addEventListener('change', function () {
     settings.set('irisAI', Object.assign({}, settings.get('irisAI') || {}, { thinking: thinkingSelect.select.value }))
   })
   meta.appendChild(thinkingSelect.label)
-  modeSelect = selectControl('Run', RUN_MODES, 'Once: until the task is done. Non-stop: no step or time limit. Repeat: runs again on a timer until you press Stop.')
+  modeSelect = selectControl(ICONS.loop, RUN_MODES, 'Once: until the task is done. Non-stop: no step or time limit. Repeat: runs again on a timer until you press Stop.')
   meta.appendChild(modeSelect.label)
+  planToggle = el('button', 'iris-plan-toggle')
+  planToggle.type = 'button'
+  planToggle.innerHTML = '<span class="iris-switch" aria-hidden="true"></span><span>Smart</span>'
+  planToggle.title = 'Smart: Iris thinks before it starts. It asks a few quick questions if your request is open, makes a plan, and reads every result before keeping it. Best for research and loose requests.'
+  planToggle.addEventListener('click', function () {
+    const on = !planToggle.classList.contains('is-on')
+    planToggle.classList.toggle('is-on', on)
+    planToggle.setAttribute('aria-pressed', String(on))
+    settings.set('irisAI', Object.assign({}, settings.get('irisAI') || {}, { planFirst: on }))
+  })
+  meta.appendChild(planToggle)
   composer.appendChild(meta)
   panelEl.appendChild(composer)
 
@@ -244,9 +304,46 @@ function openSettings () {
   }
 }
 
-function selectControl (labelText, options, title) {
+function renderProjects () {
+  projectSelect.innerHTML = ''
+  const none = document.createElement('option')
+  none.value = ''
+  none.textContent = 'None'
+  projectSelect.appendChild(none)
+  projects.forEach(function (p) {
+    const o = document.createElement('option')
+    o.value = p.id
+    o.textContent = p.name
+    projectSelect.appendChild(o)
+  })
+  const add = document.createElement('option')
+  add.value = '__new'
+  add.textContent = '+ New project…'
+  projectSelect.appendChild(add)
+  if (currentProjectId && !projects.some(function (p) { return p.id === currentProjectId })) currentProjectId = null
+  projectSelect.value = currentProjectId || ''
+}
+
+function setProject (id) {
+  if (isBusy()) {
+    projectSelect.value = currentProjectId || ''
+    return
+  }
+  currentProjectId = id
+  settings.set('irisAI', Object.assign({}, settings.get('irisAI') || {}, { currentProject: id }))
+  newChat()
+}
+
+function projectName (id) {
+  const p = projects.find(function (x) { return x.id === id })
+  return p ? p.name : ''
+}
+
+function selectControl (icon, options, title) {
   const label = el('label', 'iris-select')
-  label.appendChild(el('span', '', labelText))
+  const glyph = el('span', 'iris-select-icon')
+  glyph.innerHTML = icon
+  label.appendChild(glyph)
   const select = document.createElement('select')
   options.forEach(function (o) {
     const opt = document.createElement('option')
@@ -360,6 +457,8 @@ function submitTask (taskText, options) {
     sessionId: options && options.newSession ? null : currentSessionId,
     mode: mode,
     everyMinutes: everyMinutes,
+    plan: options && options.plan !== undefined ? !!options.plan : planToggle.classList.contains('is-on'),
+    projectId: currentProjectId,
     // where the page is drawn, so Iris can see a tab that has no view attached yet
     viewBounds: webviews.getViewBounds()
   })
@@ -396,8 +495,12 @@ function renderHistory (list) {
   head.appendChild(back)
   head.appendChild(el('span', 'iris-history-title', 'History'))
   historyEl.appendChild(head)
+  if (currentProjectId) {
+    head.querySelector('.iris-history-title').textContent = 'History · ' + projectName(currentProjectId)
+    list = (list || []).filter(function (s) { return s.projectId === currentProjectId })
+  }
   if (!list || !list.length) {
-    historyEl.appendChild(el('p', 'iris-history-empty', 'No chats yet. Everything you ask Iris is saved here.'))
+    historyEl.appendChild(el('p', 'iris-history-empty', currentProjectId ? 'No chats in this project yet.' : 'No chats yet. Everything you ask Iris is saved here.'))
     return
   }
   list.forEach(function (s) {
@@ -406,7 +509,8 @@ function renderHistory (list) {
     main.type = 'button'
     main.appendChild(el('span', 'iris-history-name', s.title || 'Untitled'))
     const status = s.status === 'done' ? 'Done' : s.status === 'running' ? 'Running' : s.status === 'stopped' ? 'Stopped' : s.status === 'failed' ? 'Failed' : ''
-    main.appendChild(el('span', 'iris-history-meta', formatWhen(s.updated) + (status ? ' · ' + status : '') + (s.runs > 1 ? ' · ' + s.runs + ' runs' : '')))
+    main.appendChild(el('span', 'iris-history-meta', formatWhen(s.updated) + (status ? ' · ' + status : '') + (s.runs > 1 ? ' · ' + s.runs + ' runs' : '') +
+      (!currentProjectId && s.projectId && projectName(s.projectId) ? ' · ' + projectName(s.projectId) : '')))
     main.addEventListener('click', function () {
       if (isBusy()) return
       ipc.send('iris-agent-session-open', s.id)
@@ -455,6 +559,10 @@ function renderSession (data) {
       }
     } else if (it.kind === 'note') {
       addNote('Noted: ' + it.text, 'memo')
+    } else if (it.kind === 'plan') {
+      addPlanCard(it.text)
+    } else if (it.kind === 'verdict') {
+      addVerdict(it)
     } else if (it.kind === 'result') {
       addResultCard({ status: it.status, answer: it.answer, reason: it.reason, steps: it.steps }, it.ms)
     }
@@ -665,6 +773,73 @@ function addResult (payload) {
   }
 }
 
+/* Planning questions: a small quiz. Answers go back as one message; "Just go" skips. */
+function addQuestions (questions) {
+  removeEmpty()
+  const card = el('div', 'iris-quiz')
+  card.appendChild(el('div', 'iris-plan-title', 'A few quick questions'))
+  const picks = questions.map(function () { return { value: '' } })
+  questions.forEach(function (q, qi) {
+    const block = el('div', 'iris-quiz-q')
+    block.appendChild(el('div', 'iris-quiz-label', q.q))
+    const opts = el('div', 'iris-quiz-options')
+    q.options.forEach(function (o) {
+      const b = el('button', 'iris-quiz-opt', o)
+      b.type = 'button'
+      b.addEventListener('click', function () {
+        opts.querySelectorAll('.iris-quiz-opt').forEach(function (x) { x.classList.remove('is-on') })
+        b.classList.add('is-on')
+        other.value = ''
+        picks[qi].value = o
+      })
+      opts.appendChild(b)
+    })
+    const other = document.createElement('input')
+    other.className = 'iris-quiz-other'
+    other.placeholder = 'Something else…'
+    other.addEventListener('input', function () {
+      opts.querySelectorAll('.iris-quiz-opt').forEach(function (x) { x.classList.remove('is-on') })
+      picks[qi].value = other.value.trim()
+    })
+    block.appendChild(opts)
+    block.appendChild(other)
+    card.appendChild(block)
+  })
+  const actions = el('div', 'iris-quiz-actions')
+  const go = el('button', 'iris-btn-primary', 'Continue')
+  go.type = 'button'
+  const skip = el('button', 'iris-btn-quiet', 'Just go')
+  skip.type = 'button'
+  const close = function () { card.classList.add('is-done'); card.querySelectorAll('button, input').forEach(function (x) { x.disabled = true }) }
+  go.addEventListener('click', function () {
+    const text = questions.map(function (q, i) { return picks[i].value ? q.q + ' → ' + picks[i].value : '' }).filter(Boolean).join('\n')
+    close()
+    ipc.send('iris-agent-answer', text)
+  })
+  skip.addEventListener('click', function () {
+    close()
+    ipc.send('iris-agent-resume')
+  })
+  actions.appendChild(skip)
+  actions.appendChild(go)
+  card.appendChild(actions)
+  streamEl.appendChild(card)
+  scrollToEnd()
+}
+
+function addPlanCard (text, updated) {
+  removeEmpty()
+  const card = el('div', 'iris-plan')
+  card.appendChild(el('div', 'iris-plan-title', updated ? 'Plan updated' : 'Plan'))
+  card.appendChild(el('pre', 'iris-plan-text', text))
+  streamEl.appendChild(card)
+  scrollToEnd()
+}
+
+function addVerdict (v) {
+  addNote((v.keep ? '✓ Kept: ' : '✗ Skipped: ') + v.item + (v.why ? ' — ' + v.why : ''), v.keep ? 'keep' : 'skip')
+}
+
 function addNote (text, kind) {
   removeEmpty()
   const note = el('div', 'iris-note' + (kind ? ' iris-note-' + kind : ''), text)
@@ -734,6 +909,19 @@ function handleEvent (payload) {
     case 'learn':
       addNote('Learned for next time: ' + payload.tip, 'memo')
       break
+    case 'plan:start':
+      setStatus(keep, 'Planning…')
+      break
+    case 'plan':
+      addPlanCard(payload.text, payload.updated)
+      break
+    case 'questions':
+      addQuestions(payload.questions)
+      setStatus('paused', 'Iris has a few questions before planning')
+      break
+    case 'verdict':
+      addVerdict(payload)
+      break
     case 'download':
       if (payload.state === 'started') setStatus(keep, 'Downloading ' + (payload.name || 'a file') + '…')
       else if (payload.state === 'completed') addNote('Downloaded ' + payload.name + ' to your Downloads folder', 'memo')
@@ -792,6 +980,7 @@ function handleEvent (payload) {
       if (payload.where === 'screenshot') setStatus(keep, 'Waiting for the page to appear…')
       else if (payload.where === 'server') setStatus(keep, 'Model server unavailable · retrying in ' + Math.round((payload.waitMs || 0) / 1000) + 's')
       else if (payload.where === 'context') addNote(payload.error, 'memo')
+      else if (payload.where === 'plan') addNote('Could not make a plan (' + payload.error + '); going ahead without one.', 'warn')
       else if (payload.where === 'model') addNote('Model error: ' + payload.error + ' — retrying.', 'warn')
       break
     default:
@@ -805,6 +994,10 @@ function refreshModelBadge () {
   modelBadge.textContent = name.replace(/-GGUF.*$/i, '')
   modelBadge.title = (cfg.model || '') + (cfg.baseUrl ? '\n' + cfg.baseUrl : '')
   if (thinkingSelect && document.activeElement !== thinkingSelect.select) thinkingSelect.select.value = cfg.thinking || 'low'
+  if (planToggle) {
+    planToggle.classList.toggle('is-on', !!cfg.planFirst)
+    planToggle.setAttribute('aria-pressed', String(!!cfg.planFirst))
+  }
 }
 
 /* Tell the main process which tabs exist, so Iris can follow new tabs and switch between them. */
@@ -857,6 +1050,16 @@ function bindProfileBridge () {
       if (!urlParser.isInternalURL(tabs.get(tabId).url)) return
       ipc.send(forward[name], Object.assign({ tabId }, args[0] || {}))
     })
+  })
+  webviews.bindIPC('irisSettingsAction', function (tabId, args) {
+    if (!urlParser.isInternalURL(tabs.get(tabId).url)) return
+    const a = args[0] || {}
+    // history lives in the browser UI's places database; the rest is done by the main process
+    if (a.action === 'clearData' && a.args && a.args.history) require('places/places.js').deleteAllHistory()
+    ipc.send('iris-settings-action', { tabId, action: a.action, args: a.args })
+  })
+  ipc.on('iris-settings-action-reply', function (e, data) {
+    if (data && data.tabId && tabs.get(data.tabId)) webviews.callAsync(data.tabId, 'send', ['irisSettingsActionResult', data])
   })
   ipc.on('iris-accounts-data', function (e, data) {
     if (!data || !data.tabId || !tabs.get(data.tabId)) return
@@ -942,6 +1145,18 @@ function initialize () {
   setTimeout(pushTabs, 500)
 
   bindProfileBridge()
+
+  ipc.on('iris-projects-reply', function (e, data) {
+    projects = (data && data.projects) || []
+    if (data && data.created) {
+      currentProjectId = data.created
+      settings.set('irisAI', Object.assign({}, settings.get('irisAI') || {}, { currentProject: data.created }))
+      newChat()
+    }
+    renderProjects()
+  })
+  currentProjectId = (settings.get('irisAI') || {}).currentProject || null
+  ipc.send('iris-projects')
 
   window.addEventListener('keydown', function (e) {
     // Esc closes the idle panel when it has focus

@@ -27,6 +27,7 @@ const { parseAction, describeAction, isTerminal, PAGE_CHANGING } = require('./ac
 const { createMapping, mapActionToView, actionAnchorCss } = require('./coordinateMapper')
 const { createSafetyGate } = require('./safety')
 const { createHistory } = require('./history')
+const prompts = require('./prompts')
 
 const DEFAULTS = {
   maxAutoWaits: 4,
@@ -34,6 +35,8 @@ const DEFAULTS = {
   markerDwellMs: 120,
   maxModelMsPerStep: 180 * 1000,
   maxCaptureFailures: 5,
+  planThinking: 'medium', // the plan is one call: worth thinking about
+  reviewEvery: 20, // with a plan, a check-in every N steps
   maxServerWaitMs: 10 * 60 * 1000, // 0 = wait for the model server forever (non-stop runs)
   coordinateSpace: 'auto'
 }
@@ -86,6 +89,9 @@ function createAgent (opts) {
   let approvedKey = null
   let pendingApproval = null
   let takeoverAcknowledged = false
+  let planActive = false
+  let lastAnswer = ''
+  let finishChecked = false
 
   function resolveResume () {
     if (resumeDeferred) {
@@ -212,6 +218,48 @@ function createAgent (opts) {
     setStatus('running', null)
     emit('run:start', { task, followUp, limits: safety.snapshot().limits })
 
+    // ---- 0. plan first (optional): one deeper call turns a loose request into a plan ----
+    let planned = false
+    planActive = false
+    finishChecked = false
+    if (runOptions && runOptions.plan) {
+      emit('plan:start', {})
+      try {
+        const extra = typeof cfg.systemExtra === 'function' ? cfg.systemExtra() : cfg.systemExtra
+        const current = history.plan() || (runOptions.projectPlan || null)
+        const ask = function (o) {
+          return Promise.resolve(model.next({ messages: prompts.planMessages(task, extra, o), step: 0, thinking: cfg.planThinking, history: [] }))
+        }
+        let reply = await ask({ allowQuestions: !current && !runOptions.noQuestions, current })
+        let text = String(typeof reply === 'string' ? reply : (reply && reply.content) || '').trim()
+        let answers = ''
+        const questions = prompts.parseQuestions(text)
+        if (questions) {
+          // a short quiz before planning; the user answers in the panel (or skips)
+          lastAnswer = ''
+          emit('questions', { questions })
+          pauseRequested = true
+          if (!(await waitForResume())) return finish('stopped', stopRequested)
+          answers = lastAnswer
+          reply = await ask({ answers: answers || '(the user skipped the questions: use your best judgement)', current })
+          text = String(typeof reply === 'string' ? reply : (reply && reply.content) || '').trim()
+        }
+        if (text && !prompts.parseQuestions(text)) {
+          const full = (answers ? text + '\nThe user said: ' + answers.replace(/\n/g, '; ') : text).slice(0, 2400)
+          history.setPlan(full)
+          planned = true
+          planActive = true
+          emit('plan', { text: full, usage: reply && reply.usage, modelMs: reply && reply.ms })
+        }
+      } catch (err) {
+        if (stopRequested) return finish('stopped', stopRequested)
+        emit('error', { step: 0, where: 'plan', error: err.message })
+      }
+    } else if (history.plan()) {
+      planned = true
+      planActive = true
+    }
+
     let autoWaits = 0
     let lastTakeoverCount = 0
     let captureFailures = 0
@@ -319,6 +367,9 @@ function createAgent (opts) {
       }
       if (!obs.loading) autoWaits = 0
 
+      if (planned && cfg.reviewEvery > 0 && state.step > 1 && state.step % cfg.reviewEvery === 0) {
+        history.addSystemNote(prompts.reviewNote())
+      }
       history.addObservation(obs, state.step)
 
       // ---- 4. think ----------------------------------------------------------
@@ -417,6 +468,13 @@ function createAgent (opts) {
   async function perform (action, index, total, mapping, obs, pageState, unchanged) {
     // ---- terminal states -----------------------------------------------------
     if (isTerminal(action)) {
+      // a planned run must have looked at what it reports: send it back once if it judged nothing
+      if (action.type === 'done' && planActive && !finishChecked && history.decisions().kept.length === 0 && history.decisions().skipped === 0) {
+        finishChecked = true
+        history.addSystemNote(prompts.finishCheckNote())
+        emit('finish:check', { step: state.step })
+        return { stopBatch: true }
+      }
       if (action.type === 'done') return { finished: finish('done', null, action.answer || null) }
       return { finished: finish('failed', action.reason || 'the model reported the task as impossible') }
     }
@@ -457,6 +515,21 @@ function createAgent (opts) {
       }
       if (actionGate.kind === 'takeover') { pauseRequested = true; return { stopBatch: true } }
       return { finished: finish('stopped', actionGate.reason) }
+    }
+
+    // ---- a revised plan replaces the old one (kept through every compaction) --------
+    if (action.type === 'update_plan') {
+      history.setPlan(action.plan.slice(0, 2400))
+      planActive = true
+      emit('plan', { text: action.plan.slice(0, 2400), updated: true })
+      return {}
+    }
+
+    // ---- a decision about a candidate: remembered, nothing happens on the page ------
+    if (action.type === 'judge') {
+      history.addVerdict(action.item, action.keep)
+      emit('verdict', { step: state.step, item: action.item, keep: action.keep, why: action.why || '' })
+      return {}
     }
 
     // ---- ask the human: pause until they answer (or just press Resume) ------------
@@ -533,7 +606,9 @@ function createAgent (opts) {
     },
     /** The human answered an ask_user question (or added an instruction while paused). */
     answer (text) {
-      if (text && String(text).trim()) history.addSystemNote('The user says: ' + String(text).trim())
+      const t = String(text || '').trim()
+      lastAnswer = t
+      if (t && state.step > 0) history.addSystemNote('The user says: ' + t)
       this.resume()
     },
     resume () {

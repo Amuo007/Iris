@@ -37,13 +37,15 @@ function textPart (text) {
   return { type: 'text', text }
 }
 
-const KEEP_KINDS = new Set(['task', 'followup'])
+const KEEP_KINDS = new Set(['task', 'followup', 'plan'])
 
 function createHistory (options) {
   const cfg = Object.assign({}, DEFAULTS, options || {})
   let entries = []
   let notes = []
   let files = [] // every file downloaded in this chat, kept compactly for long runs
+  let kept = [] // judge decisions: names kept
+  let skipped = 0
   let digest = [] // one line per step that fell out of the window
   let digestDropped = 0
   let observationCount = 0
@@ -83,6 +85,8 @@ function createHistory (options) {
       entries = []
       notes = []
       files = []
+      kept = []
+      skipped = 0
       digest = []
       digestDropped = 0
       observationCount = 0
@@ -119,6 +123,30 @@ function createHistory (options) {
 
     notes () {
       return notes.slice()
+    },
+
+    setPlan (text) {
+      const existing = entries.find(e => e.kind === 'plan')
+      if (existing) {
+        // a revised plan replaces the old one in place: it is never lost to compaction
+        existing.text = prompts.planText(text)
+        existing.plan = text
+        return existing
+      }
+      return push({ kind: 'plan', role: 'user', text: prompts.planText(text), plan: text })
+    },
+
+    plan () {
+      const e = entries.find(x => x.kind === 'plan')
+      return e ? e.plan || null : null
+    },
+
+    addVerdict (item, keep) {
+      if (keep) { if (!kept.includes(item)) kept.push(item) } else skipped++
+    },
+
+    decisions () {
+      return { kept: kept.slice(), skipped }
     },
 
     addFile (name) {
@@ -196,6 +224,7 @@ function createHistory (options) {
             if (e.tabs && e.tabs.length > 1) text += '\n' + prompts.tabsText(e.tabs)
             if (e.skills) text += '\n' + prompts.skillsText(e.skills)
             if (digest.length) text += '\n' + prompts.digestText(digest, digestDropped)
+            if (kept.length || skipped) text += '\n' + prompts.decisionsText(kept, skipped)
             if (files.length) text += '\n' + prompts.filesText(files)
             if (notes.length) text += '\n' + prompts.notesText(notes.slice(-cfg.notesShown), Math.max(0, notes.length - cfg.notesShown))
           }
@@ -219,6 +248,8 @@ function createHistory (options) {
         entries: entries.map(e => Object.assign({}, e, { dataUrl: e.dataUrl ? 'omitted' : null })),
         notes: notes.slice(),
         files: files.slice(),
+        kept: kept.slice(),
+        skipped,
         digest: digest.slice(),
         digestDropped,
         observationCount
@@ -231,6 +262,8 @@ function createHistory (options) {
       notes = Array.isArray(data.notes) ? data.notes.slice() : []
       digest = Array.isArray(data.digest) ? data.digest.slice() : []
       files = Array.isArray(data.files) ? data.files.slice() : []
+      kept = Array.isArray(data.kept) ? data.kept.slice() : []
+      skipped = data.skipped || 0
       digestDropped = data.digestDropped || 0
       observationCount = data.observationCount || entries.filter(e => e.kind === 'observation').length
       return this

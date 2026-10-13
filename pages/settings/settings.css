@@ -401,9 +401,324 @@ body.dark-mode {
   background-color: #000000;
   color: #f5f5f5;
 }
-body.dark-mode #iris-ai-settings-container input,
-body.dark-mode #iris-ai-settings-container select,
-body.dark-mode #iris-ai-settings-container textarea {
-  background-color: #111111;
-  border-color: #2a2a2a;
+
+/* ==========================================================================
+   Iris settings — sidebar + cards, white / black, macOS-style switches
+   ========================================================================== */
+
+:root {
+  --s-bg: #ffffff;
+  --s-card: #ffffff;
+  --s-muted: #f2f2f2;
+  --s-line: #e7e7e7;
+  --s-line-strong: #d6d6d6;
+  --s-text: #0a0a0a;
+  --s-text-2: #555555;
+  --s-text-3: #8f8f8f;
+  --s-primary: #0a0a0a;
+  --s-primary-ink: #ffffff;
+  --s-on: #16a34a;
+}
+body.dark-mode {
+  --s-bg: #000000;
+  --s-card: #0b0b0b;
+  --s-muted: #1a1a1a;
+  --s-line: #222222;
+  --s-line-strong: #3a3a3a;
+  --s-text: #f5f5f5;
+  --s-text-2: #a3a3a3;
+  --s-text-3: #6b6b6b;
+  --s-primary: #f5f5f5;
+  --s-primary-ink: #000000;
+  --s-on: #22c55e;
+}
+
+body,
+body.dark-mode {
+  margin: 0;
+  background: var(--s-bg);
+  color: var(--s-text);
+}
+body * {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  letter-spacing: normal !important;
+}
+.i {
+  font-family: "carbon" !important;
+}
+
+.iris-settings {
+  display: flex;
+  min-height: 100vh;
+}
+
+.iris-settings-nav {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  width: 236px;
+  flex: none;
+  box-sizing: border-box;
+  padding: 22px 12px 30px;
+  border-right: 1px solid var(--s-line);
+  overflow-y: auto;
+}
+.iris-settings-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 10px 18px;
+  font-size: 17px;
+  font-weight: 700;
+}
+.iris-settings-mark {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--s-text);
+  position: relative;
+}
+.iris-settings-mark::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--s-text);
+}
+.iris-settings .iris-settings-nav a {
+  display: block;
+  text-decoration: none;
+  padding: 7px 10px;
+  margin: 1px 0;
+  border-radius: 8px;
+  color: var(--s-text-2) !important;
+  font-size: 13.5px;
+  text-decoration: none;
+}
+.iris-settings .iris-settings-nav a:hover {
+  background: var(--s-muted);
+  color: var(--s-text) !important;
+}
+.iris-settings .iris-settings-nav a.is-current {
+  background: var(--s-muted);
+  color: var(--s-text) !important;
+  font-weight: 600;
+}
+.iris-settings-group {
+  margin: 18px 10px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em !important;
+  color: var(--s-text-3);
+}
+
+.iris-settings-main {
+  flex: 1;
+  min-width: 0;
+  max-width: 860px;
+  padding: 26px 40px 120px;
+  box-sizing: border-box;
+}
+.iris-settings-title {
+  margin: 4px 0 20px;
+  font-size: 26px;
+  font-weight: 700;
+  text-align: left;
+  opacity: 1;
+}
+
+.iris-settings .settings-container {
+  max-width: none;
+  margin: 0 0 16px;
+  padding: 18px 22px 16px;
+  border: 1px solid var(--s-line) !important;
+  border-radius: 14px;
+  background: var(--s-card);
+  scroll-margin-top: 22px;
+}
+.iris-settings .settings-container h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 650;
+  text-align: left;
+  opacity: 1;
+}
+.iris-settings .setting-section,
+.iris-settings .setting-section label,
+.iris-settings .setting-option label,
+.iris-settings .settings-container > label {
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.iris-settings .setting-section {
+  padding: 7px 0;
+}
+.iris-settings .setting-secondary-label,
+.iris-settings .settings-info-subheading,
+.iris-settings .settings-info-subheading * {
+  font-size: 12.5px;
+  color: var(--s-text-2);
+  opacity: 1;
+}
+.iris-settings a {
+  color: var(--s-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* switches instead of checkboxes */
+.iris-settings .settings-container input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  width: 32px;
+  height: 19px;
+  margin: 0 10px 0 0;
+  border-radius: 10px;
+  background: var(--s-line-strong);
+  vertical-align: middle;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex: none;
+}
+.iris-settings .settings-container input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s;
+}
+.iris-settings .settings-container input[type="checkbox"]:checked {
+  background: var(--s-on);
+}
+.iris-settings .settings-container input[type="checkbox"]:checked::after {
+  transform: translateX(13px);
+}
+/* small inline checkboxes stay checkboxes */
+.iris-settings .iris-clear-data input[type="checkbox"],
+.iris-settings .iris-row-secret input[type="checkbox"] {
+  appearance: auto;
+  -webkit-appearance: checkbox;
+  width: auto;
+  height: auto;
+  background: none;
+  margin: 0 4px 0 0;
+  accent-color: var(--s-primary);
+}
+.iris-settings .iris-clear-data input[type="checkbox"]::after,
+.iris-settings .iris-row-secret input[type="checkbox"]::after {
+  display: none;
+}
+.iris-settings input[type="radio"] {
+  accent-color: var(--s-primary);
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+/* fields */
+.iris-settings select,
+.iris-settings input[type="text"],
+.iris-settings input[type="password"],
+.iris-settings input[type="number"],
+.iris-settings input[type="time"],
+.iris-settings input:not([type]),
+.iris-settings textarea {
+  box-sizing: border-box;
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid var(--s-line-strong) !important;
+  border-radius: 8px;
+  background: var(--s-bg) !important;
+  color: var(--s-text) !important;
+  font-size: 13px;
+  outline: none;
+}
+.iris-settings select:focus,
+.iris-settings input:focus,
+.iris-settings textarea:focus {
+  border-color: var(--s-text-3) !important;
+  box-shadow: 0 0 0 3px rgba(127, 127, 127, 0.18);
+}
+
+/* buttons */
+.iris-settings .iris-button,
+.iris-settings button.button-border {
+  min-height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--s-line-strong);
+  border-radius: 8px;
+  background: var(--s-bg);
+  color: var(--s-text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.iris-settings .iris-button:hover {
+  background: var(--s-muted);
+}
+.iris-settings .iris-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.iris-settings .iris-button.iris-primary {
+  background: var(--s-primary);
+  border-color: var(--s-primary);
+  color: var(--s-primary-ink);
+}
+
+/* label / help / action rows */
+.iris-row-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 11px 0;
+  border-top: 1px solid var(--s-line);
+}
+.settings-container h3 + .iris-row-setting {
+  border-top: none;
+  padding-top: 2px;
+}
+.iris-row-title {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.iris-row-help {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--s-text-2);
+}
+.iris-clear-data .iris-row-help label {
+  display: inline-flex;
+  align-items: center;
+  margin: 6px 14px 0 0;
+  font-size: 12.5px;
+}
+
+/* keep the Iris sections' own blocks flush with the cards */
+#iris-ai-settings-container {
+  border-left: 1px solid var(--s-line) !important;
+}
+.iris-settings .iris-grid {
+  margin-top: 4px;
+}
+.iris-settings .iris-setting label {
+  opacity: 1;
+  color: var(--s-text-2);
+  font-size: 12.5px;
+}
+
+@media (max-width: 760px) {
+  .iris-settings-nav {
+    display: none;
+  }
+  .iris-settings-main {
+    padding: 20px 16px 80px;
+  }
 }

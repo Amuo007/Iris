@@ -174,6 +174,10 @@ test('validateAction covers every declared action type', () => {
     ask_user: { question: 'What is the code?' },
     save_account: { site: 'shop.test', username: 'me@x.test', password: '{{Password}}' },
     recall: { query: 'PhoneCLI' },
+    judge: { item: 'Paper A', keep: true, why: 'fits' },
+    update_plan: { plan: 'Goal: x' },
+    bookmark: {},
+    bookmarks: { query: 'news' },
     done: {},
     fail: {}
   }

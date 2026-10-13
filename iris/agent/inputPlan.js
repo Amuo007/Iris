@@ -305,6 +305,10 @@ function planInputEvents (action, opts) {
     case 'ask_user':
     case 'save_account':
     case 'recall':
+    case 'judge':
+    case 'update_plan':
+    case 'bookmark':
+    case 'bookmarks':
     case 'back':
     case 'navigate':
     case 'done':

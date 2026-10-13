@@ -11,9 +11,66 @@
   </head>
 
   <body>
-    <div class="short-hero blue-gradient-background">
-      <div class="container">
-        <h2 data-string="settingsPreferencesHeading"></h2>
+    <div class="iris-settings">
+    <nav class="iris-settings-nav" id="iris-settings-nav">
+      <div class="iris-settings-brand"><span class="iris-settings-mark"></span>Iris</div>
+      <a href="#general-settings-container">General</a>
+      <a href="#bookmarks-settings-container">Bookmarks</a>
+      <a href="#appearance-settings-container">Appearance</a>
+      <a href="#privacy-settings-container">Privacy &amp; security</a>
+      <a href="#search-engine-settings-container">Search engine</a>
+      <a href="#password-autofill-container">Passwords</a>
+      <a href="#additional-settings-container">Browsing</a>
+      <div class="iris-settings-group">Iris AI</div>
+      <a href="#iris-ai-settings-container">Model &amp; behaviour</a>
+      <a href="#iris-profile-container">My info</a>
+      <a href="#iris-accounts-container">Accounts</a>
+      <a href="#iris-rules-container">Rules</a>
+      <a href="#iris-schedule-container">Schedule</a>
+      <a href="#iris-skills-container">Skills</a>
+      <a href="#iris-usage-container">Usage</a>
+      <div class="iris-settings-group">Advanced</div>
+      <a href="#proxy-settings-container">Proxy</a>
+      <a href="#keymap-settings-container">Keyboard shortcuts</a>
+      <a href="#custom-bangs-container">Search shortcuts</a>
+    </nav>
+    <main class="iris-settings-main">
+    <h1 class="iris-settings-title">Settings</h1>
+
+    <div class="settings-container" id="general-settings-container">
+      <h3>General</h3>
+      <div class="iris-row-setting">
+        <div>
+          <div class="iris-row-title">Default browser</div>
+          <div class="iris-row-help" id="iris-default-status">Open links from other apps in Iris.</div>
+        </div>
+        <button class="iris-button" id="iris-make-default" type="button">Make default</button>
+      </div>
+      <div class="iris-row-setting">
+        <div>
+          <div class="iris-row-title">Downloads</div>
+          <div class="iris-row-help">Save to <span id="iris-download-dir">Downloads</span></div>
+        </div>
+        <button class="iris-button" id="iris-download-change" type="button">Change…</button>
+      </div>
+      <div class="setting-section">
+        <input type="checkbox" id="checkbox-iris-download-ask" />
+        <label for="checkbox-iris-download-ask">Ask where to save each file before downloading</label>
+      </div>
+    </div>
+
+    <div class="settings-container" id="bookmarks-settings-container">
+      <h3>Bookmarks</h3>
+      <div class="setting-section">
+        <input type="checkbox" id="checkbox-iris-bookmarks-bar" />
+        <label for="checkbox-iris-bookmarks-bar">Show the bookmarks bar</label>
+      </div>
+      <div class="iris-row-setting">
+        <div>
+          <div class="iris-row-title">Import from Google Chrome</div>
+          <div class="iris-row-help" id="iris-import-status">Brings in your bookmarks bar, folders and other bookmarks.</div>
+        </div>
+        <button class="iris-button" id="iris-import-chrome" type="button">Import</button>
       </div>
     </div>
 
@@ -94,23 +151,38 @@
       </div>
 
       <div class="setting-section">
+        <input type="checkbox" id="checkbox-iris-email" />
+        <label for="checkbox-iris-email">Let Iris open my email inbox to read sign-up codes and links
+          (it uses "Email inbox URL" and my saved details)</label>
+      </div>
+
+      <div class="setting-section">
         <button class="iris-button" id="iris-test-connection" type="button">Test connection</button>
         <button class="iris-button" id="iris-reset-defaults" type="button">Reset to defaults</button>
         <span class="iris-inline-status" id="iris-connection-status"></span>
       </div>
 
-      <h4 class="iris-subhead" id="iris-usage">Usage</h4>
+    </div>
+
+    <div class="settings-container" id="iris-usage-container">
+      <h3>Usage</h3>
       <div class="setting-secondary-label">What Iris has used on your model server.</div>
       <table class="iris-usage" id="iris-usage-table"></table>
 
-      <h4 class="iris-subhead" id="iris-rules">Rules</h4>
+    </div>
+
+    <div class="settings-container" id="iris-rules-container">
+      <h3>Rules</h3>
       <div class="setting-secondary-label">
         Things Iris must always or never do, one per line. For example: "Never delete emails",
         "Always use DuckDuckGo to search", "Ask me before submitting any form".
       </div>
       <textarea id="iris-rules-text" class="iris-rules" rows="5" spellcheck="false"></textarea>
 
-      <h4 class="iris-subhead" id="iris-profile">My info</h4>
+    </div>
+
+    <div class="settings-container" id="iris-profile-container">
+      <h3>My info</h3>
       <div class="setting-secondary-label">
         Iris uses these to fill forms and log in for you. Secret fields are encrypted with your Mac's
         keychain and are never shown to the model: it types a placeholder like {{Password}} and Iris
@@ -123,24 +195,27 @@
         <span class="iris-inline-status" id="iris-profile-status"></span>
       </div>
 
-      <h4 class="iris-subhead" id="iris-skills">Skills</h4>
+    </div>
+
+    <div class="settings-container" id="iris-skills-container">
+      <h3>Skills</h3>
       <div class="setting-secondary-label">
         Shortcuts Iris learned about websites (a direct search URL, where a button is). It sees them
         the next time it visits that site, so repeat tasks get faster. Remove any that are wrong.
       </div>
       <div id="iris-skills-list" class="iris-rows"></div>
 
-      <div class="setting-section">
-        <input type="checkbox" id="checkbox-iris-email" />
-        <label for="checkbox-iris-email">Let Iris open my email inbox to read sign-up codes and links
-          (it uses "Email inbox URL" and my saved details)</label>
-      </div>
+    </div>
 
-      <h4 class="iris-subhead" id="iris-accounts">Accounts Iris created</h4>
+    <div class="settings-container" id="iris-accounts-container">
+      <h3>Accounts Iris created</h3>
       <div class="setting-secondary-label">Sites where Iris signed you up, with the login it used.</div>
       <div id="iris-accounts-list" class="iris-rows"></div>
 
-      <h4 class="iris-subhead" id="iris-schedule">Schedule</h4>
+    </div>
+
+    <div class="settings-container" id="iris-schedule-container">
+      <h3>Schedule</h3>
       <div class="setting-secondary-label">
         Tasks that start on their own, in a new tab, while Iris is open. Use "Every" for a repeating
         interval or "At" for once a day.
@@ -209,6 +284,18 @@
       </div>
 
       <div id="content-type-blocking"></div>
+      <div class="iris-row-setting iris-clear-data">
+        <div>
+          <div class="iris-row-title">Clear browsing data</div>
+          <div class="iris-row-help">
+            <label><input type="checkbox" id="iris-clear-history" checked /> History</label>
+            <label><input type="checkbox" id="iris-clear-cookies" /> Cookies and site data</label>
+            <label><input type="checkbox" id="iris-clear-cache" checked /> Cached files</label>
+          </div>
+          <div class="iris-row-help" id="iris-clear-status"></div>
+        </div>
+        <button class="iris-button" id="iris-clear-data" type="button">Clear</button>
+      </div>
     </div>
 
     <div class="settings-container" id="appearance-settings-container">
@@ -493,6 +580,9 @@
         <i class="i carbon:information"></i>
         <span data-string="settingsRestartRequired"></span>
       </div>
+    </div>
+
+    </main>
     </div>
 
     <script src="../../js/util/keyMap.js"></script>

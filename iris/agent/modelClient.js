@@ -122,16 +122,17 @@ function createModelClient (config) {
   // fields the server refused once; never sent again by this client
   const refused = new Set()
 
-  function buildBody (messages) {
+  function buildBody (messages, thinking) {
+    const level = thinking || cfg.thinking
     const body = {
       model: cfg.model,
       messages,
       temperature: cfg.temperature,
-      max_tokens: cfg.maxTokens || MAX_TOKENS_BY_THINKING[cfg.thinking] || 4096,
+      max_tokens: cfg.maxTokens || MAX_TOKENS_BY_THINKING[level] || 4096,
       stream: !!cfg.stream
     }
     if (cfg.stream && !refused.has('stream_options')) body.stream_options = { include_usage: true }
-    const extra = thinkingFields(cfg.thinking)
+    const extra = thinkingFields(level)
     for (const k of Object.keys(extra)) {
       if (!refused.has(k)) body[k] = extra[k]
     }
@@ -170,7 +171,7 @@ function createModelClient (config) {
     try {
       let res
       for (let attempt = 0; attempt < 3; attempt++) {
-        const body = buildBody(messages)
+        const body = buildBody(messages, o.thinking)
         res = await post(body, controller.signal)
         if (res.ok) break
         let detail = ''
@@ -234,7 +235,7 @@ function createModelClient (config) {
 
   return {
     next (ctx) {
-      return chat(ctx.messages, { onProgress: ctx.onProgress, signal: ctx.signal })
+      return chat(ctx.messages, { onProgress: ctx.onProgress, signal: ctx.signal, thinking: ctx.thinking })
     },
     chat,
     config: cfg
