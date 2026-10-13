@@ -120,7 +120,7 @@ test('gives up after repeated unusable responses in one step', async () => {
   assert.strictEqual(h.computer.actions.length, 0)
 })
 
-test('a network error from the model is retried, not fatal on the first hit', async () => {
+test('an unexplained model error is retried, not fatal on the first hit', async () => {
   const h = harness([null, json('recovered', { type: 'click', x: 4, y: 4 }), json('done', { type: 'done' })])
   const result = await h.agent.run('flaky')
   assert.strictEqual(result.status, 'done')
@@ -222,18 +222,16 @@ test('user takeover pauses the agent and tells the model what happened', async (
   assert.strictEqual(result.status, 'done')
 })
 
-test('a repeated ineffective action parks the agent for the human', async () => {
+test('a repeated ineffective action makes the model change course, without pausing', async () => {
   const same = json('same', { type: 'click', x: 100, y: 100 })
-  const h = harness([same, same, same, json('different approach', { type: 'click', x: 700, y: 300 }), json('done', { type: 'done' })], null, {
+  const h = harness([same, same, same, (ctx) => { h.lastUser = JSON.stringify(ctx.messages.slice(-3)); return json('different approach', { type: 'click', x: 700, y: 300 }) }, json('done', { type: 'done' })], null, {
     safety: { repeatActionLimit: 2 }
   })
-  const running = h.agent.run('stuck')
-  await until(() => h.agent.status().status === 'paused', 'loop detector to park the agent')
-  h.agent.resume()
-  const result = await running
+  const result = await h.agent.run('stuck')
   assert.strictEqual(result.status, 'done')
-  const blocked = ev(h.events, 'blocked')
-  assert.ok(blocked.some(b => b.kind === 'loop'))
+  assert.ok(ev(h.events, 'blocked').some(b => b.kind === 'loop'))
+  assert.strictEqual(ev(h.events, 'pause:waiting').length, 0)
+  assert.match(h.lastUser, /completely different approach/)
 })
 
 test('blocked navigation is stopped before it reaches the page', async () => {
@@ -350,7 +348,7 @@ test('stop aborts a model call that is still running', async () => {
 })
 
 test('a sensitive action pauses, and resume lets exactly that action through', async () => {
-  const h = harness([json('order', { type: 'type', text: 'place order now' }), json('done', { type: 'done' })])
+  const h = harness([json('order', { type: 'type', text: 'place order now' }), json('done', { type: 'done' })], null, { safety: { allowSensitiveActions: false } })
   const running = h.agent.run('buy it')
   await until(() => h.agent.status().status === 'paused', 'pause for approval')
   assert.strictEqual(ev(h.events, 'blocked')[0].kind, 'confirmation')
@@ -375,4 +373,99 @@ test('after a takeover, one Resume is enough', async () => {
   const result = await running
   assert.strictEqual(result.status, 'done')
   assert.strictEqual(ev(h.events, 'pause:waiting').length, 1)
+})
+
+/* ---------- batches, follow-ups, notes, close-ups ----------------------- */
+
+test('a batch runs every action from one screenshot with one model call', async () => {
+  const h = harness([
+    JSON.stringify({ thought: 'log in', actions: [
+      { type: 'type', text: 'me@x.com', x: 200, y: 200 },
+      { type: 'type', text: '{{Password}}', x: 200, y: 300, enter: true }
+    ] }),
+    json('done', { type: 'done', answer: 'logged in' })
+  ])
+  const result = await h.agent.run('log in')
+  assert.strictEqual(result.status, 'done')
+  assert.strictEqual(h.model.callCount, 2)
+  assert.deepStrictEqual(h.computer.actions.map(a => [a.text, a.x, a.y]), [['me@x.com', 100, 100], ['{{Password}}', 100, 150]])
+})
+
+test('a follow-up keeps the conversation and starts a fresh step budget', async () => {
+  const h = harness([json('first', { type: 'done', answer: 'A' }), (ctx) => { h.msgs = ctx.messages; return json('second', { type: 'done', answer: 'B' }) }], null, { safety: { maxSteps: 1 } })
+  assert.strictEqual((await h.agent.run('first question')).answer, 'A')
+  const second = await h.agent.run('and then?', { followUp: true })
+  assert.strictEqual(second.status, 'done')
+  assert.strictEqual(second.answer, 'B')
+  const texts = h.msgs.map(m => typeof m.content === 'string' ? m.content : m.content.map(p => p.text || '').join(' ')).join('\n')
+  assert.match(texts, /Task: first question/)
+  assert.match(texts, /New message from the user.*and then\?/)
+})
+
+test('remembered notes are shown on later steps', async () => {
+  const h = harness([
+    JSON.stringify({ thought: 'found it', remember: 'price is $42', action: { type: 'scroll', direction: 'down' } }),
+    (ctx) => { h.last = ctx.messages[ctx.messages.length - 1].content[0].text; return json('done', { type: 'done' }) }
+  ])
+  await h.agent.run('research')
+  assert.match(h.last, /Your notes so far:\n- price is \$42/)
+  assert.deepStrictEqual(h.agent.notes(), ['price is $42'])
+})
+
+test('clicks on a close-up land at the right place on the page', async () => {
+  const h = harness([json('click the tiny link', { type: 'click', x: 640, y: 400 }), json('done', { type: 'done' })])
+  h.computer.screenshot = function () {
+    return { dataUrl: 'data:image/jpeg;base64,AA', width: 1280, height: 800, viewWidth: 640, viewHeight: 400, devicePixelRatio: 2, crop: { x: 300, y: 200, width: 640, height: 400 }, url: 'https://x.test/' }
+  }
+  await h.agent.run('tiny link')
+  assert.deepStrictEqual([h.computer.actions[0].x, h.computer.actions[0].y], [620, 400])
+})
+
+test('history can be exported without screenshots and restored', async () => {
+  const h = harness([json('look', { type: 'done', answer: 'ok' })])
+  await h.agent.run('save me')
+  const saved = JSON.parse(JSON.stringify(h.agent.exportHistory()))
+  assert.ok(saved.entries.every(e => e.dataUrl === null || e.dataUrl === 'omitted'))
+  const h2 = harness([(ctx) => { h2.msgs = ctx.messages; return json('again', { type: 'done' }) }])
+  h2.agent.importHistory(saved)
+  await h2.agent.run('continue please', { followUp: true })
+  assert.ok(h2.msgs.some(m => typeof m.content === 'string' && /Task: save me/.test(m.content)))
+})
+
+test('a restarting model server is waited for, without using up steps or retries', async () => {
+  let calls = 0
+  const h = harness([], null, { safety: { maxSteps: 2, maxRetriesPerStep: 1 } })
+  h.model.next = function () {
+    calls++
+    if (calls <= 6) return Promise.reject(new Error('cannot reach the model server at http://x'))
+    return json('back', { type: 'done', answer: 'ok' })
+  }
+  const result = await h.agent.run('survive a restart')
+  assert.strictEqual(result.status, 'done')
+  assert.strictEqual(ev(h.events, 'error').filter(e => e.where === 'server').length, 6)
+})
+
+test('a server that stays down long enough ends the run with a clear reason', async () => {
+  const h = harness([], null, { config: { settleDelayMs: 0, markerDwellMs: 0, maxServerWaitMs: 60000 } })
+  h.model.next = function () { return Promise.reject(new Error('cannot reach the model server at http://x')) }
+  const result = await h.agent.run('server gone')
+  assert.strictEqual(result.status, 'failed')
+  assert.match(result.reason, /unreachable/)
+})
+
+test('a full context drops old steps first, then explains if that is not enough', async () => {
+  const replies = []
+  for (let i = 0; i < 6; i++) replies.push(json('move ' + i, { type: 'scroll', direction: 'down', amount: 1, x: 10, y: 10 + i }))
+  const h = harness(replies)
+  let overflowed = false
+  const next = h.model.next.bind(h.model)
+  h.model.next = function (ctx) {
+    if (h.model.index >= 6 && !overflowed) { overflowed = true; return Promise.reject(new Error('request (4204 tokens) exceeds the available context size (4096 tokens)')) }
+    if (overflowed && h.model.index >= 6) return Promise.reject(new Error('request (4204 tokens) exceeds the available context size (4096 tokens)'))
+    return next(ctx)
+  }
+  const result = await h.agent.run('long scroll')
+  assert.strictEqual(result.status, 'failed')
+  assert.match(result.reason, /context window is too small/)
+  assert.ok(ev(h.events, 'error').some(e => e.where === 'context'))
 })

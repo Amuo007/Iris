@@ -680,19 +680,20 @@ function createBang (bang, snippet, redirect) {
 /* Iris AI settings */
 
 var IRIS_AI_DEFAULTS = {
+  settingsVersion: 2,
   baseUrl: 'http://192.168.1.252:13305/v1',
   model: 'Qwen3.8-Flash-Next-GGUF-IQ4_NL',
   apiKey: '',
-  maxSteps: 25,
+  thinking: 'low',
+  maxSteps: 40,
+  maxMinutes: 20,
   temperature: 0.2,
-  maxTokens: 700,
-  modelTimeoutMs: 90000,
-  keepImages: 2,
-  screenshotMaxDimension: 1568,
-  screenshotQuality: 72,
+  modelTimeoutMs: 180000,
+  keepImages: 1,
+  screenshotMaxDimension: 1280,
+  screenshotQuality: 82,
   markerEnabled: true,
-  autoPauseOnUserInput: true,
-  allowSensitiveActions: false
+  autoPauseOnUserInput: true
 }
 
 var irisAI = Object.assign({}, IRIS_AI_DEFAULTS)
@@ -701,7 +702,10 @@ var irisFields = [
   { key: 'baseUrl', id: 'iris-base-url', type: 'string' },
   { key: 'model', id: 'iris-model', type: 'string' },
   { key: 'apiKey', id: 'iris-api-key', type: 'string' },
+  { key: 'thinking', id: 'iris-thinking', type: 'string' },
   { key: 'maxSteps', id: 'iris-max-steps', type: 'int' },
+  { key: 'maxMinutes', id: 'iris-max-minutes', type: 'int' },
+  { key: 'modelTimeoutMs', id: 'iris-model-timeout', type: 'int', scale: 1000 },
   { key: 'temperature', id: 'iris-temperature', type: 'float' },
   { key: 'screenshotMaxDimension', id: 'iris-screenshot-size', type: 'int' },
   { key: 'screenshotQuality', id: 'iris-screenshot-quality', type: 'int' },
@@ -710,25 +714,21 @@ var irisFields = [
 
 var irisMarkerCheckbox = document.getElementById('checkbox-iris-marker')
 var irisTakeoverCheckbox = document.getElementById('checkbox-iris-takeover')
-var irisSensitiveCheckbox = document.getElementById('checkbox-iris-sensitive')
-
-function irisRenderField (field, input) {
-  var value = irisAI[field.key]
-  input.value = value === undefined || value === null ? '' : value
-}
 
 function irisSave () {
   // settings.set() is forwarded to the main process, which notifies the agent
+  irisAI.settingsVersion = 2
   settings.set('irisAI', irisAI)
 }
 
 function irisRenderAll () {
   irisFields.forEach(function (field) {
-    irisRenderField(field, document.getElementById(field.id))
+    var value = irisAI[field.key]
+    if (field.scale && typeof value === 'number') value = Math.round(value / field.scale)
+    document.getElementById(field.id).value = value === undefined || value === null ? '' : value
   })
   irisMarkerCheckbox.checked = irisAI.markerEnabled !== false
   irisTakeoverCheckbox.checked = irisAI.autoPauseOnUserInput !== false
-  irisSensitiveCheckbox.checked = irisAI.allowSensitiveActions === true
 }
 
 irisFields.forEach(function (field) {
@@ -739,16 +739,18 @@ irisFields.forEach(function (field) {
 
     if (field.type === 'int' || field.type === 'float') {
       var parsed = field.type === 'int' ? parseInt(raw, 10) : parseFloat(raw, 10)
+      var fallback = IRIS_AI_DEFAULTS[field.key]
+      if (field.scale) fallback = fallback / field.scale
       if (isNaN(parsed) || raw === '') {
         // never let a blank or bogus number reach the agent: fall back to the default
-        parsed = IRIS_AI_DEFAULTS[field.key]
+        parsed = fallback
       }
       var min = parseFloat(input.getAttribute('min'))
       var max = parseFloat(input.getAttribute('max'))
       if (!isNaN(min)) { parsed = Math.max(min, parsed) }
       if (!isNaN(max)) { parsed = Math.min(max, parsed) }
-      irisAI[field.key] = parsed
       input.value = parsed
+      irisAI[field.key] = field.scale ? parsed * field.scale : parsed
     } else {
       irisAI[field.key] = raw
     }
@@ -767,29 +769,231 @@ irisTakeoverCheckbox.addEventListener('change', function () {
   irisSave()
 })
 
-irisSensitiveCheckbox.addEventListener('change', function () {
-  irisAI.allowSensitiveActions = this.checked
-  irisSave()
-})
-
 document.getElementById('iris-reset-defaults').addEventListener('click', function () {
   irisAI = Object.assign({}, IRIS_AI_DEFAULTS)
   irisRenderAll()
   irisSave()
 })
 
+document.getElementById('iris-test-connection').addEventListener('click', function () {
+  var status = document.getElementById('iris-connection-status')
+  status.textContent = 'Checking…'
+  var headers = irisAI.apiKey ? { Authorization: 'Bearer ' + irisAI.apiKey } : {}
+  fetch(String(irisAI.baseUrl).replace(/\/+$/, '') + '/models', { headers: headers })
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)) })
+    .then(function (json) {
+      var ids = (json.data || []).map(function (m) { return m.id })
+      status.textContent = ids.indexOf(irisAI.model) !== -1 ? 'Connected. The model is available.' : 'Connected, but "' + irisAI.model + '" is not in the list (' + ids.length + ' models).'
+    })
+    .catch(function (err) { status.textContent = 'Cannot reach the server: ' + err.message })
+})
+
 settings.listen('irisAI', function (value) {
-  // only re-read what the agent and the browser agree on, keep defaults for anything missing
   var stored = value || {}
-  Object.keys(IRIS_AI_DEFAULTS).forEach(function (key) {
-    if (stored[key] !== undefined) {
-      irisAI[key] = stored[key]
-    }
-  })
+  irisAI = Object.assign({}, IRIS_AI_DEFAULTS)
+  if (stored.settingsVersion === 2) {
+    Object.keys(IRIS_AI_DEFAULTS).forEach(function (key) {
+      if (stored[key] !== undefined) irisAI[key] = stored[key]
+    })
+  } else {
+    ['baseUrl', 'model', 'apiKey', 'markerEnabled', 'autoPauseOnUserInput'].forEach(function (key) {
+      if (stored[key] !== undefined && stored[key] !== '') irisAI[key] = stored[key]
+    })
+  }
   irisRenderAll()
 })
 
-// "AI settings" in the agent panel deep-links here
+/* --- My info ----------------------------------------------------------- */
+
+var irisProfileRows = document.getElementById('iris-profile-rows')
+var irisProfileStatus = document.getElementById('iris-profile-status')
+
+function irisProfileRow (field) {
+  var row = document.createElement('div')
+  row.className = 'iris-row'
+
+  var label = document.createElement('input')
+  label.type = 'text'
+  label.className = 'iris-row-label'
+  label.placeholder = 'Field name'
+  label.value = field.label || ''
+
+  var value = document.createElement('input')
+  value.type = field.secret ? 'password' : 'text'
+  value.className = 'iris-row-value'
+  value.autocomplete = 'off'
+  value.spellcheck = false
+  value.placeholder = field.secret ? (field.hasValue ? 'Saved — type to replace' : 'Not set') : 'Value'
+  value.value = field.secret ? '' : (field.value || '')
+  row.dataset.hasValue = field.hasValue ? '1' : ''
+
+  var secretWrap = document.createElement('label')
+  secretWrap.className = 'iris-row-secret'
+  var secret = document.createElement('input')
+  secret.type = 'checkbox'
+  secret.checked = !!field.secret
+  secret.addEventListener('change', function () {
+    value.type = secret.checked ? 'password' : 'text'
+  })
+  secretWrap.appendChild(secret)
+  secretWrap.appendChild(document.createTextNode(' Secret'))
+
+  var del = document.createElement('button')
+  del.type = 'button'
+  del.className = 'iris-row-delete'
+  del.title = 'Remove'
+  del.textContent = '×'
+  del.addEventListener('click', function () { row.remove() })
+
+  row.appendChild(label)
+  row.appendChild(value)
+  row.appendChild(secretWrap)
+  row.appendChild(del)
+  irisProfileRows.appendChild(row)
+}
+
+function irisRenderProfile (fields) {
+  irisProfileRows.innerHTML = ''
+  ;(fields || []).forEach(irisProfileRow)
+}
+
+document.getElementById('iris-profile-add').addEventListener('click', function () {
+  irisProfileRow({ label: '', value: '', secret: false })
+})
+
+document.getElementById('iris-profile-save').addEventListener('click', function () {
+  var fields = Array.prototype.map.call(irisProfileRows.querySelectorAll('.iris-row'), function (row) {
+    var secret = row.querySelector('.iris-row-secret input').checked
+    var value = row.querySelector('.iris-row-value').value
+    return {
+      label: row.querySelector('.iris-row-label').value.trim(),
+      value: value,
+      secret: secret,
+      keep: secret && !value && row.dataset.hasValue === '1'
+    }
+  }).filter(function (f) { return f.label })
+  irisProfileStatus.textContent = 'Saving…'
+  postMessage({ message: 'irisProfileSet', fields: fields })
+})
+
+window.addEventListener('message', function (e) {
+  if (e.data && e.data.message === 'irisProfileData' && e.data.data) {
+    irisRenderProfile(e.data.data.fields)
+    if (e.data.data.error) irisProfileStatus.textContent = 'Could not save: ' + e.data.data.error
+    else if (e.data.data.saved) irisProfileStatus.textContent = 'Saved.'
+  }
+})
+
+postMessage({ message: 'irisProfileGet' })
+
+/* --- Schedule ---------------------------------------------------------- */
+
+var irisScheduleRows = document.getElementById('iris-schedule-rows')
+var irisSchedules = []
+
+function irisSaveSchedules () {
+  settings.set('irisSchedules', irisSchedules)
+}
+
+function irisRenderSchedules () {
+  irisScheduleRows.innerHTML = ''
+  irisSchedules.forEach(function (s, index) {
+    var row = document.createElement('div')
+    row.className = 'iris-row iris-schedule-row'
+
+    var task = document.createElement('input')
+    task.type = 'text'
+    task.className = 'iris-row-task'
+    task.placeholder = 'What should Iris do?'
+    task.value = s.task || ''
+    task.addEventListener('change', function () { s.task = task.value.trim(); irisSaveSchedules() })
+
+    var kind = document.createElement('select')
+    kind.innerHTML = '<option value="every">Every</option><option value="at">At</option>'
+    kind.value = s.at ? 'at' : 'every'
+
+    var every = document.createElement('input')
+    every.type = 'number'
+    every.min = '1'
+    every.max = '10080'
+    every.className = 'iris-row-num'
+    every.value = s.everyMinutes || 60
+    every.title = 'minutes'
+
+    var at = document.createElement('input')
+    at.type = 'time'
+    at.className = 'iris-row-time'
+    at.value = s.at || '09:00'
+
+    function sync () {
+      every.hidden = kind.value !== 'every'
+      at.hidden = kind.value !== 'at'
+      unit.hidden = kind.value !== 'every'
+    }
+    var unit = document.createElement('span')
+    unit.className = 'iris-row-unit'
+    unit.textContent = 'min'
+
+    kind.addEventListener('change', function () {
+      if (kind.value === 'at') { s.at = at.value; s.everyMinutes = 0 } else { s.at = ''; s.everyMinutes = Number(every.value) || 60 }
+      sync()
+      irisSaveSchedules()
+    })
+    every.addEventListener('change', function () { s.everyMinutes = Math.max(1, Number(every.value) || 60); irisSaveSchedules() })
+    at.addEventListener('change', function () { s.at = at.value; irisSaveSchedules() })
+
+    var mode = document.createElement('select')
+    mode.innerHTML = '<option value="once">Once</option><option value="continuous">Non-stop</option>'
+    mode.value = s.mode || 'once'
+    mode.addEventListener('change', function () { s.mode = mode.value; irisSaveSchedules() })
+
+    var onWrap = document.createElement('label')
+    onWrap.className = 'iris-row-secret'
+    var on = document.createElement('input')
+    on.type = 'checkbox'
+    on.checked = s.enabled !== false
+    on.addEventListener('change', function () { s.enabled = on.checked; irisSaveSchedules() })
+    onWrap.appendChild(on)
+    onWrap.appendChild(document.createTextNode(' On'))
+
+    var del = document.createElement('button')
+    del.type = 'button'
+    del.className = 'iris-row-delete'
+    del.title = 'Remove'
+    del.textContent = '×'
+    del.addEventListener('click', function () {
+      irisSchedules.splice(index, 1)
+      irisSaveSchedules()
+      irisRenderSchedules()
+    })
+
+    row.appendChild(task)
+    row.appendChild(kind)
+    row.appendChild(every)
+    row.appendChild(unit)
+    row.appendChild(at)
+    row.appendChild(mode)
+    row.appendChild(onWrap)
+    row.appendChild(del)
+    irisScheduleRows.appendChild(row)
+    sync()
+  })
+}
+
+document.getElementById('iris-schedule-add').addEventListener('click', function () {
+  irisSchedules.push({ id: Date.now().toString(36), task: '', everyMinutes: 60, at: '', mode: 'once', enabled: true, lastRun: Date.now() })
+  irisSaveSchedules()
+  irisRenderSchedules()
+})
+
+settings.listen('irisSchedules', function (value) {
+  var list = Array.isArray(value) ? value : []
+  // keep the row being edited if only lastRun changed
+  irisSchedules = list.map(function (s) { return Object.assign({}, s) })
+  if (!irisScheduleRows.contains(document.activeElement)) irisRenderSchedules()
+})
+
+// "Iris settings" in the agent panel deep-links here
 if (location.hash === '#iris-ai') {
   document.getElementById('iris-ai-settings-container').scrollIntoView()
 }

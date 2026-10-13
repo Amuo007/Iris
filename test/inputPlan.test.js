@@ -59,7 +59,7 @@ test('scroll emits wheel events with the right sign', () => {
 
 test('typing emits one char event per character, in order', () => {
   const plan = planInputEvents({ type: 'type', text: 'Hi there!' })
-  const chars = plan.filter(p => p.event.type === 'char').map(p => p.event.text)
+  const chars = plan.filter(p => p.event.type === 'char').map(p => p.event.keyCode)
   assert.strictEqual(chars.join(''), 'Hi there!')
 })
 
@@ -71,7 +71,7 @@ test('typing newlines and tabs emits key events', () => {
 
 test('typing is unicode safe (emoji survive)', () => {
   const plan = planInputEvents({ type: 'type', text: 'café \u{1F600}' })
-  const text = plan.filter(p => p.event.type === 'char').map(p => p.event.text).join('')
+  const text = plan.filter(p => p.event.type === 'char').map(p => p.event.keyCode).join('')
   assert.strictEqual(text, 'café \u{1F600}')
 })
 
@@ -127,10 +127,30 @@ test('type with a target clicks first; clear triple-clicks; enter sends a keypre
   const tail = plan.slice(-3).map(p => p.event)
   assert.deepStrictEqual(tail.map(e => e.type), ['keyDown', 'char', 'keyUp'])
   assert.strictEqual(tail[1].keyCode, '\r')
-  assert.deepStrictEqual(plan.filter(p => p.event.type === 'char' && p.event.text !== '\r').map(p => p.event.text), ['h', 'i'])
+  assert.deepStrictEqual(plan.filter(p => p.event.type === 'char' && p.event.keyCode !== '\r').map(p => p.event.keyCode), ['h', 'i'])
 })
 
 test('pressing enter also sends the char event forms need', () => {
   const plan = planInputEvents({ type: 'key', key: 'enter' })
   assert.deepStrictEqual(plan.map(p => p.event.type), ['keyDown', 'char', 'keyUp'])
+})
+
+test('the pointer glides from its last position before clicking', () => {
+  const plan = planInputEvents({ type: 'click', x: 100, y: 100 }, { from: { x: 0, y: 0 } })
+  const moves = plan.filter(p => p.event.type === 'mouseMove').map(p => [p.event.x, p.event.y])
+  assert.ok(moves.length >= 4, 'several intermediate moves')
+  assert.deepStrictEqual(moves[moves.length - 1], [100, 100])
+  for (let i = 1; i < moves.length; i++) assert.ok(moves[i][0] >= moves[i - 1][0])
+  assert.strictEqual(plan.filter(p => p.event.type === 'mouseDown').length, 1)
+})
+
+test('no glide without a known start, and none for scrolls', () => {
+  assert.strictEqual(planInputEvents({ type: 'click', x: 5, y: 5 }).filter(p => p.event.type === 'mouseMove').length, 1)
+  const scroll = planInputEvents({ type: 'scroll', direction: 'down', amount: 1, x: 50, y: 50 }, { from: { x: 0, y: 0 } })
+  assert.strictEqual(scroll.filter(p => p.event.type === 'mouseMove').length, 1)
+})
+
+test('typed letters keep their case (passwords!)', () => {
+  const plan = planInputEvents({ type: 'type', text: 'Tq7-blue-HARBOR@x.test' })
+  assert.strictEqual(plan.filter(p => p.event.type === 'char').map(p => p.event.keyCode).join(''), 'Tq7-blue-HARBOR@x.test')
 })

@@ -164,6 +164,10 @@ test('validateAction covers every declared action type', () => {
     wait: {},
     navigate: { url: 'https://example.com' },
     back: {},
+    switch_tab: { tab: 2 },
+    new_tab: {},
+    close_tab: {},
+    zoom: { x: 5, y: 5 },
     done: {},
     fail: {}
   }
@@ -198,4 +202,30 @@ test('back and search aliases parse', () => {
   assert.strictEqual(parseAction('{"action":{"type":"search","url":"weather in paris"}}', LIMITS).action.type, 'navigate')
   assert.match(describeAction({ type: 'navigate', url: 'weather in paris' }), /Search for/)
   assert.match(describeAction({ type: 'navigate', url: 'example.com' }), /Open example\.com/)
+})
+
+test('a list of actions parses as a batch and stops at the first page change', () => {
+  const r = parseAction(JSON.stringify({ thought: 'fill the form', remember: 'login page is /signin', actions: [
+    { type: 'type', text: 'me@x.com', x: 10, y: 10 },
+    { type: 'type', text: '{{Password}}', x: 10, y: 40 },
+    { type: 'click', x: 20, y: 80 },
+    { type: 'navigate', url: 'example.com' },
+    { type: 'click', x: 1, y: 1 }
+  ] }), LIMITS)
+  assert.strictEqual(r.ok, true)
+  assert.deepStrictEqual(r.actions.map(a => a.type), ['type', 'type', 'click', 'navigate'])
+  assert.strictEqual(r.remember, 'login page is /signin')
+})
+
+test('a bad item rejects the whole batch with its reason', () => {
+  const r = parseAction('{"actions":[{"type":"click","x":1,"y":1},{"type":"click","x":99999,"y":1}]}', LIMITS)
+  assert.strictEqual(r.ok, false)
+  assert.match(r.error, /outside the screenshot/)
+})
+
+test('tab actions and zoom validate', () => {
+  assert.strictEqual(parseAction('{"action":{"type":"switch_tab","tab":"2"}}', LIMITS).action.tab, 2)
+  assert.strictEqual(parseAction('{"action":{"type":"switch_tab"}}', LIMITS).ok, false)
+  assert.strictEqual(parseAction('{"action":{"type":"new_tab","url":"example.com"}}', LIMITS).action.url, 'example.com')
+  assert.deepStrictEqual(parseAction('{"action":{"type":"zoom","x":3,"y":4}}', LIMITS).action, { type: 'zoom', x: 3, y: 4 })
 })

@@ -13,6 +13,11 @@
 
 const COORD_TYPES = new Set(['click', 'double_click', 'right_click', 'drag', 'scroll'])
 
+/* Actions after which the page (or the tab) is different, so a batch must stop there. */
+const PAGE_CHANGING = new Set(['navigate', 'back', 'switch_tab', 'new_tab', 'close_tab', 'zoom'])
+
+const MAX_BATCH = 6
+
 const SCROLL_DIRECTIONS = ['up', 'down', 'left', 'right']
 
 /*
@@ -32,6 +37,10 @@ const SPEC = {
   wait: { required: [], optional: ['ms'] },
   navigate: { required: ['url'], optional: [] },
   back: { required: [], optional: [] },
+  switch_tab: { required: ['tab'], optional: [] },
+  new_tab: { required: [], optional: ['url'] },
+  close_tab: { required: [], optional: ['tab'] },
+  zoom: { required: ['x', 'y'], optional: [] },
   move: { required: ['x', 'y'], optional: [] },
   done: { required: [], optional: ['answer'] },
   fail: { required: [], optional: ['reason'] }
@@ -76,6 +85,14 @@ const TYPE_ALIASES = {
   open_url: 'navigate',
   search: 'navigate',
   go_back: 'back',
+  switch_to_tab: 'switch_tab',
+  select_tab: 'switch_tab',
+  tab: 'switch_tab',
+  open_tab: 'new_tab',
+  newtab: 'new_tab',
+  closetab: 'close_tab',
+  zoom_in: 'zoom',
+  inspect: 'zoom',
   navigate_back: 'back',
   goto: 'navigate',
   go_to_url: 'navigate',
@@ -463,6 +480,12 @@ function validateAction (obj, limits) {
         else action.url = s.trim()
         break
       }
+      case 'tab': {
+        const n = toInteger(value)
+        if (n === null || n < 1 || n > 200) errors.push(`tab must be a tab number from the list (got ${JSON.stringify(value)})`)
+        else action.tab = n
+        break
+      }
       case 'clear':
       case 'enter': {
         action[field] = toBoolean(value)
@@ -539,7 +562,14 @@ function parseAction (rawText, limits) {
     // Shape B (flat):      { "thought": "...", "action": "click", "x": 1, "y": 2 }
     // Shape C (bare):      { "type": "click", "x": 1, "y": 2 }
     let actionObj = null
-    if (isPlainObject(obj.action)) {
+    let batch = null
+    if (Array.isArray(obj.actions) && obj.actions.length) {
+      batch = obj.actions
+      thought = toStringValue(obj.thought ?? obj.reasoning ?? obj.reason ?? obj.explanation)
+    } else if (Array.isArray(obj.action) && obj.action.length) {
+      batch = obj.action
+      thought = toStringValue(obj.thought ?? obj.reasoning ?? obj.explanation)
+    } else if (isPlainObject(obj.action)) {
       actionObj = obj.action
       thought = toStringValue(obj.thought ?? obj.reasoning ?? obj.reason ?? obj.explanation)
     } else if (typeof obj.action === 'string' && SPEC[normalizeType(obj.action)]) {
@@ -550,12 +580,28 @@ function parseAction (rawText, limits) {
       thought = toStringValue(obj.thought ?? obj.reasoning ?? obj.reason ?? obj.explanation)
     }
 
+    const remember = toStringValue(obj.remember ?? obj.note ?? obj.memory)
+
+    if (batch) {
+      const actions = []
+      let bad = null
+      for (const item of batch.slice(0, MAX_BATCH)) {
+        const res = validateAction(item, limits)
+        if (!res.ok) { bad = res.error; break }
+        actions.push(res.action)
+        // nothing after a page change or a terminal action can be planned from this screenshot
+        if (PAGE_CHANGING.has(res.action.type) || TERMINAL.has(res.action.type)) break
+      }
+      if (bad || !actions.length) { errors.push(bad || 'empty actions list'); continue }
+      return { ok: true, action: actions[0], actions, thought, remember: remember || null }
+    }
+
     if (!actionObj) { errors.push('no "action" field'); continue }
 
     const res = validateAction(actionObj, limits)
     if (!res.ok) { errors.push(res.error); continue }
 
-    return { ok: true, action: res.action, thought: thought }
+    return { ok: true, action: res.action, actions: [res.action], thought: thought, remember: remember || null }
   }
 
   return { ok: false, error: errors[errors.length - 1] || 'could not extract a valid action' }
@@ -577,6 +623,10 @@ function describeAction (action) {
     case 'wait': return `Wait ${action.ms} ms`
     case 'navigate': return /^[a-z]+:\/\/|^[^\s]+\.[a-z]{2,}(\/|$)/i.test(action.url) ? `Open ${action.url}` : `Search for "${action.url}"`
     case 'back': return 'Go back'
+    case 'switch_tab': return `Switch to tab ${action.tab}`
+    case 'new_tab': return action.url ? `Open a new tab: ${action.url}` : 'Open a new tab'
+    case 'close_tab': return action.tab ? `Close tab ${action.tab}` : 'Close this tab'
+    case 'zoom': return `Zoom in at (${action.x}, ${action.y})`
     case 'done': return action.answer ? `Done \u2014 ${action.answer}` : 'Done'
     case 'fail': return action.reason ? `Stopped \u2014 ${action.reason}` : 'Stopped'
     default: return action.type
@@ -591,33 +641,40 @@ function isTerminal (action) {
 const ACTION_SPEC_TEXT = [
   'Reply with EXACTLY ONE JSON object and nothing else (no prose, no markdown fences):',
   '{"thought":"<one short sentence: what you see and what you do next>","action":{"type":"<type>",...}}',
+  'To do several things on the SAME screen in one go (fill a form, then submit), send a list instead:',
+  '{"thought":"...","actions":[{...},{...},{...}]}     (max 6; stops after anything that changes the page)',
+  'Optional: "remember":"<fact worth keeping>" saves a note you will see on every later step.',
   '',
   'Actions. x/y are pixel positions in the screenshot, from its top-left corner:',
   '  click        {"x":int,"y":int}',
   '  double_click {"x":int,"y":int}',
   '  right_click  {"x":int,"y":int}',
-  '  move         {"x":int,"y":int}                     (hover)',
+  '  move         {"x":int,"y":int}                     (hover, e.g. to open a menu)',
   '  drag         {"fromX":int,"fromY":int,"toX":int,"toY":int}',
   '  type         {"text":str,"x":int?,"y":int?,"clear":bool?,"enter":bool?}',
   '               clicks (x,y) first when given; clear:true replaces the text already there;',
   '               enter:true presses Enter after typing (submits searches and forms)',
   '  key          {"key":"enter|tab|escape|backspace|delete|up|down|left|right|pagedown|pageup|home|end","modifiers":["shift"]?}',
   '  scroll       {"direction":"down|up","amount":int?,"x":int?,"y":int?}   (amount = wheel notches, default 5)',
-  '  navigate     {"url":str}       open a URL, or give plain words to search the web',
-  '  back         {}                browser Back button',
-  '  wait         {"ms":int?}       only while a page is visibly loading',
-  '  done         {"answer":str}    task complete; answer tells the user the result or what you found',
-  '  fail         {"reason":str}    task impossible',
+  '  zoom         {"x":int,"y":int}  look closer: the next screenshot is a 2x close-up around that point',
+  '  navigate     {"url":str}        open a URL, or give plain words to search the web',
+  '  back         {}                 browser Back button',
+  '  new_tab      {"url":str?}       open a new tab (and switch to it)',
+  '  switch_tab   {"tab":int}        switch to a tab from the "Tabs" list',
+  '  close_tab    {"tab":int?}       close a tab (default: the current one)',
+  '  wait         {"ms":int?}        only while a page is visibly loading',
+  '  done         {"answer":str}     task complete; answer tells the user the result or what you found',
+  '  fail         {"reason":str}     task impossible',
   '',
   'Rules:',
   '- Act only on what the newest screenshot shows. If what you need is not visible, scroll or navigate.',
   '- Take the shortest path: open a known URL directly, and fill a field with ONE "type" action',
-  '  (x, y, text, enter:true) instead of separate click / type / key steps.',
-  '- Click the centre of the element you mean.',
+  '  (x, y, text, enter:true). Fill a whole form with one "actions" list.',
+  '- Click the centre of the element you mean. If it is small or you are not sure where it is, zoom first.',
+  '- When a link opens a new tab, Iris switches to it automatically; the "Tabs" list shows all tabs.',
   '- If your last action changed nothing, do something different. Never repeat a failed action.',
   '- Close cookie banners and pop-ups that block the page.',
-  '- As soon as the screenshot shows the answer, reply "done" with the answer.',
-  '- Do not sign in, buy, or send personal data unless the task explicitly asks for it.'
+  '- As soon as the screenshot shows the answer, reply "done" with the answer.'
 ].join('\n')
 
 module.exports = {
@@ -629,6 +686,8 @@ module.exports = {
   normalizeModifiers,
   normalizeKeyName,
   ACTION_SPEC_TEXT,
+  PAGE_CHANGING,
+  MAX_BATCH,
   ACTION_TYPES: Object.keys(SPEC),
   TERMINAL_TYPES: Array.from(TERMINAL)
 }

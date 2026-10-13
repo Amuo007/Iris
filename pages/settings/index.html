@@ -20,71 +20,99 @@
     <div class="settings-container" id="iris-ai-settings-container">
       <h3>Iris AI</h3>
       <div class="setting-secondary-label">
-        Iris only ever looks at screenshots of the page and sends real mouse and keyboard
-        events. It never reads the DOM and no script is injected into the sites you visit.
+        Iris looks at screenshots of the page and uses real mouse and keyboard input, like a person.
+        It never runs scripts inside the sites you visit.
       </div>
 
-      <div class="setting-section iris-setting">
-        <label for="iris-base-url">Model server (OpenAI-compatible base URL)</label>
-        <input type="text" id="iris-base-url" spellcheck="false" />
-      </div>
-
-      <div class="setting-section iris-setting">
-        <label for="iris-model">Model name</label>
-        <input type="text" id="iris-model" spellcheck="false" />
-      </div>
-
-      <div class="setting-section iris-setting">
-        <label for="iris-api-key">API key (optional, stored locally)</label>
-        <input type="password" id="iris-api-key" spellcheck="false" autocomplete="off" />
-      </div>
-
-      <div class="setting-section iris-setting">
-        <label for="iris-max-steps">Maximum steps per task</label>
-        <input type="number" id="iris-max-steps" min="1" max="200" />
-      </div>
-
-      <div class="setting-section iris-setting">
-        <label for="iris-temperature">Temperature</label>
-        <input type="number" id="iris-temperature" min="0" max="2" step="0.1" />
-      </div>
-
-      <div class="setting-section iris-setting">
-        <label for="iris-screenshot-size">Screenshot longest edge (px)</label>
-        <input type="number" id="iris-screenshot-size" min="512" max="3072" step="16" />
-      </div>
-
-      <div class="setting-section iris-setting">
-        <label for="iris-screenshot-quality">Screenshot JPEG quality</label>
-        <input type="number" id="iris-screenshot-quality" min="20" max="100" />
-      </div>
-
-      <div class="setting-section iris-setting">
-        <label for="iris-keep-images">Screenshots kept in model context</label>
-        <input type="number" id="iris-keep-images" min="1" max="12" />
+      <div class="iris-grid">
+        <div class="iris-setting iris-wide">
+          <label for="iris-base-url">Model server (OpenAI-compatible base URL)</label>
+          <input type="text" id="iris-base-url" spellcheck="false" />
+        </div>
+        <div class="iris-setting iris-wide">
+          <label for="iris-model">Model name</label>
+          <input type="text" id="iris-model" spellcheck="false" />
+        </div>
+        <div class="iris-setting iris-wide">
+          <label for="iris-api-key">API key (optional)</label>
+          <input type="password" id="iris-api-key" spellcheck="false" autocomplete="off" />
+        </div>
+        <div class="iris-setting">
+          <label for="iris-thinking">Thinking</label>
+          <select id="iris-thinking">
+            <option value="off">Fast (no thinking)</option>
+            <option value="low">Balanced</option>
+            <option value="medium">Careful</option>
+            <option value="full">Deep (slowest)</option>
+          </select>
+        </div>
+        <div class="iris-setting">
+          <label for="iris-max-steps">Steps per task (Once mode)</label>
+          <input type="number" id="iris-max-steps" min="1" max="1000" />
+        </div>
+        <div class="iris-setting">
+          <label for="iris-max-minutes">Minutes per task (Once mode)</label>
+          <input type="number" id="iris-max-minutes" min="1" max="1440" />
+        </div>
+        <div class="iris-setting">
+          <label for="iris-model-timeout">Seconds to wait for each answer</label>
+          <input type="number" id="iris-model-timeout" min="30" max="1800" />
+        </div>
+        <div class="iris-setting">
+          <label for="iris-temperature">Temperature</label>
+          <input type="number" id="iris-temperature" min="0" max="2" step="0.1" />
+        </div>
+        <div class="iris-setting">
+          <label for="iris-screenshot-size">Screenshot size (px, longest edge)</label>
+          <input type="number" id="iris-screenshot-size" min="768" max="2048" step="16" />
+        </div>
+        <div class="iris-setting">
+          <label for="iris-screenshot-quality">Screenshot JPEG quality</label>
+          <input type="number" id="iris-screenshot-quality" min="40" max="100" />
+        </div>
+        <div class="iris-setting">
+          <label for="iris-keep-images">Screenshots the model remembers</label>
+          <input type="number" id="iris-keep-images" min="1" max="6" />
+        </div>
       </div>
 
       <div class="setting-section">
         <input type="checkbox" id="checkbox-iris-marker" />
-        <label for="checkbox-iris-marker">Show the on-page marker where Iris clicks</label>
+        <label for="checkbox-iris-marker">Show Iris's mouse pointer on the page</label>
       </div>
 
       <div class="setting-section">
         <input type="checkbox" id="checkbox-iris-takeover" />
-        <label for="checkbox-iris-takeover">Pause the agent when you touch the page</label>
+        <label for="checkbox-iris-takeover">Pause Iris when you click or type in the page</label>
       </div>
 
       <div class="setting-section">
-        <input type="checkbox" id="checkbox-iris-sensitive" />
-        <label for="checkbox-iris-sensitive"
-          >Let Iris confirm purchases, payments and form submissions without asking first</label
-        >
+        <button class="iris-button" id="iris-test-connection" type="button">Test connection</button>
+        <button class="iris-button" id="iris-reset-defaults" type="button">Reset to defaults</button>
+        <span class="iris-inline-status" id="iris-connection-status"></span>
       </div>
 
+      <h4 class="iris-subhead" id="iris-profile">My info</h4>
+      <div class="setting-secondary-label">
+        Iris uses these to fill forms and log in for you. Secret fields are encrypted with your Mac's
+        keychain and are never shown to the model: it types a placeholder like {{Password}} and Iris
+        swaps in the real value as it types.
+      </div>
+      <div id="iris-profile-rows" class="iris-rows"></div>
       <div class="setting-section">
-        <button class="button-border" id="iris-reset-defaults" type="button">
-          Reset Iris defaults
-        </button>
+        <button class="iris-button" id="iris-profile-add" type="button">Add a field</button>
+        <button class="iris-button iris-primary" id="iris-profile-save" type="button">Save my info</button>
+        <span class="iris-inline-status" id="iris-profile-status"></span>
+      </div>
+
+      <h4 class="iris-subhead" id="iris-schedule">Schedule</h4>
+      <div class="setting-secondary-label">
+        Tasks that start on their own, in a new tab, while Iris is open. Use "Every" for a repeating
+        interval or "At" for once a day.
+      </div>
+      <div id="iris-schedule-rows" class="iris-rows"></div>
+      <div class="setting-section">
+        <button class="iris-button" id="iris-schedule-add" type="button">Add a scheduled task</button>
       </div>
     </div>
 

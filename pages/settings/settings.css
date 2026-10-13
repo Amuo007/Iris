@@ -189,45 +189,143 @@ html {
 }
 
 /* ------------------------------------------------------------------ *
- * Iris identity + the "Iris AI" section
+ * Iris: neutral identity + the "Iris AI" section
  * ------------------------------------------------------------------ */
 
-:root {
-  --iris-accent: #7c5cff;
-  --iris-accent-2: #4fb0e8;
-}
-
 .short-hero.blue-gradient-background {
-  background: linear-gradient(120deg, #241a4d 0%, #5b3fd6 52%, #2f7fbf 100%);
+  background: #0a0a0a;
 }
 
 #iris-ai-settings-container {
-  border-left: 3px solid var(--iris-accent);
+  border-left: 3px solid currentColor;
 }
 
-#iris-ai-settings-container .iris-setting {
+.iris-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.4rem 1.2rem;
+  margin: 0.8rem 0 0.6rem;
+}
+
+.iris-setting {
   font-size: 0.9rem;
-  padding: 0.35rem 0 0.5rem;
 }
 
-#iris-ai-settings-container .iris-setting label {
+.iris-setting.iris-wide {
+  grid-column: 1 / -1;
+}
+
+.iris-setting label {
   display: block;
   padding: 0 0 0.3rem;
-  font-size: 0.85rem;
-  opacity: 0.8;
+  font-size: 0.8rem;
+  opacity: 0.7;
 }
 
 #iris-ai-settings-container input[type='text'],
 #iris-ai-settings-container input[type='password'],
-#iris-ai-settings-container input[type='number'] {
+#iris-ai-settings-container input[type='number'],
+#iris-ai-settings-container input[type='time'],
+#iris-ai-settings-container select {
   box-sizing: border-box;
   width: 100%;
-  max-width: 520px;
-  padding: 0.5em 0.7em;
-  font-size: 0.9rem;
-  border-radius: 8px;
+  max-width: 560px;
+  padding: 0.45em 0.65em;
+  font-size: 0.88rem;
+  border-radius: 7px;
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  background: transparent;
+  color: inherit;
 }
 
-#iris-ai-settings-container input[type='number'] {
-  max-width: 140px;
+.iris-subhead {
+  margin: 1.6rem 0 0.2rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  opacity: 1;
+  text-align: left;
+}
+
+.iris-button {
+  padding: 0.45em 0.9em;
+  margin-right: 0.4em;
+  border-radius: 7px;
+  border: 1px solid rgba(127, 127, 127, 0.4);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.iris-button.iris-primary {
+  background: #0a0a0a;
+  color: #fff;
+  border-color: #0a0a0a;
+}
+
+.dark-mode .iris-button.iris-primary {
+  background: #f5f5f5;
+  color: #000;
+  border-color: #f5f5f5;
+}
+
+.iris-inline-status {
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+.iris-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0.7rem 0 0.4rem;
+}
+
+.iris-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 760px;
+}
+
+#iris-ai-settings-container .iris-row input.iris-row-label {
+  flex: 0 0 170px;
+}
+
+#iris-ai-settings-container .iris-row input.iris-row-value,
+#iris-ai-settings-container .iris-row input.iris-row-task {
+  flex: 1;
+  max-width: none;
+}
+
+#iris-ai-settings-container .iris-row select {
+  width: auto;
+}
+
+#iris-ai-settings-container .iris-row input.iris-row-num {
+  width: 80px;
+}
+
+#iris-ai-settings-container .iris-row input.iris-row-time {
+  width: 110px;
+}
+
+.iris-row-unit {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.iris-row-secret {
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.iris-row-delete {
+  font-size: 1.2rem !important;
+  line-height: 1;
+  padding: 0 0.3em;
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.iris-row-delete:hover {
+  opacity: 1;
 }

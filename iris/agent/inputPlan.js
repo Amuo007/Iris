@@ -94,6 +94,25 @@ function mouseUp (x, y, button, clickCount) {
   return { type: 'mouseUp', x, y, button: button || 'left', clickCount: clickCount || 1 }
 }
 
+function glideTarget (action) {
+  if (!action) return null
+  if (action.type === 'drag') return { x: action.fromX, y: action.fromY }
+  if (typeof action.x === 'number' && typeof action.y === 'number' && action.type !== 'scroll') return { x: action.x, y: action.y }
+  return null
+}
+
+function easeOut (t) {
+  return 1 - Math.pow(1 - t, 3)
+}
+
+/** Where the pointer rests after an action (the start of the next glide). */
+function pointerAfter (action) {
+  if (!action) return null
+  if (action.type === 'drag') return { x: action.toX, y: action.toY }
+  if (typeof action.x === 'number' && typeof action.y === 'number') return { x: action.x, y: action.y }
+  return null
+}
+
 /*
  * Enter needs a `char` event between keyDown and keyUp: Chromium's implicit form
  * submission (search boxes!) listens for the keypress, which a bare keyDown never produces.
@@ -111,9 +130,22 @@ function enterEvents (add, firstDelay) {
  */
 function planInputEvents (action, opts) {
   if (!action || typeof action !== 'object') throw new TypeError('inputPlan: action is required')
-  const cfg = Object.assign({ dragSteps: 12, wheelStepPx: 120, betweenEventMs: 12 }, opts || {})
+  const cfg = Object.assign({ dragSteps: 12, wheelStepPx: 120, betweenEventMs: 12, glideSteps: 5, glideMs: 12, from: null }, opts || {})
   const out = []
   const add = (event, delayMs) => out.push({ event, delayMs: delayMs === undefined ? cfg.betweenEventMs : delayMs })
+
+  // a real pointer travels to its target: glide from where it was (hover menus, :hover styles)
+  const target = glideTarget(action)
+  if (target && cfg.from && cfg.glideSteps > 0) {
+    const dx = target.x - cfg.from.x
+    const dy = target.y - cfg.from.y
+    if (Math.abs(dx) + Math.abs(dy) > 4) {
+      for (let i = 1; i < cfg.glideSteps; i++) {
+        const t = easeOut(i / cfg.glideSteps)
+        add(mouseMove(Math.round(cfg.from.x + dx * t), Math.round(cfg.from.y + dy * t)), cfg.glideMs)
+      }
+    }
+  }
 
   switch (action.type) {
     case 'move':
@@ -202,11 +234,10 @@ function planInputEvents (action, opts) {
             enterEvents(add)
           }
         } else {
-          // `char` is what actually inserts text into a focused field. Non-ASCII and
-          // astral-plane characters (emoji, CJK, accents) have no named keyCode, so the
-          // character itself is used as the keyCode.
-          const code = keyCodeFor(ch) || ch
-          add(Object.assign({ type: 'char', keyCode: code, text: ch, unmodifiedText: ch.toLowerCase() }, mods ? { modifiers: mods } : {}), 8)
+          // `char` is what actually inserts text into a focused field, and Electron inserts
+          // its keyCode verbatim — so it must be the character itself. (A key name such as
+          // 'A' would turn every lowercase letter into a capital and break passwords.)
+          add(Object.assign({ type: 'char', keyCode: ch }, mods ? { modifiers: mods } : {}), 8)
         }
       }
       if (action.enter) enterEvents(add, 60)
@@ -255,4 +286,4 @@ function planDuration (plan) {
   return plan.reduce((sum, e) => sum + (e.delayMs || 0), 0)
 }
 
-module.exports = { planInputEvents, planDuration, keyCodeFor, modifiersFor, KEY_CODES }
+module.exports = { planInputEvents, planDuration, pointerAfter, keyCodeFor, modifiersFor, KEY_CODES }

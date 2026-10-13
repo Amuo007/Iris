@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <title>Iris Action Marker</title>
+    <title>Iris Pointer</title>
     <style>
       html,
       body {
@@ -14,160 +14,114 @@
         overflow: hidden;
         pointer-events: none;
       }
-
-      #marker {
+      /* the agent's pointer: glides to each target the way a mouse would */
+      #pointer {
         position: absolute;
-        width: 0;
-        height: 0;
+        left: 0;
+        top: 0;
+        width: 22px;
+        height: 22px;
         opacity: 0;
-        transition: opacity 180ms ease;
+        transform: translate(-100px, -100px);
+        transition: transform 160ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 160ms ease;
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+        z-index: 2;
       }
-
-      .ring,
-      .dot,
-      .cross-h,
-      .cross-v {
+      #pointer.no-anim {
+        transition: none;
+      }
+      .ripple {
         position: absolute;
-        left: 50%;
-        top: 50%;
-      }
-
-      .dot {
-        width: 12px;
-        height: 12px;
-        margin: -6px 0 0 -6px;
+        width: 36px;
+        height: 36px;
+        margin: -18px 0 0 -18px;
         border-radius: 50%;
-        background: radial-gradient(circle at 35% 30%, #b8a4ff, #7c3aed 60%, #4f46e5);
-        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 18px 4px rgba(124, 58, 237, 0.65);
+        border: 2px solid rgba(17, 17, 17, 0.85);
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+        animation: ripple 520ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
       }
-
-      .ring {
-        width: 44px;
-        height: 44px;
-        margin: -22px 0 0 -22px;
-        border-radius: 50%;
-        border: 2px solid rgba(168, 139, 255, 0.95);
-        animation: ripple 1.1s cubic-bezier(0.16, 1, 0.3, 1) infinite;
-      }
-
-      .ring.delayed {
-        animation-delay: 0.35s;
-      }
-
-      .cross-h,
-      .cross-v {
-        background: rgba(168, 139, 255, 0.35);
-      }
-
-      .cross-h {
-        width: 100vw;
-        height: 1px;
-        margin-left: -50vw;
-      }
-
-      .cross-v {
-        width: 1px;
-        height: 100vh;
-        margin-top: -50vh;
-      }
-
-      #label {
-        position: absolute;
-        max-width: 320px;
-        padding: 5px 10px;
-        border-radius: 999px;
-        font: 500 11.5px/1.35 -apple-system, "Space Grotesk", system-ui, sans-serif;
-        letter-spacing: 0.01em;
-        color: #fff;
-        background: rgba(28, 22, 48, 0.86);
-        border: 1px solid rgba(168, 139, 255, 0.45);
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        transform: translate(-50%, -100%);
-      }
-
       @keyframes ripple {
         0% {
-          transform: scale(0.45);
-          opacity: 0.95;
+          transform: scale(0.35);
+          opacity: 1;
         }
         100% {
-          transform: scale(1.9);
+          transform: scale(1.35);
           opacity: 0;
         }
       }
-
-      body.waiting .dot {
-        background: radial-gradient(circle at 35% 30%, #ffe1a8, #d97706 60%, #b45309);
-      }
-
-      body.typing .ring {
-        animation-duration: 0.7s;
+      #label {
+        position: absolute;
+        max-width: 320px;
+        padding: 4px 9px;
+        border-radius: 6px;
+        font: 500 11.5px/1.35 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        color: #fff;
+        background: rgba(10, 10, 10, 0.88);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        transform: translate(14px, 18px);
+        transition: left 160ms cubic-bezier(0.2, 0.7, 0.2, 1), top 160ms cubic-bezier(0.2, 0.7, 0.2, 1);
       }
     </style>
   </head>
   <body>
-    <div id="marker">
-      <div class="cross-h"></div>
-      <div class="cross-v"></div>
-      <div class="ring"></div>
-      <div class="ring delayed"></div>
-      <div class="dot"></div>
-    </div>
+    <svg id="pointer" viewBox="0 0 22 22" aria-hidden="true">
+      <path d="M3 2l13.5 9.2-6.1 1.2 3.6 7.1-2.6 1.3-3.6-7.2L3.6 18z" fill="#111" stroke="#fff" stroke-width="1.4" stroke-linejoin="round" />
+    </svg>
     <div id="label" hidden></div>
-
     <script>
       const { ipcRenderer } = require('electron')
-
-      const marker = document.getElementById('marker')
+      const pointer = document.getElementById('pointer')
       const label = document.getElementById('label')
       let hideTimer = null
+      let last = null
+
+      function place (x, y, animate) {
+        pointer.classList.toggle('no-anim', !animate)
+        pointer.style.transform = `translate(${x - 3}px, ${y - 2}px)`
+        pointer.style.opacity = '1'
+      }
+
+      function ripple (x, y) {
+        const r = document.createElement('div')
+        r.className = 'ripple'
+        r.style.left = x + 'px'
+        r.style.top = y + 'px'
+        document.body.appendChild(r)
+        setTimeout(() => r.remove(), 600)
+      }
 
       ipcRenderer.on('iris-overlay', (event, payload) => {
         if (!payload || !payload.anchor) {
           return
         }
-
         clearTimeout(hideTimer)
-        document.body.className =
-          payload.action && payload.action.type === 'type'
-            ? 'typing'
-            : payload.kind === 'wait'
-            ? 'waiting'
-            : ''
-
-        marker.style.transform = `translate(${payload.anchor.x}px, ${payload.anchor.y}px)`
-        marker.style.opacity = '1'
-
+        const { x, y } = payload.anchor
+        place(x, y, !!last)
+        last = { x, y }
+        const type = payload.action && payload.action.type
+        if (type && type !== 'move' && type !== 'scroll' && type !== 'zoom') {
+          setTimeout(() => ripple(x, y), 150)
+        }
         if (payload.description) {
-          const pad = 16
-          let left = payload.anchor.x
-          let top = payload.anchor.y - 30
-          if (top < 26) {
-            top = payload.anchor.y + 42
-          }
           label.hidden = false
-          label.style.left = Math.max(pad, Math.min(window.innerWidth - pad, left)) + 'px'
-          label.style.top = top + 'px'
+          label.style.left = Math.min(window.innerWidth - 240, x) + 'px'
+          label.style.top = Math.min(window.innerHeight - 40, y) + 'px'
           label.textContent = payload.description
         }
-
         hideTimer = setTimeout(() => {
-          marker.style.opacity = '0'
           label.hidden = true
-        }, 2200)
+          pointer.style.opacity = '0.35'
+        }, 2400)
       })
 
       ipcRenderer.on('iris-overlay-hide', () => {
         clearTimeout(hideTimer)
-        marker.style.opacity = '0'
+        pointer.style.opacity = '0'
         label.hidden = true
-      })
-
-      window.addEventListener('resize', () => {
-        marker.style.transition = 'none'
+        last = null
       })
 
       // tell the main process we are ready to be positioned

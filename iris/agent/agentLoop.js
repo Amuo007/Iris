@@ -23,7 +23,7 @@
  * exercised end-to-end by the test suite with a scripted fake model.
  */
 
-const { parseAction, describeAction, isTerminal } = require('./actionSchema')
+const { parseAction, describeAction, isTerminal, PAGE_CHANGING } = require('./actionSchema')
 const { createMapping, mapActionToView, actionAnchorCss } = require('./coordinateMapper')
 const { createSafetyGate } = require('./safety')
 const { createHistory } = require('./history')
@@ -34,8 +34,13 @@ const DEFAULTS = {
   markerDwellMs: 120,
   maxModelMsPerStep: 180 * 1000,
   maxCaptureFailures: 5,
+  maxServerWaitMs: 10 * 60 * 1000, // 0 = wait for the model server forever (non-stop runs)
   coordinateSpace: 'auto'
 }
+
+/* The model server is restarting, loading or briefly unreachable: wait, don't give up. */
+const SERVER_DOWN = /cannot reach the model server|ECONNRESET|ECONNREFUSED|socket hang up|fetch failed|responded 50[234]|not loaded|loading model|server is busy/i
+const CONTEXT_FULL = /exceeds the available context size|context_length_exceeded|maximum context length|context window/i
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -183,9 +188,10 @@ function createAgent (opts) {
     }
   }
 
-  async function run (task) {
+  async function run (task, runOptions) {
     if (!task || typeof task !== 'string') throw new TypeError('run(task) requires a non-empty string')
     if (state.status === 'running') throw new Error('agent is already running')
+    const followUp = !!(runOptions && runOptions.followUp) && history.length() > 0
 
     pauseRequested = false
     stopRequested = null
@@ -197,13 +203,21 @@ function createAgent (opts) {
     state.reason = null
     state.pausedByUser = false
     state.takeover = null
-    history.start(task)
+    if (followUp) {
+      history.addFollowUp(task)
+      safety.reset()
+    } else {
+      history.start(task)
+    }
     setStatus('running', null)
-    emit('run:start', { task, limits: safety.snapshot().limits })
+    emit('run:start', { task, followUp, limits: safety.snapshot().limits })
 
     let autoWaits = 0
     let lastTakeoverCount = 0
     let captureFailures = 0
+    let serverDownSince = 0
+    let serverWaits = 0
+    let compactions = 0
     let lastFingerprint = null
     let lastActed = null
 
@@ -305,15 +319,44 @@ function createAgent (opts) {
       safety.beforeModelCall()
       emit('model:start', { step: state.step })
       try {
-        raw = await modelNext(history.messages(), state.step, obs)
+        const extra = typeof cfg.systemExtra === 'function' ? cfg.systemExtra() : cfg.systemExtra
+        raw = await modelNext(history.messages(extra || undefined), state.step, obs)
       } catch (err) {
         if (stopRequested) return finish('stopped', stopRequested)
-        const gate = safety.noteRetry(err.message)
-        emit('error', { step: state.step, where: 'model', error: err.message })
+        const message = err && err.message ? err.message : String(err)
+
+        if (CONTEXT_FULL.test(message)) {
+          safety.refundStep()
+          compactions++
+          if (compactions <= 2 && history.compact()) {
+            emit('error', { step: state.step, where: 'context', error: 'The model ran out of room; forgetting the oldest steps.' })
+            continue
+          }
+          return finish('failed', "The model server's context window is too small for Iris (" + message.slice(0, 140) + '). Load the model with a larger context, such as 32K or more.')
+        }
+
+        if (SERVER_DOWN.test(message)) {
+          safety.refundStep()
+          if (!serverDownSince) serverDownSince = now()
+          serverWaits++
+          if (cfg.maxServerWaitMs > 0 && now() - serverDownSince > cfg.maxServerWaitMs) {
+            return finish('failed', 'The model server was unreachable for ' + Math.round((now() - serverDownSince) / 60000) + ' minutes: ' + message)
+          }
+          const waitMs = Math.min(30000, 2000 * Math.pow(2, Math.min(4, serverWaits - 1)))
+          emit('error', { step: state.step, where: 'server', error: message, waitMs })
+          await delay(waitMs)
+          continue
+        }
+
+        const gate = safety.noteRetry(message)
+        emit('error', { step: state.step, where: 'model', error: message })
         if (!gate.allow) return finish('failed', gate.reason)
         await delay(Math.max(cfg.settleDelayMs, 1000))
         continue
       }
+      serverDownSince = 0
+      serverWaits = 0
+      compactions = 0
 
       if (stopRequested) return finish('stopped', stopRequested)
 
@@ -334,95 +377,125 @@ function createAgent (opts) {
 
       safety.noteSuccess()
       history.addAssistant(text, parsed.thought, parsed.action)
-      emit('thought', { step: state.step, thought: parsed.thought, action: parsed.action, reasoning, usage, modelMs })
-
-      // ---- terminal states ---------------------------------------------------
-      if (isTerminal(parsed.action)) {
-        if (parsed.action.type === 'done') return finish('done', null, parsed.action.answer || parsed.thought)
-        return finish('failed', parsed.action.reason || 'the model reported the task as impossible')
+      if (parsed.remember) {
+        history.addNote(parsed.remember)
+        emit('remember', { step: state.step, note: parsed.remember })
       }
+      const batch = parsed.actions && parsed.actions.length ? parsed.actions : [parsed.action]
+      emit('thought', { step: state.step, thought: parsed.thought, action: parsed.action, actions: batch, reasoning, usage, modelMs })
 
-      // ---- 6. map ------------------------------------------------------------
-      let mapped
-      try {
-        const mapping = createMapping({
-          imageWidth: obs.width,
-          imageHeight: obs.height,
-          viewWidth: obs.viewWidth,
-          viewHeight: obs.viewHeight,
-          devicePixelRatio: obs.devicePixelRatio
-        })
-        mapped = mapActionToView(parsed.action, mapping, { coordinateSpace: cfg.coordinateSpace })
-        mapped.anchorCss = actionAnchorCss(parsed.action, mapping)
-      } catch (err) {
-        const gate = safety.noteRetry('coordinate mapping failed: ' + err.message)
-        emit('error', { step: state.step, where: 'mapping', error: err.message })
-        if (!gate.allow) return finish('failed', gate.reason)
-        continue
-      }
-
-      // ---- 7. stop gate on the action itself ---------------------------------
-      const actionGate = safety.beforeAction(mapped, {
-        pausedByUser: pauseRequested,
-        url: pageState.url,
-        pageUnchanged: unchanged,
-        approved: approvedKey
+      const mapping = createMapping({
+        imageWidth: obs.width,
+        imageHeight: obs.height,
+        viewWidth: obs.viewWidth,
+        viewHeight: obs.viewHeight,
+        devicePixelRatio: obs.devicePixelRatio
       })
-      approvedKey = null
-      if (!actionGate.allow) {
-        emit('blocked', { step: state.step, kind: actionGate.kind, reason: actionGate.reason, action: parsed.action })
-        if (actionGate.kind === 'loop') {
-          history.addSystemNote('You repeated an action that did not change the page. Try a different approach.')
-          pauseRequested = true
-          continue
-        }
-        if (actionGate.kind === 'confirmation') {
-          pendingApproval = actionGate.key || null
-          history.addSystemNote('The user must approve your next action before it runs.')
-          pauseRequested = true
-          continue
-        }
-        if (actionGate.kind === 'takeover') { pauseRequested = true; continue }
-        return finish('stopped', actionGate.reason)
+
+      let outcome = null
+      for (let i = 0; i < batch.length; i++) {
+        outcome = await perform(batch[i], i, batch.length, mapping, obs, pageState, unchanged)
+        if (outcome.finished) return outcome.finished
+        if (outcome.stopBatch) break
       }
+      lastActed = batch[batch.length - 1]
 
-      // ---- 8. marker ----------------------------------------------------------
-      emit('action', {
-        step: state.step,
-        action: parsed.action,
-        actionView: mapped,
-        anchor: mapped.anchorCss || null,
-        description: describeAction(parsed.action),
-        automatic: false
-      })
-      if (mapped.anchorCss && cfg.markerDwellMs > 0) await delay(cfg.markerDwellMs)
-
-      if (stopRequested) return finish('stopped', stopRequested)
-
-      // ---- 9. act -------------------------------------------------------------
-      let result
-      try {
-        result = await callComputer(computer.act, mapped)
-      } catch (err) {
-        result = { ok: false, error: err && err.message ? err.message : String(err) }
-      }
-
-      if (!result || result.ok !== true) {
-        const message = (result && result.error) || 'the page rejected the input'
-        const gate = safety.noteRetry(message)
-        emit('action:result', { step: state.step, ok: false, error: message })
-        history.addFailure(message)
-        if (!gate.allow) return finish('failed', gate.reason)
-      } else {
-        emit('action:result', { step: state.step, ok: true })
-      }
-      lastActed = parsed.action
-
-      // ---- 10. settle ---------------------------------------------------------
-      await settleAfter(mapped)
       if (stopRequested) return finish('stopped', stopRequested)
       /* eslint-enable no_constant_condition */
     }
+  }
+
+  /** Carry out one parsed action. Returns { finished } to end the run, { stopBatch } to re-look. */
+  async function perform (action, index, total, mapping, obs, pageState, unchanged) {
+    // ---- terminal states -----------------------------------------------------
+    if (isTerminal(action)) {
+      if (action.type === 'done') return { finished: finish('done', null, action.answer || null) }
+      return { finished: finish('failed', action.reason || 'the model reported the task as impossible') }
+    }
+
+    // ---- 6. map --------------------------------------------------------------
+    let mapped
+    try {
+      mapped = mapActionToView(action, mapping, { coordinateSpace: cfg.coordinateSpace })
+      mapped.anchorCss = actionAnchorCss(action, mapping)
+      if (obs.crop) offsetForCrop(mapped, obs.crop)
+    } catch (err) {
+      const gate = safety.noteRetry('coordinate mapping failed: ' + err.message)
+      emit('error', { step: state.step, where: 'mapping', error: err.message })
+      if (!gate.allow) return { finished: finish('failed', gate.reason) }
+      return { stopBatch: true }
+    }
+
+    // ---- 7. gate on the action itself -----------------------------------------
+    const actionGate = safety.beforeAction(mapped, {
+      pausedByUser: pauseRequested,
+      url: pageState.url,
+      pageUnchanged: unchanged && index === 0,
+      approved: approvedKey
+    })
+    approvedKey = null
+    if (!actionGate.allow) {
+      emit('blocked', { step: state.step, kind: actionGate.kind, reason: actionGate.reason, action })
+      if (actionGate.kind === 'loop') {
+        // no pause: an autonomous run should get itself unstuck
+        history.addSystemNote('You have repeated the same action several times and the page did not change. It does not work. Choose a completely different approach.')
+        return { stopBatch: true }
+      }
+      if (actionGate.kind === 'confirmation') {
+        pendingApproval = actionGate.key || null
+        history.addSystemNote('The user must approve your next action before it runs.')
+        pauseRequested = true
+        return { stopBatch: true }
+      }
+      if (actionGate.kind === 'takeover') { pauseRequested = true; return { stopBatch: true } }
+      return { finished: finish('stopped', actionGate.reason) }
+    }
+
+    // ---- 8. marker -------------------------------------------------------------
+    emit('action', {
+      step: state.step,
+      index,
+      total,
+      action,
+      actionView: mapped,
+      anchor: mapped.anchorCss || null,
+      description: describeAction(action),
+      automatic: false
+    })
+    if (mapped.anchorCss && cfg.markerDwellMs > 0) await delay(cfg.markerDwellMs)
+
+    if (stopRequested) return { finished: finish('stopped', stopRequested) }
+
+    // ---- 9. act ----------------------------------------------------------------
+    let result
+    try {
+      result = await callComputer(computer.act, mapped)
+    } catch (err) {
+      result = { ok: false, error: err && err.message ? err.message : String(err) }
+    }
+
+    if (!result || result.ok !== true) {
+      const message = (result && result.error) || 'the page rejected the input'
+      const gate = safety.noteRetry(message)
+      emit('action:result', { step: state.step, index, ok: false, error: message })
+      history.addFailure(message)
+      if (!gate.allow) return { finished: finish('failed', gate.reason) }
+      return { stopBatch: true }
+    }
+    emit('action:result', { step: state.step, index, ok: true })
+
+    // ---- 10. settle -------------------------------------------------------------
+    await settleAfter(mapped)
+    if (stopRequested) return { finished: finish('stopped', stopRequested) }
+    if (PAGE_CHANGING.has(action.type) || (result && result.pageChanged)) return { stopBatch: true }
+    return {}
+  }
+
+  /* A close-up screenshot covers only part of the view: shift its points back into the page. */
+  function offsetForCrop (mapped, crop) {
+    ['x', 'fromX', 'toX'].forEach(function (k) { if (typeof mapped[k] === 'number') mapped[k] = Math.round(mapped[k] + crop.x) })
+    ;['y', 'fromY', 'toY'].forEach(function (k) { if (typeof mapped[k] === 'number') mapped[k] = Math.round(mapped[k] + crop.y) })
+    if (mapped.anchorCss) mapped.anchorCss = { x: Math.round(mapped.anchorCss.x + crop.x), y: Math.round(mapped.anchorCss.y + crop.y) }
   }
 
   async function readPageState () {
@@ -473,6 +546,15 @@ function createAgent (opts) {
     },
     transcript () {
       return history.transcript()
+    },
+    exportHistory () {
+      return history.export()
+    },
+    importHistory (data) {
+      history.import(data)
+    },
+    notes () {
+      return history.notes()
     },
     config: cfg
   }

@@ -22,6 +22,41 @@ function taskMessage (task) {
   return 'Task: ' + task
 }
 
+function followUpMessage (text) {
+  return 'New message from the user (continue from where you are; earlier steps above are context): ' + text
+}
+
+function tabsText (tabs) {
+  return 'Tabs: ' + tabs.map(function (t, i) {
+    const name = (t.title || t.url || 'New tab').slice(0, 60)
+    return '[' + (i + 1) + '] ' + name + (t.active ? ' (current)' : '')
+  }).join('  ')
+}
+
+function notesText (notes) {
+  return 'Your notes so far:\n' + notes.map(function (n) { return '- ' + n }).join('\n')
+}
+
+/** What Iris knows about the user. Secrets appear only as {{placeholders}}. */
+function profileText (profile) {
+  if (!profile || !profile.length) return ''
+  const lines = ['About the user (use these whenever a form, sign-up or login needs them):']
+  profile.forEach(function (f) {
+    if (!f || !f.label) return
+    if (f.secret) lines.push('- ' + f.label + ': type the placeholder {{' + f.label + '}} — Iris replaces it with the real value as it types')
+    else if (f.value) lines.push('- ' + f.label + ': ' + f.value)
+  })
+  return lines.length > 1 ? lines.join('\n') : ''
+}
+
+function modeText (mode) {
+  if (mode === 'continuous') {
+    return 'This is a long, autonomous run with no step limit. Keep working until the task is fully done. ' +
+      'Save every useful finding with "remember" so nothing is lost. Reply "done" only when there is nothing left to do, with a full report.'
+  }
+  return ''
+}
+
 function observationIntro (obs, index, limits) {
   const lines = []
   const of = limits && limits.maxSteps ? ' of ' + limits.maxSteps : ''
@@ -29,6 +64,8 @@ function observationIntro (obs, index, limits) {
   lines.push('URL: ' + (obs && obs.url ? obs.url : '(empty tab)'))
   if (obs && obs.title) lines.push('Title: ' + obs.title)
   if (obs && obs.width) lines.push('Screenshot: ' + obs.width + 'x' + obs.height + ' px (x 0-' + (obs.width - 1) + ', y 0-' + (obs.height - 1) + ').')
+  if (obs && obs.crop) lines.push('This is a 2x CLOSE-UP of part of the page. Coordinates you give refer to this close-up image. The next screenshot will show the whole page again.')
+  if (obs && obs.tabChanged) lines.push(obs.tabChanged)
   if (obs && obs.emptyTab) lines.push('This tab is empty (new tab). Use "navigate" to open a website or search.')
   else if (obs && obs.blank) lines.push('The page looks blank. It may still be loading: use "wait" once, then try something else.')
   return lines.join('\n')
@@ -67,6 +104,11 @@ function finishReminder (stepsLeft) {
 module.exports = {
   systemPrompt,
   taskMessage,
+  followUpMessage,
+  tabsText,
+  notesText,
+  profileText,
+  modeText,
   observationIntro,
   loadingWarning,
   correctionMessage,

@@ -61,16 +61,14 @@ test('blocks dangerous url schemes and honours a host block list', () => {
   const c = clock()
   const gate = createSafetyGate({ now: c.now, blockHosts: ['evil.test'] })
   assert.strictEqual(gate.beforeAction({ type: 'navigate', url: 'javascript:alert(1)' }).kind, 'blocked')
-  assert.strictEqual(gate.beforeAction({ type: 'navigate', url: 'file:///etc/passwd' }).kind, 'blocked')
-  assert.strictEqual(gate.beforeAction({ type: 'navigate', url: 'chrome://settings' }).kind, 'blocked')
   assert.strictEqual(gate.beforeAction({ type: 'navigate', url: 'https://evil.test/x' }).kind, 'blocked')
   assert.strictEqual(gate.beforeAction({ type: 'navigate', url: 'https://example.com/' }).allow, true)
   assert.strictEqual(isBlockedUrl('HTTPS://EXAMPLE.COM/', { blockSchemes: ['javascript:'], blockHosts: [] }).blocked, false)
 })
 
-test('pauses before sensitive actions', () => {
+test('pauses before sensitive actions only when the user turns that on', () => {
   const c = clock()
-  const gate = createSafetyGate({ now: c.now })
+  const gate = createSafetyGate({ now: c.now, allowSensitiveActions: false })
   const r = gate.beforeAction({ type: 'type', text: 'purchase now with card 4111' })
   assert.strictEqual(r.allow, false)
   assert.strictEqual(r.kind, 'confirmation')
@@ -136,7 +134,7 @@ test('scrolling repeatedly is fine while the page changes, a loop when it does n
 
 test('an approved sensitive action passes once', () => {
   const c = clock()
-  const gate = createSafetyGate({ now: c.now })
+  const gate = createSafetyGate({ now: c.now, allowSensitiveActions: false })
   const a = { type: 'type', text: 'place order now' }
   const first = gate.beforeAction(a)
   assert.strictEqual(first.kind, 'confirmation')
@@ -145,7 +143,7 @@ test('an approved sensitive action passes once', () => {
 
 test('ordinary words like remove or delete in a search are not treated as sensitive', () => {
   const c = clock()
-  const gate = createSafetyGate({ now: c.now })
+  const gate = createSafetyGate({ now: c.now, allowSensitiveActions: false })
   assert.strictEqual(gate.beforeAction({ type: 'type', text: 'how to remove coffee stains' }).allow, true)
 })
 
@@ -156,4 +154,28 @@ test('refundStep gives back a step that never reached the model', () => {
   gate.refundStep()
   assert.strictEqual(gate.beforeStep().allow, true)
   assert.strictEqual(gate.beforeStep().allow, false)
+})
+
+test('no restrictions by default: purchases and logins go straight through', () => {
+  const c = clock()
+  const gate = createSafetyGate({ now: c.now })
+  assert.strictEqual(gate.beforeAction({ type: 'type', text: 'place order now' }).allow, true)
+  assert.strictEqual(gate.beforeAction({ type: 'navigate', url: 'file:///Users/me/report.pdf' }).allow, true)
+})
+
+test('0 means no step or time limit (continuous runs)', () => {
+  const c = clock()
+  const gate = createSafetyGate({ now: c.now, maxSteps: 0, maxWallClockMs: 0 })
+  for (let i = 0; i < 500; i++) assert.strictEqual(gate.beforeStep().allow, true)
+  c.advance(48 * 3600 * 1000)
+  assert.strictEqual(gate.beforeStep().allow, true)
+})
+
+test('reset starts the budget again for a follow-up', () => {
+  const c = clock()
+  const gate = createSafetyGate({ now: c.now, maxSteps: 2 })
+  gate.beforeStep(); gate.beforeStep()
+  assert.strictEqual(gate.beforeStep().allow, false)
+  gate.reset()
+  assert.strictEqual(gate.beforeStep().allow, true)
 })

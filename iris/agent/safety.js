@@ -16,9 +16,10 @@ const DEFAULTS = {
   maxRetriesPerStep: 3,
   maxConsecutiveFailures: 3,
   repeatActionLimit: 3,
-  blockSchemes: ['javascript:', 'file:', 'view-source:', 'chrome:', 'chrome-extension:', 'devtools:', 'blob:'],
+  // the only thing Iris never does is run code in a page: it acts through the screen like a person
+  blockSchemes: ['javascript:'],
   blockHosts: [],
-  allowSensitiveActions: false
+  allowSensitiveActions: true
 }
 
 /* Words that mean "this action is about to touch money, credentials or destruction". */
@@ -57,7 +58,7 @@ function normalizeActionKey (action) {
  */
 function createSafetyGate (options) {
   const cfg = Object.assign({}, DEFAULTS, options || {})
-  const startedAt = typeof cfg.now === 'function' ? cfg.now() : Date.now()
+  let startedAt = typeof cfg.now === 'function' ? cfg.now() : Date.now()
 
   let steps = 0
   let modelCalls = 0
@@ -75,14 +76,24 @@ function createSafetyGate (options) {
     /** Called once per loop iteration, before asking the model. */
     beforeStep () {
       steps++
-      if (steps > cfg.maxSteps) {
+      if (cfg.maxSteps > 0 && steps > cfg.maxSteps) {
         return decision('steps', `Reached the limit of ${cfg.maxSteps} steps for this task.`)
       }
       const elapsed = (cfg.now ? cfg.now() : Date.now()) - startedAt
-      if (elapsed > cfg.maxWallClockMs) {
+      if (cfg.maxWallClockMs > 0 && elapsed > cfg.maxWallClockMs) {
         return decision('time', `Task exceeded the ${Math.round(cfg.maxWallClockMs / 1000)}s time budget.`)
       }
       return { allow: true, step: steps, elapsedMs: elapsed }
+    },
+
+    /** Start counting again for a follow-up message in the same chat. */
+    reset () {
+      steps = 0
+      modelCalls = 0
+      retries = 0
+      consecutiveFailures = 0
+      recentActions.length = 0
+      startedAt = cfg.now ? cfg.now() : Date.now()
     },
 
     /** A step that never reached the model (e.g. the screenshot failed) is not charged. */
