@@ -7,15 +7,16 @@
  *
  *   ┌──────────────────────────────────────────────────────────────────────┐
  *   │ 1. stop-gate: steps / wall clock / pause / takeover                  │
- *   │ 2. perceive: computer.screenshot()  (device px PNG + page state)     │
+ *   │ 2. perceive: computer.screenshot()  (device px image + page state)   │
+ *   │    a capture failure is retried and never charged as a step          │
  *   │ 3. settle:   if the page is still loading, auto-`wait` (bounded)    │
- *   │ 4. think:    model.next(messages) with a per-step timeout           │
+ *   │ 4. think:    model.next(messages) — streamed, abortable, timed       │
  *   │ 5. parse:    actionSchema.parseAction → strict action or correction │
  *   │ 6. map:      coordinateMapper maps image px → CSS px (Retina-safe)   │
- *   │ 7. gate:     safety.beforeAction (blocked urls, loops, takeover)    │
+ *   │ 7. gate:     safety.beforeAction (blocked urls, loops, sensitive)   │
  *   │ 8. mark:     emit the marker position so the human sees where        │
  *   │ 9. act:      computer.act() → real mouse / key events                │
- *  10. verify:    record the outcome; terminal action ends the run        │
+ *  10. settle:    computer.settle() waits for the page to react           │
  *   └──────────────────────────────────────────────────────────────────────┘
  *
  * No Electron, no DOM, no network: `model` and `computer` are injected, so this file is
@@ -31,7 +32,8 @@ const DEFAULTS = {
   maxAutoWaits: 4,
   settleDelayMs: 350,
   markerDwellMs: 120,
-  maxModelMsPerStep: 90 * 1000,
+  maxModelMsPerStep: 180 * 1000,
+  maxCaptureFailures: 5,
   coordinateSpace: 'auto'
 }
 
@@ -39,7 +41,8 @@ const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
 /**
  * @param {object} opts
- * @param {{next: function}} opts.model          model.next({messages, step}) -> string|Promise
+ * @param {{next: function}} opts.model          model.next({messages, step, onProgress, signal})
+ *                                               -> string | {content, reasoning, usage, ms}
  * @param {object} opts.computer                 see file header
  * @param {function} [opts.onEvent]              onEvent(type, payload)
  * @param {object} [opts.safety]                 overrides for the safety gate
@@ -59,7 +62,7 @@ function createAgent (opts) {
   const now = opts.now || Date.now
 
   const safety = createSafetyGate(Object.assign({ now }, opts.safety || {}))
-  const history = createHistory(opts.history || {})
+  const history = createHistory(Object.assign({ maxSteps: safety.config.maxSteps }, opts.history || {}))
 
   const state = {
     status: 'idle', // idle | running | paused | stopping | done | failed | stopped
@@ -74,6 +77,10 @@ function createAgent (opts) {
   let pauseRequested = false
   let stopRequested = null
   let resumeDeferred = null
+  let modelAbort = null
+  let approvedKey = null
+  let pendingApproval = null
+  let takeoverAcknowledged = false
 
   function resolveResume () {
     if (resumeDeferred) {
@@ -107,14 +114,20 @@ function createAgent (opts) {
     const timeoutMs = safety.config.maxModelMsPerStep || cfg.maxModelMsPerStep
     let timer = null
     const timeout = new Promise((resolve, reject) => {
-      timer = setTimeout(() => reject(new Error('model did not respond within ' + timeoutMs + ' ms')), timeoutMs)
+      timer = setTimeout(() => reject(new Error('the model did not answer within ' + Math.round(timeoutMs / 1000) + ' s')), timeoutMs)
     })
+    modelAbort = typeof AbortController === 'function' ? new AbortController() : null
+    const started = now()
     try {
       return await Promise.race([
         Promise.resolve(model.next({
           messages: messages,
           step: step,
           history: history.transcript(),
+          signal: modelAbort ? modelAbort.signal : undefined,
+          onProgress: function (p) {
+            emit('model:progress', Object.assign({ step, elapsedMs: now() - started }, p, { reasoning: undefined }))
+          },
           lastObservation: {
             width: obs.width, height: obs.height,
             viewWidth: obs.viewWidth, viewHeight: obs.viewHeight,
@@ -125,6 +138,7 @@ function createAgent (opts) {
       ])
     } finally {
       if (timer) clearTimeout(timer)
+      modelAbort = null
     }
   }
 
@@ -157,12 +171,26 @@ function createAgent (opts) {
     }
   }
 
+  async function settleAfter (action) {
+    if (typeof computer.settle === 'function') {
+      try {
+        await callComputer(computer.settle, action)
+      } catch (err) {
+        log('settle failed: ' + (err && err.message))
+      }
+    } else if (cfg.settleDelayMs > 0) {
+      await delay(cfg.settleDelayMs)
+    }
+  }
+
   async function run (task) {
     if (!task || typeof task !== 'string') throw new TypeError('run(task) requires a non-empty string')
     if (state.status === 'running') throw new Error('agent is already running')
 
     pauseRequested = false
     stopRequested = null
+    approvedKey = null
+    pendingApproval = null
     state.task = task
     state.step = 0
     state.answer = null
@@ -171,55 +199,82 @@ function createAgent (opts) {
     state.takeover = null
     history.start(task)
     setStatus('running', null)
-    emit('run:start', { task })
+    emit('run:start', { task, limits: safety.snapshot().limits })
 
     let autoWaits = 0
     let lastTakeoverCount = 0
+    let captureFailures = 0
+    let lastFingerprint = null
+    let lastActed = null
 
     /* eslint-disable no_constant_condition */
     while (true) {
       // ---- 1. human controls + stop conditions -------------------------------
       if (stopRequested) return finish('stopped', stopRequested)
       if (pauseRequested && !(await waitForResume())) return finish('stopped', stopRequested)
+      if (pendingApproval) {
+        // resumed after a sensitive-action pause: the human approved that exact action
+        approvedKey = pendingApproval
+        pendingApproval = null
+      }
 
       const stepGate = safety.beforeStep()
       if (!stepGate.allow) return finish('stopped', stepGate.reason)
 
       state.step = stepGate.step
-      emit('step:start', { step: state.step, remaining: safety.config.maxSteps - state.step })
+      emit('step:start', { step: state.step, remaining: safety.config.maxSteps - state.step, elapsedMs: stepGate.elapsedMs })
 
       // a real human touched the page → pause and tell the model why
-      log('phase:readPageState')
       const pageState = await readPageState()
-      log('phase:readPageState done')
       const takeoverCount = pageState.takeoverCount || 0
       if (takeoverCount > lastTakeoverCount) {
         lastTakeoverCount = takeoverCount
-        state.pausedByUser = true
         state.takeover = pageState.takeover || null
         history.addTakeover(state.takeover)
-        emit('takeover', { step: state.step, info: state.takeover })
-        pauseRequested = true
-        continue
+        // already paused for this input and the human pressed Resume: carry on
+        if (!takeoverAcknowledged) {
+          state.pausedByUser = true
+          emit('takeover', { step: state.step, info: state.takeover })
+          pauseRequested = true
+          safety.refundStep()
+          continue
+        }
       }
+      takeoverAcknowledged = false
 
       // ---- 2. perceive -------------------------------------------------------
       log('phase:screenshot')
       const shot = await screenshotSafe()
       log('phase:screenshot done ok=' + shot.ok)
       if (!shot.ok) {
-        safety.noteRetry('screenshot failed: ' + shot.error)
-        emit('error', { step: state.step, where: 'screenshot', error: shot.error })
+        // seeing is not a step: the model was never asked, so the budget is untouched
+        safety.refundStep()
+        captureFailures++
+        emit('error', { step: state.step, where: 'screenshot', error: shot.error, attempt: captureFailures })
+        if (captureFailures >= cfg.maxCaptureFailures) {
+          return finish('failed', "Iris can't see this page: " + shot.error)
+        }
         if (stopRequested) return finish('stopped', stopRequested)
-        await delay(cfg.settleDelayMs)
+        await delay(Math.max(cfg.settleDelayMs, 400 * captureFailures))
         continue
       }
+      captureFailures = 0
       const obs = shot.obs
+
+      // did the last action visibly do anything? (cheap, pixel-level)
+      const unchanged = !!(lastActed && obs.fingerprint && lastFingerprint && obs.fingerprint === lastFingerprint)
+      if (unchanged && !obs.note) {
+        obs.note = 'Your last action (' + describeAction(lastActed) + ') did not visibly change the page.'
+      }
+      if (obs.fingerprint) lastFingerprint = obs.fingerprint
+
       emit('observation', {
         step: state.step,
         dataUrl: obs.dataUrl,
         url: obs.url,
+        title: obs.title,
         loading: !!obs.loading,
+        blank: !!obs.blank,
         width: obs.width,
         height: obs.height,
         viewWidth: obs.viewWidth,
@@ -238,30 +293,34 @@ function createAgent (opts) {
           automatic: true,
           anchor: null
         })
-        history.addSystemNote('Waiting ' + ms + ' ms — the page was still loading.')
         await delay(ms)
         continue
       }
       if (!obs.loading) autoWaits = 0
 
-      history.addObservation(obs)
+      history.addObservation(obs, state.step)
 
       // ---- 4. think ----------------------------------------------------------
       let raw
       safety.beforeModelCall()
+      emit('model:start', { step: state.step })
       try {
         raw = await modelNext(history.messages(), state.step, obs)
       } catch (err) {
+        if (stopRequested) return finish('stopped', stopRequested)
         const gate = safety.noteRetry(err.message)
         emit('error', { step: state.step, where: 'model', error: err.message })
         if (!gate.allow) return finish('failed', gate.reason)
-        await delay(cfg.settleDelayMs)
+        await delay(Math.max(cfg.settleDelayMs, 1000))
         continue
       }
 
       if (stopRequested) return finish('stopped', stopRequested)
 
       const text = typeof raw === 'string' ? raw : (raw && raw.content) || ''
+      const reasoning = raw && typeof raw === 'object' ? raw.reasoning || '' : ''
+      const usage = raw && typeof raw === 'object' ? raw.usage || null : null
+      const modelMs = raw && typeof raw === 'object' ? raw.ms || null : null
 
       // ---- 5. parse ----------------------------------------------------------
       const parsed = parseAction(text, { imageWidth: obs.width, imageHeight: obs.height })
@@ -275,11 +334,11 @@ function createAgent (opts) {
 
       safety.noteSuccess()
       history.addAssistant(text, parsed.thought, parsed.action)
-      emit('thought', { step: state.step, thought: parsed.thought, action: parsed.action })
+      emit('thought', { step: state.step, thought: parsed.thought, action: parsed.action, reasoning, usage, modelMs })
 
       // ---- terminal states ---------------------------------------------------
       if (isTerminal(parsed.action)) {
-        if (parsed.action.type === 'done') return finish('done', null, parsed.action.answer)
+        if (parsed.action.type === 'done') return finish('done', null, parsed.action.answer || parsed.thought)
         return finish('failed', parsed.action.reason || 'the model reported the task as impossible')
       }
 
@@ -303,11 +362,23 @@ function createAgent (opts) {
       }
 
       // ---- 7. stop gate on the action itself ---------------------------------
-      const actionGate = safety.beforeAction(mapped, { pausedByUser: pauseRequested, url: pageState.url })
+      const actionGate = safety.beforeAction(mapped, {
+        pausedByUser: pauseRequested,
+        url: pageState.url,
+        pageUnchanged: unchanged,
+        approved: approvedKey
+      })
+      approvedKey = null
       if (!actionGate.allow) {
         emit('blocked', { step: state.step, kind: actionGate.kind, reason: actionGate.reason, action: parsed.action })
         if (actionGate.kind === 'loop') {
-          history.addSystemNote('You repeated an ineffective action. Waiting for the human to resume.')
+          history.addSystemNote('You repeated an action that did not change the page. Try a different approach.')
+          pauseRequested = true
+          continue
+        }
+        if (actionGate.kind === 'confirmation') {
+          pendingApproval = actionGate.key || null
+          history.addSystemNote('The user must approve your next action before it runs.')
           pauseRequested = true
           continue
         }
@@ -345,9 +416,10 @@ function createAgent (opts) {
       } else {
         emit('action:result', { step: state.step, ok: true })
       }
+      lastActed = parsed.action
 
-      // ---- 10. verify / settle -------------------------------------------------
-      if (cfg.settleDelayMs > 0) await delay(cfg.settleDelayMs)
+      // ---- 10. settle ---------------------------------------------------------
+      await settleAfter(mapped)
       if (stopRequested) return finish('stopped', stopRequested)
       /* eslint-enable no_constant_condition */
     }
@@ -373,6 +445,7 @@ function createAgent (opts) {
     resume () {
       pauseRequested = false
       state.pausedByUser = false
+      takeoverAcknowledged = true
       emit('resume', {})
       if (state.status === 'paused') setStatus('running')
       resolveResume()
@@ -382,6 +455,9 @@ function createAgent (opts) {
       pauseRequested = false
       emit('stop', { reason: stopRequested })
       if (state.status !== 'idle') setStatus('stopping', stopRequested)
+      if (modelAbort) {
+        try { modelAbort.abort() } catch (e) { /* already done */ }
+      }
       resolveResume()
     },
     status () {

@@ -26,11 +26,12 @@ const SPEC = {
   right_click: { required: ['x', 'y'], optional: [] },
   drag: { required: ['fromX', 'fromY', 'toX', 'toY'], optional: [] },
   scroll: { required: ['direction'], optional: ['x', 'y', 'amount'] },
-  type: { required: ['text'], optional: [] },
+  type: { required: ['text'], optional: ['x', 'y', 'clear', 'enter'] },
   key: { required: ['key'], optional: ['modifiers'] },
   shortcut: { required: ['keys'], optional: [] },
   wait: { required: [], optional: ['ms'] },
   navigate: { required: ['url'], optional: [] },
+  back: { required: [], optional: [] },
   move: { required: ['x', 'y'], optional: [] },
   done: { required: [], optional: ['answer'] },
   fail: { required: [], optional: ['reason'] }
@@ -73,6 +74,9 @@ const TYPE_ALIASES = {
   enter_text: 'type',
   type_text: 'type',
   open_url: 'navigate',
+  search: 'navigate',
+  go_back: 'back',
+  navigate_back: 'back',
   goto: 'navigate',
   go_to_url: 'navigate',
   wait_: 'wait',
@@ -240,6 +244,13 @@ function toStringValue (v) {
   return null
 }
 
+function toBoolean (v) {
+  if (typeof v === 'boolean') return v
+  if (typeof v === 'number') return v !== 0
+  if (typeof v === 'string') return /^(true|yes|1)$/i.test(v.trim())
+  return false
+}
+
 function normalizeType (raw) {
   if (typeof raw !== 'string') return null
   let t = raw.trim().toLowerCase().replace(/\s+/g, '_')
@@ -334,6 +345,11 @@ function validateAction (obj, limits) {
     if (n === null) { errors.push(`${name} must be a finite number (got ${JSON.stringify(value)})`); return null }
     if (!inRange(n, max)) { errors.push(`${name}=${n} is outside the screenshot (0..${max})`); return null }
     return n
+  }
+
+  if (type === 'type' && obj.enter === undefined) {
+    const alias = obj.submit !== undefined ? obj.submit : (obj.press_enter !== undefined ? obj.press_enter : obj.pressEnter)
+    if (alias !== undefined) obj = Object.assign({}, obj, { enter: alias })
   }
 
   const w = limits && typeof limits.imageWidth === 'number' ? limits.imageWidth : undefined
@@ -447,6 +463,11 @@ function validateAction (obj, limits) {
         else action.url = s.trim()
         break
       }
+      case 'clear':
+      case 'enter': {
+        action[field] = toBoolean(value)
+        break
+      }
       case 'answer':
       case 'reason': {
         const s = toStringValue(value)
@@ -468,11 +489,14 @@ function validateAction (obj, limits) {
   if (COORD_TYPES.has(type) || type === 'move') {
     if (action.type === 'scroll') {
       action.direction = action.direction || 'down'
-      action.amount = action.amount || 3
+      action.amount = action.amount || 5
     }
     if (action.button === undefined) action.button = type === 'right_click' ? 'right' : 'left'
   }
   if (type === 'wait' && action.ms === undefined) action.ms = 800
+  if (type === 'type' && (action.x === undefined) !== (action.y === undefined)) {
+    return { ok: false, error: 'type needs both x and y, or neither' }
+  }
   if (type === 'scroll' && (action.x === undefined || action.y === undefined)) {
     // scrolling with no anchor means "scroll the viewport centre"
     if (w && h) { action.x = Math.round(w / 2); action.y = Math.round(h / 2) }
@@ -547,11 +571,12 @@ function describeAction (action) {
     case 'move': return `Move pointer to (${action.x}, ${action.y})`
     case 'drag': return `Drag (${action.fromX}, ${action.fromY}) \u2192 (${action.toX}, ${action.toY})`
     case 'scroll': return `Scroll ${action.direction}${action.x !== undefined ? ` at (${action.x}, ${action.y})` : ''} \u00d7${action.amount}`
-    case 'type': return `Type "${action.text.length > 40 ? action.text.slice(0, 40) + '\u2026' : action.text}"`
+    case 'type': return `Type "${action.text.length > 40 ? action.text.slice(0, 40) + '\u2026' : action.text}"${action.enter ? ' and press Enter' : ''}`
     case 'key': return `Press ${((action.modifiers || []).join('+') ? (action.modifiers.join('+') + '+') : '') + action.key}`
     case 'shortcut': return `Shortcut ${action.keys}`
     case 'wait': return `Wait ${action.ms} ms`
-    case 'navigate': return `Navigate to ${action.url}`
+    case 'navigate': return /^[a-z]+:\/\/|^[^\s]+\.[a-z]{2,}(\/|$)/i.test(action.url) ? `Open ${action.url}` : `Search for "${action.url}"`
+    case 'back': return 'Go back'
     case 'done': return action.answer ? `Done \u2014 ${action.answer}` : 'Done'
     case 'fail': return action.reason ? `Stopped \u2014 ${action.reason}` : 'Stopped'
     default: return action.type
@@ -564,34 +589,35 @@ function isTerminal (action) {
 
 /** The spec text handed to the model. Kept next to the parser so they cannot drift. */
 const ACTION_SPEC_TEXT = [
-  'You control a real web browser ONLY through the pixels you see and real input events.',
-  'Reply with EXACTLY ONE JSON object and nothing else. No prose, no markdown fences, no comments.',
+  'Reply with EXACTLY ONE JSON object and nothing else (no prose, no markdown fences):',
+  '{"thought":"<one short sentence: what you see and what you do next>","action":{"type":"<type>",...}}',
   '',
-  'Schema:',
-  '{"thought":"<one short sentence about what you see and why>","action":{"type":"<type>",...}}',
-  '',
-  'Allowed "type" values and their fields (x/y are pixel coordinates in the screenshot you were',
-  'given, measured from its top-left corner, at the screenshot\'s own resolution):',
+  'Actions. x/y are pixel positions in the screenshot, from its top-left corner:',
   '  click        {"x":int,"y":int}',
   '  double_click {"x":int,"y":int}',
   '  right_click  {"x":int,"y":int}',
-  '  move         {"x":int,"y":int}',
+  '  move         {"x":int,"y":int}                     (hover)',
   '  drag         {"fromX":int,"fromY":int,"toX":int,"toY":int}',
-  '  scroll       {"direction":"up|down","amount":int?,"x":int?,"y":int?}',
-  '  type         {"text":string}              (types at the current cursor position)',
-  '  key          {"key":string,"modifiers":[string]?}',
-  '  shortcut     {"keys":"cmd+l"}',
-  '  wait         {"ms":int?}                 (use when the page is still loading)',
-  '  navigate     {"url":string}',
-  '  done         {"answer":string?}          (task complete)',
-  '  fail         {"reason":string}           (task impossible)',
+  '  type         {"text":str,"x":int?,"y":int?,"clear":bool?,"enter":bool?}',
+  '               clicks (x,y) first when given; clear:true replaces the text already there;',
+  '               enter:true presses Enter after typing (submits searches and forms)',
+  '  key          {"key":"enter|tab|escape|backspace|delete|up|down|left|right|pagedown|pageup|home|end","modifiers":["shift"]?}',
+  '  scroll       {"direction":"down|up","amount":int?,"x":int?,"y":int?}   (amount = wheel notches, default 5)',
+  '  navigate     {"url":str}       open a URL, or give plain words to search the web',
+  '  back         {}                browser Back button',
+  '  wait         {"ms":int?}       only while a page is visibly loading',
+  '  done         {"answer":str}    task complete; answer tells the user the result or what you found',
+  '  fail         {"reason":str}    task impossible',
   '',
   'Rules:',
-  '- Before clicking a text field, click it, then use "type" in the NEXT step.',
-  '- If a screenshot shows a blank, half-rendered or loading page, answer with "wait".',
-  '- Never invent coordinates outside the screenshot. Never claim to have done something',
-  '  you have not verified in a screenshot.',
-  '- One action per message. If your previous action did not work, change something.'
+  '- Act only on what the newest screenshot shows. If what you need is not visible, scroll or navigate.',
+  '- Take the shortest path: open a known URL directly, and fill a field with ONE "type" action',
+  '  (x, y, text, enter:true) instead of separate click / type / key steps.',
+  '- Click the centre of the element you mean.',
+  '- If your last action changed nothing, do something different. Never repeat a failed action.',
+  '- Close cookie banners and pop-ups that block the page.',
+  '- As soon as the screenshot shows the answer, reply "done" with the answer.',
+  '- Do not sign in, buy, or send personal data unless the task explicitly asks for it.'
 ].join('\n')
 
 module.exports = {

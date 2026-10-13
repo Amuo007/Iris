@@ -16,8 +16,9 @@
 const prompts = require('./prompts')
 
 const DEFAULTS = {
-  keepImages: 2,
-  maxMessages: 40
+  keepImages: 1,
+  maxMessages: 40,
+  maxSteps: 0
 }
 
 function imagePart (dataUrl) {
@@ -60,12 +61,15 @@ function createHistory (options) {
       return this
     },
 
-    addObservation (obs) {
+    addObservation (obs, step) {
       observationCount++
+      const notes = []
+      if (obs && obs.note) notes.push(obs.note)
+      if (obs && obs.loading) notes.push(prompts.loadingWarning(obs))
       return push({
         kind: 'observation',
         index: observationCount,
-        text: prompts.observationIntro(obs, observationCount) + (obs && obs.loading ? '\n' + prompts.loadingWarning(obs) : ''),
+        text: prompts.observationIntro(obs, step || observationCount, { maxSteps: cfg.maxSteps }) + (notes.length ? '\n' + notes.join('\n') : ''),
         dataUrl: obs && obs.dataUrl ? obs.dataUrl : null,
         url: obs && obs.url,
         loading: !!(obs && obs.loading)
@@ -114,7 +118,7 @@ function createHistory (options) {
           if (e.dataUrl && obsIndexes.has(e)) {
             parts.push(imagePart(e.dataUrl))
           } else if (e.dataUrl) {
-            parts.push(textPart('[screenshot from this step omitted to save context]'))
+            parts.push(textPart('[older screenshot omitted]'))
           }
           out.push({ role: 'user', content: parts })
         } else if (e.kind === 'assistant') {

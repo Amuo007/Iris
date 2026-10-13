@@ -10,9 +10,9 @@
  */
 
 const DEFAULTS = {
-  maxSteps: 25,
-  maxWallClockMs: 5 * 60 * 1000,
-  maxModelMsPerStep: 90 * 1000,
+  maxSteps: 40,
+  maxWallClockMs: 20 * 60 * 1000,
+  maxModelMsPerStep: 180 * 1000,
   maxRetriesPerStep: 3,
   maxConsecutiveFailures: 3,
   repeatActionLimit: 3,
@@ -23,11 +23,14 @@ const DEFAULTS = {
 
 /* Words that mean "this action is about to touch money, credentials or destruction". */
 const SENSITIVE_PATTERNS = [
-  /\b(purchase|buy now|checkout|pay|payment|wire transfer)\b/i,
-  /\b(delete|remove|destroy|drop table|erase)\b/i,
-  /\b(send|submit)\b[^\n]{0,40}\b(password|otp|code|verification)\b/i,
-  /\b(sign ?out|log ?out)\b/i
+  /\b(purchase|buy now|checkout|place order|wire transfer)\b/i,
+  /\b(?:\d[ -]?){13,19}\b/, // looks like a card number
+  /\b(send|submit)\b[^\n]{0,40}\b(password|otp|verification code)\b/i,
+  /\bdrop table\b/i
 ]
+
+/* Actions whose repetition is normal progress, as long as the page keeps changing. */
+const REPEATABLE = new Set(['scroll', 'wait', 'key'])
 
 function normalizeUrl (url) {
   return String(url || '').trim().toLowerCase()
@@ -82,6 +85,11 @@ function createSafetyGate (options) {
       return { allow: true, step: steps, elapsedMs: elapsed }
     },
 
+    /** A step that never reached the model (e.g. the screenshot failed) is not charged. */
+    refundStep () {
+      if (steps > 0) steps--
+    },
+
     /** Called immediately before every model request. */
     beforeModelCall () {
       modelCalls++
@@ -121,14 +129,16 @@ function createSafetyGate (options) {
         if (recentActions[i] === key) streak++
         else break
       }
-      if (streak > cfg.repeatActionLimit) {
-        return decision('loop', `The same action (${action.type}) had no effect ${streak} times in a row — pausing for you to check.`, { action })
+      // scrolling down a long page is the same action many times; only a frozen page is a loop
+      const counts = !REPEATABLE.has(action.type) || (pageState && pageState.pageUnchanged)
+      if (counts && streak > cfg.repeatActionLimit) {
+        return decision('loop', `The same action (${action.type}) had no effect ${streak} times in a row — pausing for you to check.`, { action, key })
       }
 
-      if (!cfg.allowSensitiveActions) {
+      if (!cfg.allowSensitiveActions && !(pageState && pageState.approved === key)) {
         for (const re of SENSITIVE_PATTERNS) {
           if (re.test(action.text || '') || re.test(action.url || '') || re.test(action.answer || '')) {
-            return decision('confirmation', `Paused before a sensitive action (${action.type}). Review it and resume when ready.`, { action })
+            return decision('confirmation', `Paused before a sensitive action (${action.type}). Review it and press Resume to allow it.`, { action, key })
           }
         }
       }
@@ -159,4 +169,4 @@ function createSafetyGate (options) {
   }
 }
 
-module.exports = { createSafetyGate, DEFAULTS, isBlockedUrl, SENSITIVE_PATTERNS }
+module.exports = { createSafetyGate, DEFAULTS, isBlockedUrl, SENSITIVE_PATTERNS, REPEATABLE }

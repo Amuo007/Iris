@@ -94,6 +94,16 @@ function mouseUp (x, y, button, clickCount) {
   return { type: 'mouseUp', x, y, button: button || 'left', clickCount: clickCount || 1 }
 }
 
+/*
+ * Enter needs a `char` event between keyDown and keyUp: Chromium's implicit form
+ * submission (search boxes!) listens for the keypress, which a bare keyDown never produces.
+ */
+function enterEvents (add, firstDelay) {
+  add({ type: 'keyDown', keyCode: 'Return' }, firstDelay)
+  add({ type: 'char', keyCode: '\r', text: '\r', unmodifiedText: '\r' })
+  add({ type: 'keyUp', keyCode: 'Return' }, 40)
+}
+
 /**
  * @param {object} action mapped (view-space) action
  * @param {object} [opts] { dragSteps, wheelStepPx, betweenEventMs }
@@ -171,19 +181,35 @@ function planInputEvents (action, opts) {
     case 'type': {
       if (typeof action.text !== 'string') throw new Error('type requires text')
       const mods = modifiersFor(action.modifiers)
+      if (action.x !== undefined && action.y !== undefined) {
+        // focus the field first; three clicks select whatever is already in it
+        add(mouseMove(action.x, action.y))
+        const clicks = action.clear ? 3 : 1
+        for (let c = 1; c <= clicks; c++) {
+          add(mouseDown(action.x, action.y, 'left', c), 20)
+          add(mouseUp(action.x, action.y, 'left', c), c === clicks ? 120 : 30)
+        }
+      } else if (action.clear) {
+        add({ type: 'keyDown', keyCode: 'A', modifiers: ['meta'] })
+        add({ type: 'keyUp', keyCode: 'A', modifiers: ['meta'] }, 40)
+      }
       for (const ch of action.text) {
         if (isWhitespaceChar(ch)) {
-          const code = ch === '\t' ? 'Tab' : 'Return'
-          add(Object.assign({ type: 'keyDown', keyCode: code }, mods ? { modifiers: mods } : {}))
-          add(Object.assign({ type: 'keyUp', keyCode: code }, mods ? { modifiers: mods } : {}), 20)
+          if (ch === '\t') {
+            add({ type: 'keyDown', keyCode: 'Tab' })
+            add({ type: 'keyUp', keyCode: 'Tab' }, 20)
+          } else {
+            enterEvents(add)
+          }
         } else {
           // `char` is what actually inserts text into a focused field. Non-ASCII and
           // astral-plane characters (emoji, CJK, accents) have no named keyCode, so the
           // character itself is used as the keyCode.
           const code = keyCodeFor(ch) || ch
-          add(Object.assign({ type: 'char', keyCode: code, text: ch, unmodifiedText: ch.toLowerCase() }, mods ? { modifiers: mods } : {}), 16)
+          add(Object.assign({ type: 'char', keyCode: code, text: ch, unmodifiedText: ch.toLowerCase() }, mods ? { modifiers: mods } : {}), 8)
         }
       }
+      if (action.enter) enterEvents(add, 60)
       break
     }
 
@@ -191,6 +217,10 @@ function planInputEvents (action, opts) {
       const code = keyCodeFor(action.key)
       if (!code) throw new Error('unknown key name: ' + action.key)
       const mods = modifiersFor(action.modifiers)
+      if (code === 'Return' && !mods) {
+        enterEvents(add)
+        break
+      }
       add(Object.assign({ type: 'keyDown', keyCode: code }, mods ? { modifiers: mods } : {}))
       add(Object.assign({ type: 'keyUp', keyCode: code }, mods ? { modifiers: mods } : {}), 40)
       break
@@ -207,6 +237,7 @@ function planInputEvents (action, opts) {
     }
 
     case 'wait':
+    case 'back':
     case 'navigate':
     case 'done':
     case 'fail':

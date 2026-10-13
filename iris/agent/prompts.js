@@ -9,8 +9,8 @@ const { ACTION_SPEC_TEXT } = require('./actionSchema')
 
 function systemPrompt (extra) {
   const parts = [
-    'You are Iris, an AI agent inside the Iris web browser for macOS.',
-    'You are given a task and screenshots of the browser page you control.',
+    'You are Iris, an AI agent that operates a web browser for the user.',
+    'Each step you get a screenshot of the current tab and act on it with a real mouse and keyboard.',
     '',
     ACTION_SPEC_TEXT
   ]
@@ -22,9 +22,16 @@ function taskMessage (task) {
   return 'Task: ' + task
 }
 
-function observationIntro (obs, index) {
-  const url = obs && obs.url ? obs.url : '(unknown url)'
-  return 'Step ' + index + ' — page: ' + url
+function observationIntro (obs, index, limits) {
+  const lines = []
+  const of = limits && limits.maxSteps ? ' of ' + limits.maxSteps : ''
+  lines.push('Step ' + index + of + '.')
+  lines.push('URL: ' + (obs && obs.url ? obs.url : '(empty tab)'))
+  if (obs && obs.title) lines.push('Title: ' + obs.title)
+  if (obs && obs.width) lines.push('Screenshot: ' + obs.width + 'x' + obs.height + ' px (x 0-' + (obs.width - 1) + ', y 0-' + (obs.height - 1) + ').')
+  if (obs && obs.emptyTab) lines.push('This tab is empty (new tab). Use "navigate" to open a website or search.')
+  else if (obs && obs.blank) lines.push('The page looks blank. It may still be loading: use "wait" once, then try something else.')
+  return lines.join('\n')
 }
 
 function loadingWarning (obs) {

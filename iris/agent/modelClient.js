@@ -3,14 +3,32 @@
 /*
  * iris/agent/modelClient.js
  *
- * Minimal OpenAI-compatible /v1/chat/completions client that supports image parts.
+ * OpenAI-compatible /v1/chat/completions client with image parts and streaming.
  * Works in the Electron main process (global fetch) and in Node 18+.
  *
- * IMPORTANT: nothing in this file is ever called by the test suite — tests inject a fake
- * model object with the same `next()` shape.
+ * Streaming matters for a local model: the panel can show "thinking… 6s" while tokens
+ * arrive, a stop press aborts the request at once, and long prefills never look like a
+ * dead connection.
+ *
+ * Thinking levels (`thinking`):
+ *   'off'     chat_template_kwargs.enable_thinking = false   (fastest)
+ *   'low'     reasoning_effort = 'low'                       (default: short plan, ~7 s/step)
+ *   'medium'  reasoning_effort = 'medium'
+ *   'full'    nothing sent: the model's own default
+ * If a server rejects one of those fields (HTTP 400 naming it), the client retries once
+ * without it and remembers, so cloud APIs and other local servers keep working.
+ *
+ * Tests inject a fake model with the same `next()` shape; `fetch` can be injected too.
  */
 
-const DEFAULT_TIMEOUT_MS = 90 * 1000
+const DEFAULT_TIMEOUT_MS = 180 * 1000
+
+const MAX_TOKENS_BY_THINKING = {
+  off: 1024,
+  low: 4096,
+  medium: 8192,
+  full: 16384
+}
 
 function joinUrl (baseUrl, path) {
   const base = String(baseUrl || '').replace(/\/+$/, '')
@@ -18,6 +36,17 @@ function joinUrl (baseUrl, path) {
   if (!base) throw new Error('Iris AI: no model server URL configured')
   if (/^https?:\/\//i.test(path)) return path
   return base + '/' + p
+}
+
+/* Strip reasoning blocks some chat templates leak into the visible content. */
+function cleanContent (text) {
+  const t = String(text || '')
+  const stripped = t
+    .replace(/<think>[\s\S]*?<\/think>/g, '')
+    .replace(/^[\s\S]*?<\/think>/, '')
+    .replace(/<\|im_start\|>[\s\S]*?<\|im_end\|>/g, '')
+    .trim()
+  return stripped || t.trim()
 }
 
 function normalizeResponse (json) {
@@ -33,13 +62,48 @@ function normalizeResponse (json) {
   else if (choice.message && Array.isArray(choice.message.content)) {
     text = choice.message.content.map(p => (typeof p === 'string' ? p : (p.text || ''))).join('')
   }
-  // strip a trailing …</think> reasoning block some chat templates leak
-  text = text.replace(/<\|im_start>[\s\S]*?<\|im_end>/g, '').trim() || text.trim()
-  return text
+  return cleanContent(text)
+}
+
+/** Fields a given thinking level adds to the request body. */
+function thinkingFields (level) {
+  switch (level) {
+    case 'off': return { chat_template_kwargs: { enable_thinking: false } }
+    case 'low': return { reasoning_effort: 'low' }
+    case 'medium': return { reasoning_effort: 'medium' }
+    default: return {}
+  }
 }
 
 /**
- * @param {object} config { baseUrl, model, apiKey, temperature, maxTokens, timeoutMs, headers }
+ * Read an SSE body chunk by chunk. Calls onEvent(json) for every `data:` line.
+ * Works with WHATWG streams (fetch in Node/Electron).
+ */
+async function readSse (body, onEvent) {
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    let nl
+    while ((nl = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, nl).replace(/\r$/, '')
+      buffer = buffer.slice(nl + 1)
+      if (!line.startsWith('data:')) continue
+      const data = line.slice(5).trim()
+      if (!data || data === '[DONE]') continue
+      let json
+      try { json = JSON.parse(data) } catch (e) { continue }
+      onEvent(json)
+    }
+  }
+}
+
+/**
+ * @param {object} config { baseUrl, model, apiKey, temperature, maxTokens, timeoutMs,
+ *                          thinking, stream, headers, fetch }
  */
 function createModelClient (config) {
   const cfg = Object.assign({
@@ -47,60 +111,130 @@ function createModelClient (config) {
     model: '',
     apiKey: '',
     temperature: 0.2,
-    maxTokens: 700,
+    maxTokens: 0, // 0 = pick from the thinking level
     timeoutMs: DEFAULT_TIMEOUT_MS,
+    thinking: 'low',
+    stream: true,
     headers: {}
   }, config || {})
 
   const fetchImpl = cfg.fetch || (typeof fetch === 'function' ? fetch : null)
+  // fields the server refused once; never sent again by this client
+  const refused = new Set()
 
-  async function chat (messages, extra) {
-    if (!fetchImpl) throw new Error('fetch is not available in this environment')
-    const controller = typeof AbortController === 'function' ? new AbortController() : null
-    let timer = null
-    if (controller) timer = setTimeout(() => controller.abort(), cfg.timeoutMs)
-
-    const body = Object.assign({
+  function buildBody (messages) {
+    const body = {
       model: cfg.model,
       messages,
       temperature: cfg.temperature,
-      max_tokens: cfg.maxTokens,
-      stream: false
-    }, extra || {})
-
-    const headers = {
-      'Content-Type': 'application/json',
-      ...cfg.headers
+      max_tokens: cfg.maxTokens || MAX_TOKENS_BY_THINKING[cfg.thinking] || 4096,
+      stream: !!cfg.stream
     }
+    if (cfg.stream && !refused.has('stream_options')) body.stream_options = { include_usage: true }
+    const extra = thinkingFields(cfg.thinking)
+    for (const k of Object.keys(extra)) {
+      if (!refused.has(k)) body[k] = extra[k]
+    }
+    return body
+  }
+
+  async function post (body, signal) {
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, cfg.headers)
     if (cfg.apiKey) headers.Authorization = 'Bearer ' + cfg.apiKey
+    return fetchImpl(joinUrl(cfg.baseUrl, 'chat/completions'), {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal
+    })
+  }
+
+  /**
+   * One completion. Returns { content, reasoning, usage, ms }.
+   * opts.onProgress({ phase: 'waiting'|'thinking'|'answering', reasoningChars, contentChars })
+   * opts.signal aborts the request (stop button).
+   */
+  async function chat (messages, opts) {
+    if (!fetchImpl) throw new Error('fetch is not available in this environment')
+    const o = opts || {}
+    const started = Date.now()
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(new Error('timeout')), cfg.timeoutMs)
+    const onOuterAbort = () => controller.abort(new Error('stopped'))
+    if (o.signal) {
+      if (o.signal.aborted) onOuterAbort()
+      else o.signal.addEventListener('abort', onOuterAbort, { once: true })
+    }
+    const progress = typeof o.onProgress === 'function' ? o.onProgress : function () {}
 
     try {
-      const res = await fetchImpl(joinUrl(cfg.baseUrl, 'chat/completions'), {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: controller ? controller.signal : undefined
-      })
-      if (!res.ok) {
+      let res
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const body = buildBody(messages)
+        res = await post(body, controller.signal)
+        if (res.ok) break
         let detail = ''
-        try { detail = (await res.text()).slice(0, 300) } catch (e) { /* ignore */ }
+        try { detail = (await res.text()).slice(0, 400) } catch (e) { /* ignore */ }
+        // a server that does not understand an optional field: drop it and try again
+        const dropped = ['reasoning_effort', 'chat_template_kwargs', 'stream_options'].find(k => k in body && detail.indexOf(k === 'reasoning_effort' ? 'reasoning' : k) !== -1)
+        if (res.status === 400 && dropped && !refused.has(dropped)) {
+          refused.add(dropped)
+          continue
+        }
         const err = new Error('model server responded ' + res.status + (detail ? ': ' + detail : ''))
         err.status = res.status
         throw err
       }
-      const json = await res.json()
-      return normalizeResponse(json)
+
+      if (!cfg.stream || !res.body || !(res.headers.get('content-type') || '').includes('event-stream')) {
+        const json = await res.json()
+        const msg = (json.choices && json.choices[0] && json.choices[0].message) || {}
+        return {
+          content: normalizeResponse(json),
+          reasoning: msg.reasoning_content || '',
+          usage: json.usage || null,
+          ms: Date.now() - started
+        }
+      }
+
+      let content = ''
+      let reasoning = ''
+      let usage = null
+      let lastTick = 0
+      progress({ phase: 'waiting', reasoningChars: 0, contentChars: 0 })
+      await readSse(res.body, function (json) {
+        if (json.usage) usage = json.usage
+        if (json.error) throw new Error('model server error: ' + (json.error.message || JSON.stringify(json.error)).slice(0, 300))
+        const delta = json.choices && json.choices[0] && json.choices[0].delta
+        if (!delta) return
+        if (delta.reasoning_content) reasoning += delta.reasoning_content
+        if (delta.content) content += delta.content
+        const now = Date.now()
+        if (now - lastTick > 250) {
+          lastTick = now
+          progress({ phase: content ? 'answering' : 'thinking', reasoningChars: reasoning.length, contentChars: content.length, reasoning })
+        }
+      })
+      return { content: cleanContent(content), reasoning, usage, ms: Date.now() - started }
     } catch (err) {
-      if (err && err.name === 'AbortError') throw new Error('model request timed out after ' + cfg.timeoutMs + ' ms')
+      if (err && (err.name === 'AbortError' || err.name === 'TimeoutError' || controller.signal.aborted)) {
+        const why = controller.signal.reason && controller.signal.reason.message
+        if (why === 'stopped') throw new Error('stopped')
+        throw new Error('the model did not answer within ' + Math.round(cfg.timeoutMs / 1000) + ' s')
+      }
+      if (err && /fetch failed|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH/i.test(err.message + (err.cause ? ' ' + err.cause.code : ''))) {
+        throw new Error('cannot reach the model server at ' + cfg.baseUrl)
+      }
       throw err
     } finally {
-      if (timer) clearTimeout(timer)
+      clearTimeout(timer)
+      if (o.signal) o.signal.removeEventListener('abort', onOuterAbort)
     }
   }
 
   return {
-    next ({ messages }) {
-      return chat(messages)
+    next (ctx) {
+      return chat(ctx.messages, { onProgress: ctx.onProgress, signal: ctx.signal })
     },
     chat,
     config: cfg
@@ -125,4 +259,4 @@ async function probeServer (config) {
   }
 }
 
-module.exports = { createModelClient, probeServer, normalizeResponse, joinUrl }
+module.exports = { createModelClient, probeServer, normalizeResponse, cleanContent, thinkingFields, joinUrl, readSse, MAX_TOKENS_BY_THINKING }

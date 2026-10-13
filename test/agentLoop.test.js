@@ -290,3 +290,89 @@ test('run() rejects bad arguments and re-entrancy', async () => {
   assert.throws(() => createAgent({ model: {}, computer: {} }), /model/)
   assert.throws(() => createAgent({ model: { next () {} } }), /computer/)
 })
+
+/* ---------- capture failures, progress, feedback ------------------------ */
+
+test('capture failures do not use up steps', async () => {
+  const h = harness([json('ok', { type: 'done', answer: 'seen' })], { failScreenshotTimes: 3 }, { safety: { maxSteps: 1 } })
+  const result = await h.agent.run('see it')
+  assert.strictEqual(result.status, 'done')
+  assert.strictEqual(ev(h.events, 'error').filter(e => e.where === 'screenshot').length, 3)
+})
+
+test('a page that can never be captured fails with a clear message', async () => {
+  const h = harness([json('ok', { type: 'done' })], { failScreenshotTimes: 99 })
+  const result = await h.agent.run('blind')
+  assert.strictEqual(result.status, 'failed')
+  assert.match(result.reason, /can't see this page/)
+  assert.strictEqual(h.model.callCount, 0)
+})
+
+test('the model is told when its last action changed nothing', async () => {
+  const h = harness([
+    json('click', { type: 'click', x: 10, y: 10 }),
+    (ctx) => { h.seen = ctx.messages[ctx.messages.length - 1].content[0].text; return json('done', { type: 'done' }) }
+  ])
+  h.computer.screenshot = function () {
+    return { dataUrl: 'data:image/png;base64,AAAA', width: 2880, height: 1800, viewWidth: 1440, viewHeight: 900, devicePixelRatio: 2, url: 'https://x.test/', fingerprint: 'same' }
+  }
+  await h.agent.run('click something')
+  assert.match(h.seen, /did not visibly change the page/)
+})
+
+test('object replies carry reasoning and usage to the panel', async () => {
+  const h = harness([{ content: json('look', { type: 'done', answer: '42' }), reasoning: 'short plan', usage: { prompt_tokens: 10 }, ms: 5 }])
+  const result = await h.agent.run('answer')
+  assert.strictEqual(result.answer, '42')
+  const t = ev(h.events, 'thought')[0]
+  assert.strictEqual(t.reasoning, 'short plan')
+  assert.strictEqual(t.usage.prompt_tokens, 10)
+})
+
+test('stop aborts a model call that is still running', async () => {
+  let aborted = false
+  const model = {
+    next (ctx) {
+      return new Promise((resolve, reject) => {
+        ctx.signal.addEventListener('abort', () => { aborted = true; reject(new Error('stopped')) })
+      })
+    }
+  }
+  const computer = new FakeComputer()
+  const agent = createAgent({ model, computer, config: { settleDelayMs: 0, markerDwellMs: 0 } })
+  const running = agent.run('slow model')
+  await until(() => agent.status().step === 1, 'first step')
+  await new Promise(r => setImmediate(r))
+  agent.stop('user pressed stop')
+  const result = await running
+  assert.strictEqual(result.status, 'stopped')
+  assert.ok(aborted)
+})
+
+test('a sensitive action pauses, and resume lets exactly that action through', async () => {
+  const h = harness([json('order', { type: 'type', text: 'place order now' }), json('done', { type: 'done' })])
+  const running = h.agent.run('buy it')
+  await until(() => h.agent.status().status === 'paused', 'pause for approval')
+  assert.strictEqual(ev(h.events, 'blocked')[0].kind, 'confirmation')
+  h.model.replies.splice(1, 0, json('order', { type: 'type', text: 'place order now' }))
+  h.agent.resume()
+  const result = await running
+  assert.strictEqual(result.status, 'done')
+  assert.deepStrictEqual(h.computer.actions.map(a => a.text), ['place order now'])
+})
+
+test('after a takeover, one Resume is enough', async () => {
+  const h = harness([json('a', { type: 'click', x: 10, y: 10 }), json('b', { type: 'click', x: 30, y: 30 }), json('done', { type: 'done' })])
+  let interacted = false
+  const act = h.computer.act.bind(h.computer)
+  h.computer.act = function (a) {
+    if (!interacted) { interacted = true; this.userInteracts('click') }
+    return act(a)
+  }
+  const running = h.agent.run('takeover mid-run')
+  await until(() => h.agent.status().status === 'paused', 'pause after the human clicked')
+  h.agent.resume()
+  const result = await running
+  assert.strictEqual(result.status, 'done')
+  assert.strictEqual(ev(h.events, 'pause:waiting').length, 1)
+})

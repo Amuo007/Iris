@@ -118,3 +118,19 @@ test('planDuration sums the delays', () => {
   const plan = planInputEvents({ type: 'drag', fromX: 0, fromY: 0, toX: 10, toY: 10 }, { dragSteps: 4, betweenEventMs: 10 })
   assert.ok(planDuration(plan) > 0)
 })
+
+test('type with a target clicks first; clear triple-clicks; enter sends a keypress char', () => {
+  const plan = planInputEvents({ type: 'type', text: 'hi', x: 10, y: 20, clear: true, enter: true })
+  const types = plan.map(p => p.event.type)
+  assert.deepStrictEqual(types.slice(0, 7), ['mouseMove', 'mouseDown', 'mouseUp', 'mouseDown', 'mouseUp', 'mouseDown', 'mouseUp'])
+  assert.deepStrictEqual(plan.filter(p => p.event.type === 'mouseDown').map(p => p.event.clickCount), [1, 2, 3])
+  const tail = plan.slice(-3).map(p => p.event)
+  assert.deepStrictEqual(tail.map(e => e.type), ['keyDown', 'char', 'keyUp'])
+  assert.strictEqual(tail[1].keyCode, '\r')
+  assert.deepStrictEqual(plan.filter(p => p.event.type === 'char' && p.event.text !== '\r').map(p => p.event.text), ['h', 'i'])
+})
+
+test('pressing enter also sends the char event forms need', () => {
+  const plan = planInputEvents({ type: 'key', key: 'enter' })
+  assert.deepStrictEqual(plan.map(p => p.event.type), ['keyDown', 'char', 'keyUp'])
+})

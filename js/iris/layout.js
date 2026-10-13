@@ -9,7 +9,7 @@
 const webviews = require('webviews.js')
 
 // keep in sync with --iris-navbar-height in css/iris.css
-window.IRIS_NAVBAR_HEIGHT = 86
+window.IRIS_NAVBAR_HEIGHT = 80
 
 function el (tag, className, html) {
   const node = document.createElement(tag)
@@ -61,9 +61,19 @@ function addReloadButton () {
   group.appendChild(reload)
 }
 
+function moveTaskButtonToCommandBar () {
+  /* Min floats the task switcher in the corner; Iris gives it a slot on row 1 */
+  const navbar = document.getElementById('navbar')
+  const button = document.getElementById('switch-task-button')
+  if (navbar && button && button.parentElement !== navbar) {
+    navbar.appendChild(button)
+  }
+}
+
 function initialize () {
   addBrand()
   addReloadButton()
+  moveTaskButtonToCommandBar()
   moveTabEditorToCommandBar()
   moveAddTabButtonToTabRow()
 

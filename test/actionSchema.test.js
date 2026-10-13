@@ -147,7 +147,7 @@ test('defaults are applied (button, wait ms, scroll anchor)', () => {
   assert.strictEqual(parseAction('{"action":{"type":"right_click","x":1,"y":1}}', LIMITS).action.button, 'right')
   assert.strictEqual(parseAction('{"action":{"type":"wait"}}', LIMITS).action.ms, 800)
   const s = parseAction('{"action":{"type":"scroll","direction":"down"}}', LIMITS).action
-  assert.deepStrictEqual({ x: s.x, y: s.y, amount: s.amount }, { x: 1440, y: 900, amount: 3 })
+  assert.deepStrictEqual({ x: s.x, y: s.y, amount: s.amount }, { x: 1440, y: 900, amount: 5 })
 })
 
 test('validateAction covers every declared action type', () => {
@@ -163,6 +163,7 @@ test('validateAction covers every declared action type', () => {
     shortcut: { keys: 'cmd+r' },
     wait: {},
     navigate: { url: 'https://example.com' },
+    back: {},
     done: {},
     fail: {}
   }
@@ -178,4 +179,23 @@ test('describeAction produces readable summaries', () => {
   assert.match(describeAction({ type: 'scroll', direction: 'down', amount: 3 }), /Scroll down/)
   assert.match(describeAction({ type: 'type', text: 'a'.repeat(60) }), /…/)
   assert.match(describeAction({ type: 'shortcut', keys: 'meta+l' }), /Shortcut meta\+l/)
+})
+
+test('type can click a field first, clear it and press enter in one action', () => {
+  const r = parseAction('{"thought":"search","action":{"type":"type","text":"weather","x":640,"y":173,"clear":true,"enter":true}}', LIMITS)
+  assert.strictEqual(r.ok, true)
+  assert.deepStrictEqual(r.action, { type: 'type', text: 'weather', x: 640, y: 173, clear: true, enter: true })
+  assert.match(describeAction(r.action), /and press Enter/)
+})
+
+test('type accepts "submit" as an alias for enter and rejects a half coordinate', () => {
+  assert.strictEqual(parseAction('{"action":{"type":"type","text":"a","submit":true}}', LIMITS).action.enter, true)
+  assert.strictEqual(parseAction('{"action":{"type":"type","text":"a","x":5}}', LIMITS).ok, false)
+})
+
+test('back and search aliases parse', () => {
+  assert.strictEqual(parseAction('{"action":{"type":"go_back"}}', LIMITS).action.type, 'back')
+  assert.strictEqual(parseAction('{"action":{"type":"search","url":"weather in paris"}}', LIMITS).action.type, 'navigate')
+  assert.match(describeAction({ type: 'navigate', url: 'weather in paris' }), /Search for/)
+  assert.match(describeAction({ type: 'navigate', url: 'example.com' }), /Open example\.com/)
 })

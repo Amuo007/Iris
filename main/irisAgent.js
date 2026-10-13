@@ -14,60 +14,47 @@
  * automation protocol. All of the thinking lives in iris/agent/*, which is Electron-free.
  */
 
-const { desktopCapturer, webContents: allWebContents } = require('electron')
+const { webContents: allWebContents } = require('electron') // nativeImage comes from main.js (shared scope)
 const irisActionSchema = require('./iris/agent/actionSchema.js')
 const irisMapper = require('./iris/agent/coordinateMapper.js')
 const irisInputPlan = require('./iris/agent/inputPlan.js')
 const irisLoop = require('./iris/agent/agentLoop.js')
 const irisModelClient = require('./iris/agent/modelClient.js')
 
+const IRIS_SETTINGS_VERSION = 2
+
 const IRIS_DEFAULT_SETTINGS = {
+  settingsVersion: IRIS_SETTINGS_VERSION,
   baseUrl: 'http://192.168.1.252:13305/v1',
   model: 'Qwen3.8-Flash-Next-GGUF-IQ4_NL',
   apiKey: '',
-  maxSteps: 25,
+  thinking: 'low', // off | low | medium | full
+  maxSteps: 40,
+  maxMinutes: 20,
   temperature: 0.2,
-  maxTokens: 700,
-  modelTimeoutMs: 90000,
-  keepImages: 2,
-  screenshotMaxDimension: 1568,
-  screenshotQuality: 72,
+  modelTimeoutMs: 180000,
+  keepImages: 1,
+  screenshotMaxDimension: 1280,
+  screenshotQuality: 82,
   markerEnabled: true,
   autoPauseOnUserInput: true,
   allowSensitiveActions: false
 }
 
+/* settings from before v2 had limits tuned for the cloud (90 s, 700 tokens, 2 images); keep only who/where */
+const IRIS_KEEP_FROM_V1 = ['baseUrl', 'model', 'apiKey', 'markerEnabled', 'autoPauseOnUserInput', 'allowSensitiveActions']
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms || 0))
 
-
-
 function irisSettings () {
-  const stored = settings.get('irisAI') || {}
-  return Object.assign({}, IRIS_DEFAULT_SETTINGS, stored)
-}
-
-/* ------------------------------------------------------------------ *
- * The "computer": what the agent can see and do
- * ------------------------------------------------------------------ */
-
-function IrisComputer (tabId, config, onInject, viewBounds) {
-  this.tabId = tabId
-  // the browser UI tells us where the page area is, so a tab whose view has not been
-  // attached yet (a fresh tab, the new-tab page) can still be captured
-  this.fallbackBounds = viewBounds || null
-  this.config = config
-  this.onInject = onInject || function () {}
-  this.takeoverCount = 0
-  this.injectingUntil = 0
-  this.lastError = null
-}
-
-IrisComputer.prototype.view = function () {
-  const view = getView(this.tabId)
-  if (!view || !view.webContents || view.webContents.isDestroyed()) {
-    throw new Error('the tab the agent is working in is gone')
+  let stored = settings.get('irisAI') || {}
+  if (stored.settingsVersion !== IRIS_SETTINGS_VERSION) {
+    const kept = { settingsVersion: IRIS_SETTINGS_VERSION }
+    IRIS_KEEP_FROM_V1.forEach(function (k) { if (stored[k] !== undefined && stored[k] !== '') kept[k] = stored[k] })
+    stored = kept
+    try { settings.set('irisAI', stored) } catch (e) { /* settings may not be ready yet */ }
   }
-  return view
+  return Object.assign({}, IRIS_DEFAULT_SETTINGS, stored)
 }
 
 const DEBUG_LOG = process.env.IRIS_AGENT_DEBUG || ''
@@ -76,137 +63,152 @@ function DBUG (m) {
   try { require('fs').appendFileSync(DEBUG_LOG, new Date().toISOString() + ' ' + m + '\n') } catch (e) { /* logging must never break the agent */ }
 }
 
-/*
- * Capturing what the user sees.
- *
- * webContents.capturePage() on a WebContentsView is unreliable on macOS (it can reject with
- * UnknownVizError or never settle at all, which would stall the whole agent), so Iris grabs
- * the window's own composited image through desktopCapturer and crops it to the tab's view
- * rectangle. Same pixels, same device-pixel scale, no dependency on the view's compositor.
- *
- * The mapping never assumes a scale factor: the image size and the view size are carried
- * separately and the coordinate mapper derives the ratio (see iris/agent/coordinateMapper.js).
- */
-/**
- * Which BrowserWindow hosts a given WebContentsView's contents. Min's own
- * windowFromContents() only ever looks at the window's primary contents, so Iris walks the
- * whole view tree instead.
- */
-function findWindowForWebContents (webContents) {
-  const wins = windows.openWindows || []
-  for (let i = 0; i < wins.length; i++) {
-    const win = wins[i].win
-    if (!win || win.isDestroyed()) continue
-    const children = win.getContentView().children || []
-    for (let j = 0; j < children.length; j++) {
-      const child = children[j]
-      if (child && child.webContents && !child.webContents.isDestroyed() && child.webContents.id === webContents.id) {
-        return win
-      }
-    }
-  }
-  return null
+function withTimeout (promise, ms, message) {
+  let timer = null
+  return Promise.race([
+    promise.finally(function () { clearTimeout(timer) }),
+    new Promise(function (resolve, reject) { timer = setTimeout(function () { reject(new Error(message)) }, ms) })
+  ])
 }
 
-async function captureWindowOf (win) {
-  DBUG('captureWindowOf:enter')
-  const frame = win.getBounds()
-  DBUG('captureWindowOf:frame ' + JSON.stringify(frame))
-  const scale = win.getContentBounds().width ? Math.max(1, Math.round((win.getContentBounds().width * 2) / frame.width)) : 2
+/* ------------------------------------------------------------------ *
+ * The "computer": what the agent can see and do
+ * ------------------------------------------------------------------ */
 
-  DBUG('captureWindowOf: asking desktopCapturer for ' + frame.width + 'x' + frame.height)
-  const sources = await desktopCapturer.getSources({
-    types: ['window'],
-    thumbnailSize: { width: Math.round(frame.width * scale), height: Math.round(frame.height * scale) },
-    fetchWindowIcons: false
-  })
-
-  const title = win.getTitle()
-  let source = sources.find(function (s) { return s.name === title && title })
-
-  if (!source) {
-    source = sources.find(function (s) {
-      const size = s.thumbnail.getSize()
-      return size.width > 0 && !/marker/i.test(s.name)
-    })
-  }
-
-  DBUG('capture getSources -> ' + sources.length + ' sources')
-  if (!source) throw new Error('could not capture the browser window')
-
-  return { image: source.thumbnail, frame: frame, scale: source.thumbnail.getSize().width / frame.width }
+function IrisComputer (tabId, config, onInject, viewBounds) {
+  this.tabId = tabId
+  // where the browser UI draws the page; used when the tab has no attached view yet
+  this.fallbackBounds = viewBounds || null
+  this.config = config
+  this.onInject = onInject || function () {}
+  this.takeoverCount = 0
+  this.injecting = false
+  this.injectingUntil = 0
+  this.lastError = null
 }
 
-IrisComputer.prototype.capture = async function (wc) {
+IrisComputer.prototype.view = function () {
+  const view = getView(this.tabId)
+  if (!view || !view.webContents || view.webContents.isDestroyed()) {
+    throw new Error('the tab Iris is working in was closed')
+  }
+  return view
+}
+
+/** The browser window this tab's view lives in (attached or not). */
+IrisComputer.prototype.window = function () {
   const view = this.view()
-  const parent = findWindowForWebContents(wc) || windows.getCurrent()
-  if (!parent || parent.isDestroyed()) {
-    throw new Error('cannot capture: this tab has no window')
+  const all = windows.getAll()
+  for (let i = 0; i < all.length; i++) {
+    if (all[i].getContentView().children.indexOf(view) !== -1) return all[i]
   }
-
-  const viewBounds = view.getBounds()
-  const bounds = viewBounds.width && viewBounds.height ? viewBounds : this.fallbackBounds
-  if (!bounds || !bounds.width || !bounds.height) {
-    throw new Error('the page has not painted yet')
+  for (let i = 0; i < all.length; i++) {
+    if (String(windows.getState(all[i]).selectedView) === String(this.tabId)) return all[i]
   }
-
-  const captured = await captureWindowOf(parent)
-  const cb = parent.getContentBounds()
-  const scale = captured.scale
-
-  const image = captured.image.crop({
-    x: Math.max(0, Math.round((cb.x - captured.frame.x + bounds.x) * scale)),
-    y: Math.max(0, Math.round((cb.y - captured.frame.y + bounds.y) * scale)),
-    width: Math.max(1, Math.round(bounds.width * scale)),
-    height: Math.max(1, Math.round(bounds.height * scale))
-  })
-
-  const size = image.getSize()
-  if (!size.width || !size.height) {
-    throw new Error('the page has not painted yet')
-  }
-
-  DBUG('capture ok ' + JSON.stringify(size) + ' scale ' + scale + ' url ' + wc.getURL())
-  return image
+  return windows.getCurrent()
 }
 
+IrisComputer.prototype.isAttached = function () {
+  const view = this.view()
+  return windows.getAll().some(function (win) { return win.getContentView().children.indexOf(view) !== -1 })
+}
+
+/* 32x20 grey thumbnail: enough to tell "blank" and "nothing changed" apart from real pages. */
+function imageSignature (image) {
+  const small = image.resize({ width: 32, height: 20, quality: 'good' })
+  const bmp = small.toBitmap()
+  const lum = []
+  for (let i = 0; i + 3 < bmp.length; i += 4) lum.push((bmp[i] * 0.114 + bmp[i + 1] * 0.587 + bmp[i + 2] * 0.299))
+  const mean = lum.reduce(function (a, b) { return a + b }, 0) / (lum.length || 1)
+  const variance = lum.reduce(function (a, b) { return a + (b - mean) * (b - mean) }, 0) / (lum.length || 1)
+  return {
+    blank: Math.sqrt(variance) < 2.5,
+    fingerprint: lum.map(function (v) { return Math.round(v / 16).toString(16) }).join('')
+  }
+}
+
+/*
+ * Seeing the page: the tab's own webContents.capturePage(). It shows exactly the tab, at the
+ * device scale, needs no screen-recording permission, and can never pick up another window
+ * or another app. It is bounded by a timeout and retried, because a view that has just been
+ * attached may not have painted its first frame yet.
+ */
 IrisComputer.prototype.screenshot = async function () {
   const view = this.view()
   const wc = view.webContents
-  const bounds = view.getBounds()
-  if (bounds.width && bounds.height) {
-    this.fallbackBounds = bounds
+  const url = wc.getURL()
+  const viewBounds = view.getBounds()
+  const bounds = viewBounds.width && viewBounds.height ? viewBounds : this.fallbackBounds
+  if (viewBounds.width && viewBounds.height) this.fallbackBounds = viewBounds
+  if (!bounds || !bounds.width || !bounds.height) throw new Error('the tab has no size yet')
+
+  // a brand-new tab has no page at all: describe it instead of photographing nothing
+  if (!url || url === 'about:blank' || /^min:\/\/newtab/.test(url)) {
+    return this.emptyTabObservation(bounds)
   }
 
-  let image
-  try {
-    image = await this.capture(wc)
-  } catch (err) {
-    DBUG('screenshot attempt failed: ' + err.message + ' — retrying')
-    // A tab that has never painted yields an empty image; give it a moment and retry once.
-    await sleep(250)
-    image = await this.capture(wc)
+  if (!this.isAttached()) {
+    // the address bar or a menu put Min into placeholder mode; ask the UI to show the page again
+    broadcast('iris-agent-need-view', { tabId: this.tabId })
+    await sleep(300)
+    if (!this.isAttached()) throw new Error('the page is hidden behind the address bar or a menu')
   }
+
+  let image = null
+  let lastError = null
+  let sig = null
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      image = await withTimeout(wc.capturePage(), 4000, 'capturing the page timed out')
+      if (image && !image.isEmpty()) {
+        sig = imageSignature(image)
+        if (!sig.blank || attempt === 3) break
+        lastError = new Error('the page looked blank')
+      } else {
+        lastError = new Error('the page has not painted yet')
+      }
+    } catch (err) {
+      lastError = err
+    }
+    DBUG('capture attempt ' + attempt + ' failed: ' + (lastError && lastError.message))
+    image = null
+    try { wc.invalidate() } catch (e) { /* view going away */ }
+    await sleep(250 * attempt)
+  }
+  if (!image) throw lastError || new Error('could not capture the page')
 
   const size = image.getSize()
-  if (!size.width || !size.height) {
-    throw new Error('the page has not painted yet')
-  }
-
-  return this.finishCapture(image, size, bounds, wc)
+  DBUG('capture ok ' + JSON.stringify(size) + ' view ' + bounds.width + 'x' + bounds.height + ' url ' + url + (sig.blank ? ' (blank)' : ''))
+  return this.finishCapture(image, size, bounds, wc, sig)
 }
 
-IrisComputer.prototype.finishCapture = function (image, size, bounds, wc) {
-  const maxDim = this.config.screenshotMaxDimension
-  const fitted = irisMapper.fitDimensions(size.width, size.height, maxDim)
+IrisComputer.prototype.emptyTabObservation = function (bounds) {
+  const fitted = irisMapper.fitDimensions(bounds.width, bounds.height, this.config.screenshotMaxDimension)
+  const buf = Buffer.alloc(fitted.width * fitted.height * 4, 255)
+  const image = nativeImage.createFromBitmap(buf, { width: fitted.width, height: fitted.height })
+  return {
+    dataUrl: 'data:image/jpeg;base64,' + image.toJPEG(70).toString('base64'),
+    width: fitted.width,
+    height: fitted.height,
+    viewWidth: bounds.width,
+    viewHeight: bounds.height,
+    devicePixelRatio: fitted.width / bounds.width,
+    url: '',
+    title: 'New tab',
+    loading: false,
+    emptyTab: true,
+    fingerprint: 'empty-tab'
+  }
+}
 
+IrisComputer.prototype.finishCapture = function (image, size, bounds, wc, sig) {
+  const fitted = irisMapper.fitDimensions(size.width, size.height, this.config.screenshotMaxDimension)
   let payload = image
   if (fitted.width !== size.width || fitted.height !== size.height) {
-    payload = image.resize({ width: fitted.width, height: fitted.height, quality: this.config.screenshotQuality })
+    payload = image.resize({ width: fitted.width, height: fitted.height, quality: 'better' })
   }
-
   return {
-    dataUrl: payload.toDataURL(),
+    dataUrl: 'data:image/jpeg;base64,' + payload.toJPEG(this.config.screenshotQuality || 82).toString('base64'),
     width: fitted.width,
     height: fitted.height,
     captureWidth: size.width,
@@ -216,8 +218,18 @@ IrisComputer.prototype.finishCapture = function (image, size, bounds, wc) {
     devicePixelRatio: bounds.width ? size.width / bounds.width : 1,
     url: wc.getURL(),
     title: wc.getTitle(),
-    loading: wc.isLoading()
+    loading: wc.isLoading(),
+    blank: !!(sig && sig.blank),
+    fingerprint: sig ? sig.fingerprint : null
   }
+}
+
+/* Plain words → a web search; anything that looks like an address → that address. */
+function irisResolveUrl (text) {
+  const t = String(text || '').trim()
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t)) return t
+  if (/^[^\s]+\.[a-z]{2,}(:\d+)?(\/\S*)?$/i.test(t) || /^localhost(:\d+)?(\/|$)/i.test(t)) return 'https://' + t.replace(/^\/+/, '')
+  return 'https://duckduckgo.com/?q=' + encodeURIComponent(t)
 }
 
 /**
@@ -229,8 +241,15 @@ IrisComputer.prototype.act = async function (action) {
   const wc = view.webContents
 
   if (action.type === 'navigate') {
-    const url = /^https?:\/\//i.test(action.url) ? action.url : 'https://' + action.url.replace(/^\/+/, '')
-    await wc.loadURL(url)
+    const url = irisResolveUrl(action.url)
+    // Min's own loader: attaches a new tab's view to the window, exactly like typing a URL
+    loadURLInView(this.tabId, url, this.window())
+    return { ok: true, url: url }
+  }
+  if (action.type === 'back') {
+    const nav = wc.navigationHistory
+    if (!nav || !nav.canGoBack()) return { ok: false, error: 'there is no previous page in this tab' }
+    nav.goBack()
     return { ok: true }
   }
   if (action.type === 'wait') {
@@ -241,16 +260,34 @@ IrisComputer.prototype.act = async function (action) {
   const plan = irisInputPlan.planInputEvents(action)
 
   // Mark "we are driving" so genuine human input can be told apart from our own events.
-  this.injectingUntil = Date.now() + irisInputPlan.planDuration(plan) + 250
-
-  for (const step of plan) {
-    wc.sendInputEvent(step.event)
-    if (step.delayMs) await sleep(step.delayMs)
+  this.injecting = true
+  try {
+    for (const step of plan) {
+      wc.sendInputEvent(step.event)
+      if (step.delayMs) await sleep(step.delayMs)
+    }
+  } finally {
+    this.injecting = false
+    this.injectingUntil = Date.now() + 400
   }
 
-  this.injectingUntil = 0
   this.onInject(action, plan.length)
   return { ok: true, events: plan.length }
+}
+
+/** Wait for the page to react to an action: navigation, loading, then one paint. */
+IrisComputer.prototype.settle = async function (action) {
+  let wc
+  try { wc = this.view().webContents } catch (e) { return }
+  const started = Date.now()
+  const mayNavigate = action && (action.type === 'navigate' || action.type === 'back' || action.type === 'click' ||
+    action.type === 'key' || (action.type === 'type' && action.enter))
+  await sleep(mayNavigate ? 400 : 180)
+  while (wc.isLoading() && Date.now() - started < 12000) {
+    await sleep(150)
+  }
+  if (action && action.type === 'scroll') await sleep(200) // smooth scrolling
+  await sleep(150)
 }
 
 IrisComputer.prototype.state = function () {
@@ -269,7 +306,7 @@ IrisComputer.prototype.state = function () {
 }
 
 IrisComputer.prototype.noteHumanInput = function (info) {
-  if (Date.now() < this.injectingUntil) return false
+  if (this.injecting || Date.now() < this.injectingUntil) return false
   this.takeoverCount++
   this.lastTakeover = info
   return true
@@ -325,7 +362,7 @@ function positionOverlay (tabId, fallbackBounds) {
   const view = getView(tabId)
   if (!view) return null
 
-  const parent = findWindowForWebContents(view.webContents) || windows.getCurrent()
+  const parent = windows.getAll().find(function (win) { return win.getContentView().children.indexOf(view) !== -1 }) || windows.getCurrent()
   if (!parent || parent.isDestroyed()) return null
 
   const viewBounds = view.getBounds()
@@ -427,23 +464,27 @@ function startAgent (task, options, senderContents) {
     overlaySend({ kind: 'pulse', action: action, at: Date.now() })
   }, options && options.viewBounds)
 
-  // genuine human input in the tab → pause the agent so the user can take over
+  // genuine human input in the tab (a click or a key press) → pause so the user can take over
   const view = getView(tabId)
+  if (!view) return { ok: false, error: 'This tab is not ready yet. Try again in a moment.' }
   const onInput = function (event, input) {
-    if (input.type === 'keyDown' && input.key === 'Escape') return
+    const type = input && input.type
+    if (type !== 'mouseDown' && type !== 'keyDown' && type !== 'rawKeyDown') return
+    if (input.key === 'Escape' || input.keyCode === 'Escape') return
     const accepted = computer.noteHumanInput({
-      kind: input.type === 'keyDown' ? 'keydown' : (input.type === 'mouseDown' ? 'click' : input.type),
+      kind: type === 'mouseDown' ? 'click' : 'keydown',
       at: input.x !== undefined ? { x: input.x, y: input.y } : null
     })
-    if (accepted && irisAgent && irisAgentState.autoPause !== false) {
+    if (accepted && irisAgent && irisAgentState.autoPause !== false && irisAgentState.status === 'running') {
       irisAgent.pause('human-input')
       broadcastEvent({ type: 'takeover', info: computer.lastTakeover })
     }
   }
+  let detachInput = null
   if (cfg.autoPauseOnUserInput) {
-    view.webContents.on('before-input-event', onInput)
-    irisAgentState.detachInput = function () {
-      try { view.webContents.removeListener('before-input-event', onInput) } catch (e) { /* already gone */ }
+    view.webContents.on('input-event', onInput)
+    detachInput = function () {
+      try { view.webContents.removeListener('input-event', onInput) } catch (e) { /* already gone */ }
     }
   }
 
@@ -455,7 +496,8 @@ function startAgent (task, options, senderContents) {
     answer: null,
     steps: 0,
     startedAt: Date.now(),
-    autoPause: cfg.autoPauseOnUserInput
+    autoPause: cfg.autoPauseOnUserInput,
+    detachInput: detachInput
   }
 
   const useFakeModel = !!process.env.IRIS_FAKE_MODEL || !!cfg.useFakeModel
@@ -466,7 +508,7 @@ function startAgent (task, options, senderContents) {
       model: cfg.model,
       apiKey: cfg.apiKey,
       temperature: cfg.temperature,
-      maxTokens: cfg.maxTokens,
+      thinking: cfg.thinking,
       timeoutMs: cfg.modelTimeoutMs
     })
 
@@ -476,12 +518,13 @@ function startAgent (task, options, senderContents) {
     safety: {
       maxSteps: cfg.maxSteps,
       allowSensitiveActions: cfg.allowSensitiveActions,
-      maxModelMsPerStep: cfg.modelTimeoutMs
+      maxModelMsPerStep: cfg.modelTimeoutMs + 5000,
+      maxWallClockMs: Math.max(1, cfg.maxMinutes) * 60 * 1000
     },
     history: { keepImages: cfg.keepImages },
     log: DBUG,
     onEvent: function (type, payload) {
-      DBUG('event ' + type + ' ' + JSON.stringify(payload && (payload.status || payload.description || payload.error || '') || ''))
+      if (type !== 'model:progress') DBUG('event ' + type + ' ' + JSON.stringify(payload && (payload.status || payload.description || payload.error || payload.thought || '') || ''))
       if (type === 'run:end') {
         irisAgentState.status = payload.status
         irisAgentState.answer = payload.answer
@@ -556,7 +599,7 @@ ipc.on('iris-agent-resume', function (event) {
 })
 
 ipc.on('iris-agent-stop', function (event) {
-  if (irisAgent) irisAgent.stop('stopped from the panel')
+  if (irisAgent) irisAgent.stop('Stopped by you')
   hideOverlay()
   event.reply('iris-agent-control-reply', { ok: true, status: irisAgentState.status })
 })

@@ -125,3 +125,35 @@ test('snapshot reports counters and limits', () => {
   assert.strictEqual(s.retries, 1)
   assert.strictEqual(s.limits.maxSteps, 5)
 })
+
+test('scrolling repeatedly is fine while the page changes, a loop when it does not', () => {
+  const c = clock()
+  const gate = createSafetyGate({ now: c.now, repeatActionLimit: 2 })
+  const s = { type: 'scroll', direction: 'down', amount: 5, x: 1, y: 1 }
+  for (let i = 0; i < 6; i++) assert.strictEqual(gate.beforeAction(s, { pageUnchanged: false }).allow, true)
+  assert.strictEqual(gate.beforeAction(s, { pageUnchanged: true }).kind, 'loop')
+})
+
+test('an approved sensitive action passes once', () => {
+  const c = clock()
+  const gate = createSafetyGate({ now: c.now })
+  const a = { type: 'type', text: 'place order now' }
+  const first = gate.beforeAction(a)
+  assert.strictEqual(first.kind, 'confirmation')
+  assert.strictEqual(gate.beforeAction(a, { approved: first.key }).allow, true)
+})
+
+test('ordinary words like remove or delete in a search are not treated as sensitive', () => {
+  const c = clock()
+  const gate = createSafetyGate({ now: c.now })
+  assert.strictEqual(gate.beforeAction({ type: 'type', text: 'how to remove coffee stains' }).allow, true)
+})
+
+test('refundStep gives back a step that never reached the model', () => {
+  const c = clock()
+  const gate = createSafetyGate({ now: c.now, maxSteps: 1 })
+  assert.strictEqual(gate.beforeStep().allow, true)
+  gate.refundStep()
+  assert.strictEqual(gate.beforeStep().allow, true)
+  assert.strictEqual(gate.beforeStep().allow, false)
+})
