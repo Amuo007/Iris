@@ -168,6 +168,10 @@ test('validateAction covers every declared action type', () => {
     new_tab: {},
     close_tab: {},
     zoom: { x: 5, y: 5 },
+    find: { text: 'Directions' },
+    dialog: { accept: true },
+    upload: { file: 'cv.pdf' },
+    ask_user: { question: 'What is the code?' },
     done: {},
     fail: {}
   }

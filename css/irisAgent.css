@@ -603,3 +603,11 @@
 .iris-history-row:hover .iris-history-del {
   opacity: 1;
 }
+
+.iris-note-ask {
+  color: var(--iris-text);
+  background: var(--iris-bg-muted);
+  border-left: 3px solid var(--iris-warn);
+  border-radius: 0 var(--iris-r-sm) var(--iris-r-sm) 0;
+  font-weight: 500;
+}

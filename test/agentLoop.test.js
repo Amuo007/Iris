@@ -469,3 +469,39 @@ test('a full context drops old steps first, then explains if that is not enough'
   assert.match(result.reason, /context window is too small/)
   assert.ok(ev(h.events, 'error').some(e => e.where === 'context'))
 })
+
+test('steps that fall out of the window are kept as a one-line summary', async () => {
+  const replies = []
+  for (let i = 0; i < 30; i++) replies.push(json('reading item ' + i, { type: 'scroll', direction: 'down', amount: 1, x: 10, y: 10 + i }))
+  replies.push((ctx) => { h.last = ctx.messages[ctx.messages.length - 1].content[0].text; h.count = ctx.messages.length; return json('done', { type: 'done' }) })
+  const h = harness(replies, null, { history: { maxMessages: 12 }, safety: { maxSteps: 100 } })
+  await h.agent.run('long research')
+  assert.match(h.last, /Earlier steps \(summary/)
+  assert.match(h.last, /Scroll down/)
+  assert.ok(h.count <= 14, 'the conversation itself stays small: ' + h.count)
+})
+
+test('finished downloads become permanent notes', async () => {
+  const h = harness([json('download', { type: 'click', x: 10, y: 10 }), (ctx) => { h.last = ctx.messages[ctx.messages.length - 1].content[0].text; return json('done', { type: 'done' }) }])
+  let n = 0
+  const shot = h.computer.screenshot.bind(h.computer)
+  h.computer.screenshot = function () {
+    const o = shot()
+    if (++n === 2) { o.note = 'Downloaded "paper.pdf" (1.2 MB) to the Downloads folder.'; o.memos = ['Downloaded: paper.pdf'] }
+    return o
+  }
+  await h.agent.run('get the paper')
+  assert.match(h.last, /Downloaded "paper.pdf"/)
+  assert.deepStrictEqual(h.agent.notes(), ['Downloaded: paper.pdf'])
+})
+
+test('ask_user pauses with the question and the answer reaches the model', async () => {
+  const h = harness([json('need the code', { type: 'ask_user', question: 'What is the 6-digit code from your phone?' }), (ctx) => { h.msgs = JSON.stringify(ctx.messages); return json('done', { type: 'done' }) }])
+  const running = h.agent.run('log in with 2FA')
+  await until(() => h.agent.status().status === 'paused', 'pause for the question')
+  assert.strictEqual(ev(h.events, 'ask')[0].question, 'What is the 6-digit code from your phone?')
+  h.agent.answer('482913')
+  const result = await running
+  assert.strictEqual(result.status, 'done')
+  assert.match(h.msgs, /The user says: 482913/)
+})

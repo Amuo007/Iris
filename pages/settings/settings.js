@@ -803,6 +803,16 @@ settings.listen('irisAI', function (value) {
   irisRenderAll()
 })
 
+/* --- Rules ------------------------------------------------------------- */
+
+var irisRulesText = document.getElementById('iris-rules-text')
+irisRulesText.addEventListener('change', function () {
+  settings.set('irisRules', irisRulesText.value.trim())
+})
+settings.listen('irisRules', function (value) {
+  if (document.activeElement !== irisRulesText) irisRulesText.value = value || ''
+})
+
 /* --- My info ----------------------------------------------------------- */
 
 var irisProfileRows = document.getElementById('iris-profile-rows')

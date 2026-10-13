@@ -274,6 +274,12 @@ function createAgent (opts) {
       }
       captureFailures = 0
       const obs = shot.obs
+      if (Array.isArray(obs.memos)) {
+        obs.memos.forEach(function (m) {
+          history.addNote(m)
+          emit('remember', { step: state.step, note: m, automatic: true })
+        })
+      }
 
       // did the last action visibly do anything? (cheap, pixel-level)
       const unchanged = !!(lastActed && obs.fingerprint && lastFingerprint && obs.fingerprint === lastFingerprint)
@@ -376,7 +382,7 @@ function createAgent (opts) {
       }
 
       safety.noteSuccess()
-      history.addAssistant(text, parsed.thought, parsed.action)
+      history.addAssistant(text, parsed.thought, parsed.action, obs.url)
       if (parsed.remember) {
         history.addNote(parsed.remember)
         emit('remember', { step: state.step, note: parsed.remember })
@@ -451,6 +457,14 @@ function createAgent (opts) {
       return { finished: finish('stopped', actionGate.reason) }
     }
 
+    // ---- ask the human: pause until they answer (or just press Resume) ------------
+    if (action.type === 'ask_user') {
+      emit('action', { step: state.step, index, total, action, actionView: mapped, anchor: null, description: describeAction(action), automatic: false })
+      emit('ask', { step: state.step, question: action.question })
+      pauseRequested = true
+      return { stopBatch: true }
+    }
+
     // ---- 8. marker -------------------------------------------------------------
     emit('action', {
       step: state.step,
@@ -514,6 +528,11 @@ function createAgent (opts) {
       pauseRequested = true
       emit('pause', { reason: reason || 'user' })
       if (state.status === 'running') setStatus('paused', reason || 'user')
+    },
+    /** The human answered an ask_user question (or added an instruction while paused). */
+    answer (text) {
+      if (text && String(text).trim()) history.addSystemNote('The user says: ' + String(text).trim())
+      this.resume()
     },
     resume () {
       pauseRequested = false

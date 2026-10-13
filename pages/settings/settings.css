@@ -329,3 +329,17 @@ html {
 .iris-row-delete:hover {
   opacity: 1;
 }
+
+#iris-ai-settings-container textarea.iris-rules {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 760px;
+  margin-top: 0.6rem;
+  padding: 0.6em 0.7em;
+  font: 0.88rem/1.5 -apple-system, BlinkMacSystemFont, sans-serif;
+  border-radius: 7px;
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  background: transparent;
+  color: inherit;
+  resize: vertical;
+}

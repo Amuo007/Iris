@@ -47,14 +47,15 @@ test('scroll emits wheel events with the right sign', () => {
   const down = planInputEvents({ type: 'scroll', direction: 'down', amount: 3, x: 10, y: 20 })
   const wheels = down.filter(p => p.event.type === 'mouseWheel')
   assert.strictEqual(wheels.length, 3)
-  assert.ok(wheels.every(w => w.event.deltaY > 0))
+  // Chromium convention, verified live: negative deltaY scrolls the page down
+  assert.ok(wheels.every(w => w.event.deltaY < 0))
   assert.ok(wheels.every(w => w.event.x === 10 && w.event.y === 20))
 
   const up = planInputEvents({ type: 'scroll', direction: 'up', amount: 2, x: 1, y: 2 })
-  assert.ok(up.filter(p => p.event.type === 'mouseWheel').every(w => w.event.deltaY < 0))
+  assert.ok(up.filter(p => p.event.type === 'mouseWheel').every(w => w.event.deltaY > 0))
 
   const left = planInputEvents({ type: 'scroll', direction: 'left', amount: 1, x: 1, y: 2 })
-  assert.ok(left.filter(p => p.event.type === 'mouseWheel').every(w => w.event.deltaX < 0 && w.event.deltaY === 0))
+  assert.ok(left.filter(p => p.event.type === 'mouseWheel').every(w => w.event.deltaX > 0 && w.event.deltaY === 0))
 })
 
 test('typing emits one char event per character, in order', () => {

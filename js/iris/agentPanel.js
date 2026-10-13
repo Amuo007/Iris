@@ -66,6 +66,10 @@ const ACTION_LABELS = {
   navigate: 'Open',
   back: 'Back',
   zoom: 'Zoom in',
+  find: 'Find',
+  dialog: 'Answer dialog',
+  upload: 'Upload',
+  ask_user: 'Asking you',
   new_tab: 'New tab',
   switch_tab: 'Switch tab',
   close_tab: 'Close tab',
@@ -318,6 +322,14 @@ function submitTask (taskText, options) {
     taskInput.focus()
     return
   }
+  if (lastStatus === 'paused' && typeof taskText !== 'string') {
+    // while Iris waits (a question, a takeover, an approval) a message is an answer, not a new task
+    addUserMessage(task)
+    taskInput.value = ''
+    autosize()
+    ipc.send('iris-agent-answer', task)
+    return
+  }
   if (isBusy()) return
   const activeTabId = (options && options.tabId) || tabs.getSelected()
   if (!activeTabId) return
@@ -509,7 +521,7 @@ function setStatus (status, text) {
   pauseButton.title = status === 'paused' ? 'Resume' : 'Pause'
   pauseButton.disabled = status === 'stopping'
   stopButton.disabled = status === 'stopping'
-  sendButton.disabled = running
+  sendButton.disabled = running && status !== 'paused'
   openButton.classList.toggle('is-working', running)
   if ((running || repeatAt) && !clock) {
     clock = setInterval(tick, 1000)
@@ -568,6 +580,11 @@ function addObservation (payload) {
 function addThought (payload) {
   const rec = steps[payload.step]
   if (!rec) return
+  const kind = payload.action && payload.action.type
+  if (kind === 'done' || kind === 'fail') {
+    rec.label.textContent = kind === 'done' ? 'Answer' : 'Gave up'
+    rec.detail.textContent = ''
+  }
   if (payload.thought) {
     rec.thought.hidden = false
     rec.thought.textContent = payload.thought
@@ -579,6 +596,10 @@ function actionDetail (action, description) {
   switch (action.type) {
     case 'type': return '“' + action.text + '”' + (action.enter ? ' ↵' : '')
     case 'navigate': return action.url
+    case 'find': return '“' + action.text + '”'
+    case 'dialog': return action.accept ? 'OK' : 'Cancel'
+    case 'upload': return action.file
+    case 'ask_user': return ''
     case 'new_tab': return action.url || ''
     case 'switch_tab':
     case 'close_tab': return action.tab ? '#' + action.tab : ''
@@ -595,6 +616,10 @@ function actionDetail (action, description) {
   }
 }
 
+function looksLikeUrl (text) {
+  return /^[a-z]+:\/\/|^[^\s]+\.[a-z]{2,}(\/|:|$)|^localhost/i.test(String(text || '').trim())
+}
+
 function addSubAction (rec, label, detail) {
   const sub = el('div', 'iris-step-sub')
   sub.appendChild(el('span', 'iris-step-label', label))
@@ -609,7 +634,7 @@ function addAction (payload) {
     return
   }
   const rec = steps[payload.step] || stepRow(payload.step)
-  const label = ACTION_LABELS[kind] || kind
+  const label = kind === 'navigate' && !looksLikeUrl(payload.action.url) ? 'Search' : (ACTION_LABELS[kind] || kind)
   const detail = actionDetail(payload.action, payload.description)
   if (payload.index > 0) {
     addSubAction(rec, label, detail)
@@ -701,7 +726,12 @@ function handleEvent (payload) {
       addThought(payload)
       break
     case 'remember':
-      addNote('Noted: ' + payload.note, 'memo')
+      if (!payload.automatic) addNote('Noted: ' + payload.note, 'memo')
+      break
+    case 'download':
+      if (payload.state === 'started') setStatus(keep, 'Downloading ' + (payload.name || 'a file') + '…')
+      else if (payload.state === 'completed') addNote('Downloaded ' + payload.name + ' to your Downloads folder', 'memo')
+      else addNote('Download failed: ' + payload.name + ' (' + payload.state + ')', 'warn')
       break
     case 'action':
       addAction(payload)
@@ -720,6 +750,12 @@ function handleEvent (payload) {
       break
     case 'takeover':
       setStatus('paused', 'Paused — you took over. Press ▶ to continue.')
+      break
+    case 'ask':
+      addNote(payload.question, 'ask')
+      setStatus('paused', 'Iris is asking you — type an answer, or press ▶')
+      taskInput.placeholder = 'Answer Iris…'
+      taskInput.focus()
       break
     case 'pause':
       setStatus('paused', 'Paused')

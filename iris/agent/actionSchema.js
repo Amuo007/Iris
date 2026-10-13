@@ -14,7 +14,7 @@
 const COORD_TYPES = new Set(['click', 'double_click', 'right_click', 'drag', 'scroll'])
 
 /* Actions after which the page (or the tab) is different, so a batch must stop there. */
-const PAGE_CHANGING = new Set(['navigate', 'back', 'switch_tab', 'new_tab', 'close_tab', 'zoom'])
+const PAGE_CHANGING = new Set(['navigate', 'back', 'switch_tab', 'new_tab', 'close_tab', 'zoom', 'find', 'dialog', 'upload', 'ask_user'])
 
 const MAX_BATCH = 6
 
@@ -41,6 +41,10 @@ const SPEC = {
   new_tab: { required: [], optional: ['url'] },
   close_tab: { required: [], optional: ['tab'] },
   zoom: { required: ['x', 'y'], optional: [] },
+  find: { required: ['text'], optional: [] },
+  dialog: { required: ['accept'], optional: ['text'] },
+  upload: { required: ['file'], optional: [] },
+  ask_user: { required: ['question'], optional: [] },
   move: { required: ['x', 'y'], optional: [] },
   done: { required: [], optional: ['answer'] },
   fail: { required: [], optional: ['reason'] }
@@ -92,6 +96,15 @@ const TYPE_ALIASES = {
   newtab: 'new_tab',
   closetab: 'close_tab',
   zoom_in: 'zoom',
+  find_in_page: 'find',
+  answer_dialog: 'dialog',
+  handle_dialog: 'dialog',
+  upload_file: 'upload',
+  choose_file: 'upload',
+  ask: 'ask_user',
+  ask_human: 'ask_user',
+  search_page: 'find',
+  ctrl_f: 'find',
   inspect: 'zoom',
   navigate_back: 'back',
   goto: 'navigate',
@@ -486,6 +499,14 @@ function validateAction (obj, limits) {
         else action.tab = n
         break
       }
+      case 'file':
+      case 'question': {
+        const v = toStringValue(value)
+        if (!v || !v.trim()) errors.push(field + ' must be a non-empty string')
+        else action[field] = v.trim()
+        break
+      }
+      case 'accept':
       case 'clear':
       case 'enter': {
         action[field] = toBoolean(value)
@@ -627,6 +648,10 @@ function describeAction (action) {
     case 'new_tab': return action.url ? `Open a new tab: ${action.url}` : 'Open a new tab'
     case 'close_tab': return action.tab ? `Close tab ${action.tab}` : 'Close this tab'
     case 'zoom': return `Zoom in at (${action.x}, ${action.y})`
+    case 'find': return `Find "${action.text}" on the page`
+    case 'dialog': return action.accept ? 'Answer the dialog: OK' + (action.text ? ` ("${action.text}")` : '') : 'Answer the dialog: Cancel'
+    case 'upload': return `Upload ${action.file}`
+    case 'ask_user': return `Ask you: ${action.question}`
     case 'done': return action.answer ? `Done \u2014 ${action.answer}` : 'Done'
     case 'fail': return action.reason ? `Stopped \u2014 ${action.reason}` : 'Stopped'
     default: return action.type
@@ -657,6 +682,10 @@ const ACTION_SPEC_TEXT = [
   '  key          {"key":"enter|tab|escape|backspace|delete|up|down|left|right|pagedown|pageup|home|end","modifiers":["shift"]?}',
   '  scroll       {"direction":"down|up","amount":int?,"x":int?,"y":int?}   (amount = wheel notches, default 5)',
   '  zoom         {"x":int,"y":int}  look closer: the next screenshot is a 2x close-up around that point',
+  '  find         {"text":str}       find text on the page (like Cmd+F): jumps to it and highlights it; repeat for the next match',
+  '  dialog       {"accept":bool,"text":str?}  answer a browser dialog (alert / confirm / prompt) Iris tells you about',
+  '  upload       {"file":str}       choose a file in an open file picker (a name from the list Iris gives you, or a full path)',
+  '  ask_user     {"question":str}   pause and ask the user (CAPTCHA, a one-time code, a missing detail, a choice only they can make)',
   '  navigate     {"url":str}        open a URL, or give plain words to search the web',
   '  back         {}                 browser Back button',
   '  new_tab      {"url":str?}       open a new tab (and switch to it)',
@@ -668,12 +697,19 @@ const ACTION_SPEC_TEXT = [
   '',
   'Rules:',
   '- Act only on what the newest screenshot shows. If what you need is not visible, scroll or navigate.',
+  '- On a long page, use find with a likely word (e.g. "Directions", "Price", "°F") instead of scrolling back and forth.',
+  '- One screen of scrolling is about amount 6.',
   '- Take the shortest path: open a known URL directly, and fill a field with ONE "type" action',
   '  (x, y, text, enter:true). Fill a whole form with one "actions" list.',
   '- Click the centre of the element you mean. If it is small or you are not sure where it is, zoom first.',
   '- When a link opens a new tab, Iris switches to it automatically; the "Tabs" list shows all tabs.',
   '- If your last action changed nothing, do something different. Never repeat a failed action.',
-  '- Close cookie banners and pop-ups that block the page.',
+  '- Close cookie banners, ads and pop-ups that cover the page (their X, "Close", "No thanks", or Escape). Never click ads.',
+  '- If a tab you did not want opened by itself (an ad or pop-up), close it with close_tab and carry on in your own tab.',
+  '- To download a file, click its download link or button. Iris saves it to the Downloads folder by itself and tells you when it is done.',
+  '- To upload a file, click the upload button or "Choose file"; Iris then lists files you can pick with upload.',
+  '- Date and time fields: click the field and type the digits (for 23 Oct 2026 type "10232026"); do not use the calendar pop-up.',
+  '- Never try to solve a CAPTCHA or "verify you are human" check yourself: use ask_user so the user can do it.',
   '- As soon as the screenshot shows the answer, reply "done" with the answer.'
 ].join('\n')
 

@@ -198,12 +198,14 @@ function planInputEvents (action, opts) {
       const magnitude = ticks * cfg.wheelStepPx
       add(mouseMove(x, y), 0)
       for (let i = 0; i < ticks; i++) {
-        const event = { type: 'mouseWheel', x, y, deltaX: 0, deltaY: 0, wheelTicksX: 0, wheelTicksY: 0, hasPreciseScrollingDeltas: false }
-        if (action.direction === 'down') event.deltaY = cfg.wheelStepPx
-        else if (action.direction === 'up') event.deltaY = -cfg.wheelStepPx
-        else if (action.direction === 'right') event.deltaX = cfg.wheelStepPx
-        else event.deltaX = -cfg.wheelStepPx
-        if (i === ticks - 1) event.wheelTicksY = event.deltaY > 0 ? 1 : (event.deltaY < 0 ? -1 : 0)
+        // Chromium's wheel deltas point the way the CONTENT moves: negative deltaY scrolls down
+        const event = { type: 'mouseWheel', x, y, deltaX: 0, deltaY: 0, wheelTicksX: 0, wheelTicksY: 0, hasPreciseScrollingDeltas: false, canScroll: true }
+        if (action.direction === 'down') event.deltaY = -cfg.wheelStepPx
+        else if (action.direction === 'up') event.deltaY = cfg.wheelStepPx
+        else if (action.direction === 'right') event.deltaX = -cfg.wheelStepPx
+        else event.deltaX = cfg.wheelStepPx
+        event.wheelTicksY = Math.sign(event.deltaY)
+        event.wheelTicksX = Math.sign(event.deltaX)
         add(event, 30)
       }
       if (magnitude > 4800) throw new Error('scroll amount too large')
@@ -268,6 +270,10 @@ function planInputEvents (action, opts) {
     }
 
     case 'wait':
+    case 'find':
+    case 'dialog':
+    case 'upload':
+    case 'ask_user':
     case 'back':
     case 'navigate':
     case 'done':

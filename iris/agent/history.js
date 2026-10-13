@@ -23,7 +23,8 @@ const DEFAULTS = {
   keepImages: 1,
   maxMessages: 40,
   maxSteps: 0,
-  maxNotes: 60
+  maxNotes: 60,
+  maxDigest: 40
 }
 
 function imagePart (dataUrl) {
@@ -40,7 +41,19 @@ function createHistory (options) {
   const cfg = Object.assign({}, DEFAULTS, options || {})
   let entries = []
   let notes = []
+  let digest = [] // one line per step that fell out of the window
+  let digestDropped = 0
   let observationCount = 0
+
+  function remember (e) {
+    if (e.kind !== 'assistant' || !e.action) return
+    const where = e.url ? ' on ' + String(e.url).replace(/^https?:\/\//, '').slice(0, 60) : ''
+    digest.push('- ' + prompts.digestLine(e.action, e.thought) + where)
+    if (digest.length > cfg.maxDigest) {
+      digestDropped += digest.length - cfg.maxDigest
+      digest = digest.slice(-cfg.maxDigest)
+    }
+  }
 
   function push (entry) {
     entries.push(entry)
@@ -48,6 +61,7 @@ function createHistory (options) {
     while (entries.length > cfg.maxMessages) {
       const dropIndex = entries.findIndex(e => !KEEP_KINDS.has(e.kind))
       if (dropIndex < 0) break
+      remember(entries[dropIndex])
       entries.splice(dropIndex, 1)
     }
     return entry
@@ -59,6 +73,8 @@ function createHistory (options) {
     start (task) {
       entries = []
       notes = []
+      digest = []
+      digestDropped = 0
       observationCount = 0
       push({ kind: 'task', role: 'user', text: prompts.taskMessage(task) })
       return this
@@ -79,6 +95,7 @@ function createHistory (options) {
       const candidates = droppable.filter(i => i !== lastObs)
       if (candidates.length < 2) return false
       const drop = new Set(candidates.slice(0, Math.ceil(candidates.length / 2)))
+      entries.forEach((e, i) => { if (drop.has(i)) remember(e) })
       entries = entries.filter((e, i) => !drop.has(i))
       return true
     },
@@ -110,8 +127,12 @@ function createHistory (options) {
       })
     },
 
-    addAssistant (rawText, thought, action) {
-      return push({ kind: 'assistant', role: 'assistant', text: rawText, thought, action })
+    addAssistant (rawText, thought, action, url) {
+      return push({ kind: 'assistant', role: 'assistant', text: rawText, thought, action, url })
+    },
+
+    digest () {
+      return digest.slice()
     },
 
     addCorrection (error) {
@@ -151,6 +172,7 @@ function createHistory (options) {
           let text = e.text
           if (e === newest) {
             if (e.tabs && e.tabs.length > 1) text += '\n' + prompts.tabsText(e.tabs)
+            if (digest.length) text += '\n' + prompts.digestText(digest, digestDropped)
             if (notes.length) text += '\n' + prompts.notesText(notes)
           }
           const parts = [textPart(text)]
@@ -172,6 +194,8 @@ function createHistory (options) {
       return {
         entries: entries.map(e => Object.assign({}, e, { dataUrl: e.dataUrl ? 'omitted' : null })),
         notes: notes.slice(),
+        digest: digest.slice(),
+        digestDropped,
         observationCount
       }
     },
@@ -180,6 +204,8 @@ function createHistory (options) {
       if (!data || !Array.isArray(data.entries)) return this
       entries = data.entries.map(e => Object.assign({}, e))
       notes = Array.isArray(data.notes) ? data.notes.slice() : []
+      digest = Array.isArray(data.digest) ? data.digest.slice() : []
+      digestDropped = data.digestDropped || 0
       observationCount = data.observationCount || entries.filter(e => e.kind === 'observation').length
       return this
     },

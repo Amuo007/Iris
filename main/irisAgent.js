@@ -278,9 +278,20 @@ IrisComputer.prototype.screenshot = async function () {
   if (viewBounds.width && viewBounds.height) this.fallbackBounds = viewBounds
   if (!bounds || !bounds.width || !bounds.height) throw new Error('the tab has no size yet')
 
+  this.watch(wc)
   const info = irisTabInfo(this.tabId)
   const tabNote = this.tabNote
   this.tabNote = null
+
+  // a JavaScript dialog freezes the page: report it instead of waiting for a fresh frame
+  if (this.pendingDialog && this.lastObservation) {
+    const d = this.pendingDialog
+    const obs = Object.assign({}, this.lastObservation, { tabs: irisTabList(), fingerprint: null, crop: null, memos: null })
+    obs.note = 'The page opened a ' + d.type + ' dialog: "' + String(d.message || '').slice(0, 400) + '"' +
+      (d.type === 'prompt' ? ' (it asks for text; default "' + (d.defaultPrompt || '') + '")' : '') +
+      '. The page is frozen until you answer it with the dialog action (accept true = OK, false = Cancel).'
+    return obs
+  }
 
   // a brand-new tab has no page at all: describe it instead of photographing nothing
   if (!url || url === 'about:blank' || /^min:\/\/newtab/.test(url)) {
@@ -288,7 +299,7 @@ IrisComputer.prototype.screenshot = async function () {
       this.tabNote = tabNote
       throw new Error('the new tab is still opening')
     }
-    return Object.assign(this.emptyTabObservation(bounds), { tabs: irisTabList(), tabChanged: tabNote })
+    return irisAttachEvents(this, Object.assign(this.emptyTabObservation(bounds), { tabs: irisTabList(), tabChanged: tabNote }))
   }
 
   if (!this.isAttached()) {
@@ -345,6 +356,13 @@ IrisComputer.prototype.screenshot = async function () {
   const size = image.getSize()
   DBUG('capture ok ' + JSON.stringify(size) + (crop ? ' crop ' + JSON.stringify(crop) : ' view ' + bounds.width + 'x' + bounds.height) + ' url ' + url)
   const obs = this.finishCapture(image, size, crop || bounds, wc, sig)
+  irisAttachEvents(this, obs)
+  if (this.pendingChooser) {
+    const files = irisRecentFiles(12)
+    obs.note = (obs.note ? obs.note + '\n' : '') + 'A file picker is open (' + (this.pendingChooser.mode === 'selectMultiple' ? 'several files allowed' : 'one file') + '). ' +
+      'Pick a file with {"type":"upload","file":"<name>"}. Recent files: ' + (files.length ? files.map(function (f) { return f.name }).join(', ') : '(none found)') + '.'
+  }
+  if (!crop) this.lastObservation = obs
   obs.tabs = irisTabList()
   if (tabNote) obs.tabChanged = tabNote
   if (crop) {
@@ -396,6 +414,30 @@ IrisComputer.prototype.finishCapture = function (image, size, bounds, wc, sig) {
   }
 }
 
+function irisFormatBytes (n) {
+  if (!n || n < 0) return 'unknown size'
+  if (n < 1024 * 1024) return Math.max(1, Math.round(n / 1024)) + ' KB'
+  return (n / 1024 / 1024).toFixed(1) + ' MB'
+}
+
+/* Finished downloads become a line in the observation and a permanent note. */
+function irisAttachEvents (computer, obs) {
+  const events = computer.takeEvents()
+  if (computer.notes && computer.notes.length) {
+    obs.note = (obs.note ? obs.note + '\n' : '') + computer.notes.join('\n')
+    computer.notes = []
+  }
+  if (!events.length) return obs
+  const lines = events.map(function (d) {
+    return d.state === 'completed'
+      ? 'Downloaded "' + d.name + '" (' + irisFormatBytes(d.bytes) + ') to the Downloads folder.'
+      : 'The download of "' + d.name + '" failed (' + d.state + ').'
+  })
+  obs.note = (obs.note ? obs.note + '\n' : '') + lines.join('\n')
+  obs.memos = events.filter(function (d) { return d.state === 'completed' }).map(function (d) { return 'Downloaded: ' + d.name })
+  return obs
+}
+
 /* Plain words → a web search; anything that looks like an address → that address. */
 function irisResolveUrl (text) {
   const t = String(text || '').trim()
@@ -414,6 +456,7 @@ IrisComputer.prototype.act = async function (action) {
 
   switch (action.type) {
     case 'navigate': {
+      try { wc.stopFindInPage('clearSelection') } catch (e) { /* nothing to clear */ }
       const url = irisResolveUrl(action.url)
       // Min's own loader: attaches a new tab's view to the window, exactly like typing a URL
       loadURLInView(this.tabId, url, this.window())
@@ -431,6 +474,32 @@ IrisComputer.prototype.act = async function (action) {
     case 'zoom':
       this.pendingZoom = { x: action.x, y: action.y }
       return { ok: true }
+    case 'find':
+      return this.findInPage(wc, action.text)
+    case 'dialog': {
+      if (!this.pendingDialog) return { ok: false, error: 'no dialog is open' }
+      try {
+        await wc.debugger.sendCommand('Page.handleJavaScriptDialog', { accept: !!action.accept, promptText: action.text || '' })
+      } catch (e) {
+        return { ok: false, error: 'could not answer the dialog: ' + e.message }
+      }
+      this.pendingDialog = null
+      return { ok: true, pageChanged: true }
+    }
+    case 'upload': {
+      const chooser = this.pendingChooser
+      if (!chooser) return { ok: false, error: 'no file picker is open; click the upload button or "Choose file" first' }
+      const file = irisFindFile(action.file)
+      if (!file) return { ok: false, error: 'no file named "' + action.file + '" in Downloads, Desktop or Documents' }
+      try {
+        await wc.debugger.sendCommand('DOM.setFileInputFiles', { files: [file], backendNodeId: chooser.backendNodeId })
+      } catch (e) {
+        return { ok: false, error: 'could not choose the file: ' + e.message }
+      }
+      this.pendingChooser = null
+      this.notes = (this.notes || []).concat('Chose the file "' + path.basename(file) + '" in the file picker.')
+      return { ok: true, pageChanged: true }
+    }
     case 'switch_tab': {
       const tab = irisTabList()[action.tab - 1]
       if (!tab) return { ok: false, error: 'there is no tab ' + action.tab + ' (there are ' + irisTabs.tabs.length + ')' }
@@ -471,6 +540,40 @@ IrisComputer.prototype.act = async function (action) {
   return { ok: true, events: plan.length }
 }
 
+/*
+ * Find on page — the browser's own Cmd+F. Chromium scrolls the match into view and highlights
+ * it; Iris reads the match count the way a person reads "2 of 5" in the find bar.
+ */
+IrisComputer.prototype.findInPage = function (wc, text) {
+  const self = this
+  const again = this.lastFind && this.lastFind.text === text && this.lastFind.url === wc.getURL()
+  return new Promise(function (resolve) {
+    let timer = null
+    let latest = null
+    const report = function (result) {
+      clearTimeout(timer)
+      wc.removeListener('found-in-page', onFound)
+      self.lastFind = { text: text, url: wc.getURL() }
+      if (!result) {
+        self.notes = (self.notes || []).concat('Find "' + text + '": the page did not report matches yet (it may still be loading). Look at the screenshot; try again or scroll.')
+      } else {
+        self.notes = (self.notes || []).concat(result.matches
+          ? 'Find "' + text + '": match ' + result.activeMatchOrdinal + ' of ' + result.matches + ' is highlighted and scrolled into view' + (result.matches > 1 ? ' (find the same text again for the next one).' : '.')
+          : 'Find "' + text + '": no matches on this page.')
+      }
+      resolve({ ok: true })
+    }
+    const onFound = function (event, result) {
+      latest = result
+      // busy pages (ads still loading) can delay the final count; the first answer is enough
+      if (result.finalUpdate || result.matches) report(result)
+    }
+    wc.on('found-in-page', onFound)
+    timer = setTimeout(function () { report(latest) }, 6000)
+    wc.findInPage(text, { findNext: !!again, forward: true })
+  })
+}
+
 /** Wait for the page to react to an action: navigation, loading, then one paint. */
 IrisComputer.prototype.settle = async function (action) {
   let wc
@@ -501,6 +604,104 @@ IrisComputer.prototype.state = function () {
   } catch (err) {
     return { url: '', loading: false, takeoverCount: this.takeoverCount }
   }
+}
+
+/*
+ * Browser-level UI the page cannot draw: JavaScript dialogs (alert / confirm / prompt) and the
+ * operating system's file picker. Iris watches for them through the tab's DevTools channel —
+ * the same way Chrome DevTools sees a dialog — and answers them like a person clicking OK or
+ * choosing a file. Nothing in the page itself is read or changed.
+ *
+ * Native <select> pop-ups are drawn by macOS outside the page, where a screenshot cannot see
+ * them; a user-level style asks Chromium to draw them inside the page instead.
+ */
+const IRIS_SELECT_CSS = 'select, ::picker(select) { appearance: base-select; }'
+
+IrisComputer.prototype.watch = function (wc) {
+  const self = this
+  if (this.watched === wc) return
+  this.unwatch()
+  this.watched = wc
+  this.pendingDialog = null
+  this.pendingChooser = null
+  const styleSelects = function () {
+    wc.insertCSS(IRIS_SELECT_CSS, { cssOrigin: 'user' }).then(function (key) { self.cssKey = key }).catch(function () {})
+  }
+  const onMessage = function (event, method, params) {
+    if (method === 'Page.javascriptDialogOpening') {
+      self.pendingDialog = params
+    } else if (method === 'Page.javascriptDialogClosed') {
+      self.pendingDialog = null
+    } else if (method === 'Page.fileChooserOpened') {
+      self.pendingChooser = params
+    } else if (method === 'Page.frameNavigated' && params.frame && !params.frame.parentId) {
+      self.pendingChooser = null
+    }
+  }
+  try {
+    if (!wc.debugger.isAttached()) wc.debugger.attach('1.3')
+    this.attachedDebugger = true
+    wc.debugger.on('message', onMessage)
+    wc.debugger.sendCommand('Page.enable').then(function () {
+      return wc.debugger.sendCommand('Page.setInterceptFileChooserDialog', { enabled: true })
+    }).catch(function (e) { DBUG('debugger setup failed: ' + e.message) })
+  } catch (e) {
+    this.attachedDebugger = false
+    DBUG('debugger attach failed: ' + e.message)
+  }
+  wc.on('dom-ready', styleSelects)
+  styleSelects()
+  this.unwatchFn = function () {
+    try { wc.removeListener('dom-ready', styleSelects) } catch (e) { /* gone */ }
+    try { wc.debugger.removeListener('message', onMessage) } catch (e) { /* gone */ }
+    try { if (self.attachedDebugger && wc.debugger.isAttached()) wc.debugger.detach() } catch (e) { /* gone */ }
+    try { if (self.cssKey) wc.removeInsertedCSS(self.cssKey) } catch (e) { /* gone */ }
+  }
+}
+
+IrisComputer.prototype.unwatch = function () {
+  if (this.unwatchFn) this.unwatchFn()
+  this.unwatchFn = null
+  this.watched = null
+  this.cssKey = null
+}
+
+/* Files Iris may offer for an upload: the most recent ones in Downloads, Desktop and Documents. */
+function irisRecentFiles (limit) {
+  const dirs = ['downloads', 'desktop', 'documents'].map(function (k) { try { return app.getPath(k) } catch (e) { return null } }).filter(Boolean)
+  const files = []
+  dirs.forEach(function (dir) {
+    let names = []
+    try { names = fs.readdirSync(dir) } catch (e) { return }
+    names.forEach(function (n) {
+      if (n[0] === '.') return
+      try {
+        const full = path.join(dir, n)
+        const st = fs.statSync(full)
+        if (st.isFile()) files.push({ name: n, path: full, mtime: st.mtimeMs, size: st.size })
+      } catch (e) { /* unreadable */ }
+    })
+  })
+  files.sort(function (a, b) { return b.mtime - a.mtime })
+  return files.slice(0, limit || 15)
+}
+
+function irisFindFile (name) {
+  const wanted = String(name || '').trim().replace(/^~(?=\/)/, app.getPath('home'))
+  if (path.isAbsolute(wanted)) return fs.existsSync(wanted) ? wanted : null
+  const all = irisRecentFiles(400)
+  const exact = all.find(function (f) { return f.name === wanted })
+  if (exact) return exact.path
+  const lower = wanted.toLowerCase()
+  const loose = all.find(function (f) { return f.name.toLowerCase() === lower }) || all.find(function (f) { return f.name.toLowerCase().indexOf(lower) !== -1 })
+  return loose ? loose.path : null
+}
+
+/** Things that happened outside the page since the last look (finished downloads). */
+IrisComputer.prototype.takeEvents = function () {
+  const done = this.downloads || []
+  this.downloads = []
+  return done
 }
 
 IrisComputer.prototype.noteHumanInput = function (info) {
@@ -786,6 +987,8 @@ function irisSystemExtra (mode) {
   if (profile) parts.push(profile)
   const modeText = irisPrompts.modeText(mode)
   if (modeText) parts.push(modeText)
+  const rules = String(settings.get('irisRules') || '').trim()
+  if (rules) parts.push('Rules from the user. Always follow these, they override everything else:\n' + rules)
   return parts.join('\n\n')
 }
 
@@ -874,6 +1077,9 @@ function startAgent (task, options) {
     history: { keepImages: cfg.keepImages, maxMessages: unlimited ? 60 : 40 },
     log: DBUG,
     onEvent: function (type, payload) {
+      if (type === 'thought' && payload.usage) {
+        DBUG('usage step ' + payload.step + ' prompt=' + payload.usage.prompt_tokens + ' completion=' + payload.usage.completion_tokens + ' ms=' + payload.modelMs)
+      }
       if (type !== 'model:progress') DBUG('event ' + type + ' ' + JSON.stringify(payload && (payload.status || payload.description || payload.error || payload.thought || '') || ''))
       irisRecord(session, type, payload)
       if (type === 'run:end') {
@@ -882,6 +1088,7 @@ function startAgent (task, options) {
         irisAgentState.reason = payload.reason
         irisAgentState.steps = payload.steps
         hideOverlay()
+        computer.unwatch()
         if (irisInputBinding) { irisInputBinding.detach(); irisInputBinding = null }
         session.history = agent.exportHistory()
         irisSessionSave(session, true)
@@ -971,6 +1178,14 @@ ipc.on('iris-agent-stop', function (event) {
   event.reply('iris-agent-control-reply', { ok: true, status: irisAgentState.status })
 })
 
+ipc.on('iris-agent-answer', function (event, text) {
+  if (irisAgent && irisIsBusy()) irisAgent.answer(text)
+  if (irisSession && text) {
+    irisSession.items.push({ kind: 'user', text: text, run: irisSession.run, answer: true })
+    irisSessionSave(irisSession)
+  }
+})
+
 ipc.on('iris-agent-status', function (event) {
   event.reply('iris-agent-status-reply', agentStatus())
 })
@@ -1036,6 +1251,45 @@ ipc.on('iris-profile-set', function (event, data) {
 /* the model config can change while a run is idle; pick it up immediately */
 settings.listen('irisAI', function () {
   broadcast('iris-agent-settings', irisSettings())
+})
+
+/* ------------------------------------------------------------------ *
+ * Downloads while Iris works: straight to ~/Downloads, no save dialog
+ * (a native dialog is invisible to a screenshot-driven agent)
+ * ------------------------------------------------------------------ */
+
+function irisOnDownload (event, item) {
+  if (!irisIsBusy() || !irisComputer) return
+  const computer = irisComputer
+  try {
+    const dir = app.getPath('downloads')
+    const name = (item.getFilename() || 'download').replace(/[/\\:]/g, '_')
+    const ext = path.extname(name)
+    const base = path.basename(name, ext)
+    let target = path.join(dir, name)
+    for (let i = 1; fs.existsSync(target) && i < 500; i++) target = path.join(dir, base + ' (' + i + ')' + ext)
+    item.setSavePath(target)
+  } catch (e) {
+    DBUG('download path failed: ' + e.message)
+  }
+  broadcastEvent({ type: 'download', state: 'started', name: item.getFilename() })
+  item.once('done', function (e, state) {
+    const rec = { name: path.basename(item.getSavePath() || item.getFilename()), state: state, bytes: item.getReceivedBytes(), path: item.getSavePath() }
+    computer.downloads = (computer.downloads || []).concat(rec)
+    DBUG('download ' + state + ': ' + rec.path)
+    broadcastEvent(Object.assign({ type: 'download' }, rec))
+    if (irisSession && state === 'completed') {
+      irisSession.items.push({ kind: 'note', text: 'Downloaded ' + rec.name + ' (' + irisFormatBytes(rec.bytes) + ')' })
+      irisSessionSave(irisSession)
+    }
+  })
+}
+
+app.whenReady().then(function () {
+  session.defaultSession.on('will-download', irisOnDownload)
+})
+app.on('session-created', function (ses) {
+  ses.on('will-download', irisOnDownload)
 })
 
 /* ------------------------------------------------------------------ *

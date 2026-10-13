@@ -33,6 +33,16 @@ function tabsText (tabs) {
   }).join('  ')
 }
 
+const { describeAction } = require('./actionSchema')
+
+function digestLine (action, thought) {
+  return describeAction(action) + (thought ? ' — ' + String(thought).slice(0, 90) : '')
+}
+
+function digestText (lines, dropped) {
+  return 'Earlier steps (summary' + (dropped ? ', plus ' + dropped + ' older ones' : '') + '):\n' + lines.join('\n')
+}
+
 function notesText (notes) {
   return 'Your notes so far:\n' + notes.map(function (n) { return '- ' + n }).join('\n')
 }
@@ -52,7 +62,8 @@ function profileText (profile) {
 function modeText (mode) {
   if (mode === 'continuous') {
     return 'This is a long, autonomous run with no step limit. Keep working until the task is fully done. ' +
-      'Save every useful finding with "remember" so nothing is lost. Reply "done" only when there is nothing left to do, with a full report.'
+      'Save every useful finding with "remember" so nothing is lost, and check your notes so you never repeat work (for example, never download the same file twice). ' +
+      'Reply "done" only when there is truly nothing left to do, with a full report.'
   }
   return ''
 }
@@ -105,6 +116,8 @@ module.exports = {
   systemPrompt,
   taskMessage,
   followUpMessage,
+  digestLine,
+  digestText,
   tabsText,
   notesText,
   profileText,
