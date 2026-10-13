@@ -388,6 +388,7 @@ function createAgent (opts) {
         history.addNote(parsed.remember)
         emit('remember', { step: state.step, note: parsed.remember })
       }
+      if (parsed.learn) emit('learn', { step: state.step, tip: parsed.learn, url: obs.url })
       const batch = parsed.actions && parsed.actions.length ? parsed.actions : [parsed.action]
       emit('thought', { step: state.step, thought: parsed.thought, action: parsed.action, actions: batch, reasoning, usage, modelMs })
 

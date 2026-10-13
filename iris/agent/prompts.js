@@ -49,6 +49,10 @@ function filesText (files) {
     (files.length > shown.length ? '… ' : '') + shown.join(', ')
 }
 
+function skillsText (skills) {
+  return 'What you learned before on ' + skills.site + ':\n' + skills.tips.map(function (t) { return '- ' + t }).join('\n')
+}
+
 function notesText (notes) {
   return 'Your notes so far:\n' + notes.map(function (n) { return '- ' + n }).join('\n')
 }
@@ -125,6 +129,7 @@ module.exports = {
   digestLine,
   digestText,
   filesText,
+  skillsText,
   tabsText,
   notesText,
   profileText,

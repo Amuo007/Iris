@@ -602,6 +602,7 @@ function parseAction (rawText, limits) {
     }
 
     const remember = toStringValue(obj.remember ?? obj.note ?? obj.memory)
+    const learn = toStringValue(obj.learn ?? obj.skill ?? obj.lesson)
 
     if (batch) {
       const actions = []
@@ -614,7 +615,7 @@ function parseAction (rawText, limits) {
         if (PAGE_CHANGING.has(res.action.type) || TERMINAL.has(res.action.type)) break
       }
       if (bad || !actions.length) { errors.push(bad || 'empty actions list'); continue }
-      return { ok: true, action: actions[0], actions, thought, remember: remember || null }
+      return { ok: true, action: actions[0], actions, thought, remember: remember || null, learn: learn || null }
     }
 
     if (!actionObj) { errors.push('no "action" field'); continue }
@@ -622,7 +623,7 @@ function parseAction (rawText, limits) {
     const res = validateAction(actionObj, limits)
     if (!res.ok) { errors.push(res.error); continue }
 
-    return { ok: true, action: res.action, actions: [res.action], thought: thought, remember: remember || null }
+    return { ok: true, action: res.action, actions: [res.action], thought: thought, remember: remember || null, learn: learn || null }
   }
 
   return { ok: false, error: errors[errors.length - 1] || 'could not extract a valid action' }
@@ -669,6 +670,8 @@ const ACTION_SPEC_TEXT = [
   'To do several things on the SAME screen in one go (fill a form, then submit), send a list instead:',
   '{"thought":"...","actions":[{...},{...},{...}]}     (max 6; stops after anything that changes the page)',
   'Optional: "remember":"<fact worth keeping>" saves a note you will see on every later step.',
+  'Optional: "learn":"<short tip about THIS website>" saves a skill for next time, e.g. a direct URL that',
+  'goes straight to results, or where a hidden button is. Only real, reusable shortcuts; you will see them next visit.',
   '',
   'Actions. x/y are pixel positions in the screenshot, from its top-left corner:',
   '  click        {"x":int,"y":int}',
@@ -714,7 +717,8 @@ const ACTION_SPEC_TEXT = [
   '- To upload a file, click the upload button or "Choose file"; Iris then lists files you can pick with upload.',
   '- Date and time fields: click the field and type the digits (for 23 Oct 2026 type "10232026"); do not use the calendar pop-up.',
   '- Never try to solve a CAPTCHA or "verify you are human" check yourself: use ask_user so the user can do it.',
-  '- As soon as the screenshot shows the answer, reply "done" with the answer.'
+  '- As soon as the screenshot shows the answer, reply "done" with the answer. If you found a faster way',
+  '  around this site than the obvious one, include "learn" in that same reply.'
 ].join('\n')
 
 module.exports = {

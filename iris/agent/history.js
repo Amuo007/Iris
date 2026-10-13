@@ -141,6 +141,7 @@ function createHistory (options) {
         index: observationCount,
         text: prompts.observationIntro(obs, step || observationCount, { maxSteps: cfg.maxSteps }) + (extra.length ? '\n' + extra.join('\n') : ''),
         tabs: obs && obs.tabs ? obs.tabs : null,
+        skills: obs && obs.skills && obs.skills.tips && obs.skills.tips.length ? obs.skills : null,
         dataUrl: obs && obs.dataUrl ? obs.dataUrl : null,
         url: obs && obs.url,
         loading: !!(obs && obs.loading)
@@ -192,6 +193,7 @@ function createHistory (options) {
           let text = e.text
           if (e === newest) {
             if (e.tabs && e.tabs.length > 1) text += '\n' + prompts.tabsText(e.tabs)
+            if (e.skills) text += '\n' + prompts.skillsText(e.skills)
             if (digest.length) text += '\n' + prompts.digestText(digest, digestDropped)
             if (files.length) text += '\n' + prompts.filesText(files)
             if (notes.length) text += '\n' + prompts.notesText(notes)

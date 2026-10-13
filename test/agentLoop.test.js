@@ -513,3 +513,17 @@ test('ask_user pauses with the question and the answer reaches the model', async
   assert.strictEqual(result.status, 'done')
   assert.match(h.msgs, /The user says: 482913/)
 })
+
+test('a learned tip is emitted, and site skills are shown on the newest step only', async () => {
+  const h = harness([
+    JSON.stringify({ thought: 'search url', learn: 'Search directly with /search?q=TERM', action: { type: 'scroll', direction: 'down' } }),
+    (ctx) => { h.msgs = ctx.messages; return json('done', { type: 'done' }) }
+  ])
+  const shot = h.computer.screenshot.bind(h.computer)
+  h.computer.screenshot = function () { return Object.assign(shot(), { skills: { site: 'example.com', tips: ['PDF button is top right'] } }) }
+  await h.agent.run('use skills')
+  assert.strictEqual(ev(h.events, 'learn')[0].tip, 'Search directly with /search?q=TERM')
+  const texts = h.msgs.filter(m => Array.isArray(m.content)).map(m => m.content[0].text)
+  assert.strictEqual(texts.filter(t => /What you learned before on example.com/.test(t)).length, 1)
+  assert.match(texts[texts.length - 1], /PDF button is top right/)
+})

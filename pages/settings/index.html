@@ -99,6 +99,10 @@
         <span class="iris-inline-status" id="iris-connection-status"></span>
       </div>
 
+      <h4 class="iris-subhead" id="iris-usage">Usage</h4>
+      <div class="setting-secondary-label">What Iris has used on your model server.</div>
+      <table class="iris-usage" id="iris-usage-table"></table>
+
       <h4 class="iris-subhead" id="iris-rules">Rules</h4>
       <div class="setting-secondary-label">
         Things Iris must always or never do, one per line. For example: "Never delete emails",
@@ -118,6 +122,13 @@
         <button class="iris-button iris-primary" id="iris-profile-save" type="button">Save my info</button>
         <span class="iris-inline-status" id="iris-profile-status"></span>
       </div>
+
+      <h4 class="iris-subhead" id="iris-skills">Skills</h4>
+      <div class="setting-secondary-label">
+        Shortcuts Iris learned about websites (a direct search URL, where a button is). It sees them
+        the next time it visits that site, so repeat tasks get faster. Remove any that are wrong.
+      </div>
+      <div id="iris-skills-list" class="iris-rows"></div>
 
       <h4 class="iris-subhead" id="iris-schedule">Schedule</h4>
       <div class="setting-secondary-label">

@@ -805,6 +805,82 @@ settings.listen('irisAI', function (value) {
   irisRenderAll()
 })
 
+/* --- Usage ------------------------------------------------------------- */
+
+function irisFormatCount (n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + 'M'
+  if (n >= 1e4) return Math.round(n / 1e3) + 'K'
+  return String(n)
+}
+
+function irisRenderUsage (usage) {
+  var days = (usage && usage.days) || {}
+  var keyOf = function (d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') }
+  var sum = function (n) {
+    var t = { tasks: 0, requests: 0, input: 0, output: 0, ms: 0 }
+    Object.keys(days).forEach(function (k) {
+      if (n !== null) {
+        var cutoff = new Date()
+        cutoff.setDate(cutoff.getDate() - (n - 1))
+        if (k < keyOf(cutoff)) return
+      }
+      Object.keys(t).forEach(function (f) { t[f] += days[k][f] || 0 })
+    })
+    return t
+  }
+  var rows = [['Today', sum(1)], ['Last 7 days', sum(7)], ['Last 30 days', sum(30)], ['All time', sum(null)]]
+  var html = '<tr><th></th><th>Tasks</th><th>Requests</th><th>Input tokens</th><th>Output tokens</th><th>Avg. per step</th></tr>'
+  rows.forEach(function (r) {
+    var t = r[1]
+    html += '<tr><th>' + r[0] + '</th><td>' + irisFormatCount(t.tasks) + '</td><td>' + irisFormatCount(t.requests) + '</td><td>' + irisFormatCount(t.input) +
+      '</td><td>' + irisFormatCount(t.output) + '</td><td>' + (t.requests ? (t.ms / t.requests / 1000).toFixed(1) + ' s' : '–') + '</td></tr>'
+  })
+  document.getElementById('iris-usage-table').innerHTML = html
+}
+
+settings.listen('irisUsage', irisRenderUsage)
+
+/* --- Skills ------------------------------------------------------------ */
+
+var irisSkillsList = document.getElementById('iris-skills-list')
+
+function irisRenderSkills (all) {
+  all = all || {}
+  irisSkillsList.innerHTML = ''
+  var sites = Object.keys(all).filter(function (k) { return all[k] && all[k].length })
+  if (!sites.length) {
+    irisSkillsList.textContent = 'Nothing learned yet.'
+    return
+  }
+  sites.sort().forEach(function (site) {
+    all[site].forEach(function (t, i) {
+      var row = document.createElement('div')
+      row.className = 'iris-row iris-skill-row'
+      var name = document.createElement('b')
+      name.textContent = site
+      var tip = document.createElement('span')
+      tip.className = 'iris-skill-tip'
+      tip.textContent = t.tip
+      var del = document.createElement('button')
+      del.type = 'button'
+      del.className = 'iris-row-delete'
+      del.title = 'Forget this'
+      del.textContent = '×'
+      del.addEventListener('click', function () {
+        var copy = JSON.parse(JSON.stringify(all))
+        copy[site].splice(i, 1)
+        settings.set('irisSkills', copy)
+      })
+      row.appendChild(name)
+      row.appendChild(tip)
+      row.appendChild(del)
+      irisSkillsList.appendChild(row)
+    })
+  })
+}
+
+settings.listen('irisSkills', irisRenderSkills)
+
 /* --- Rules ------------------------------------------------------------- */
 
 var irisRulesText = document.getElementById('iris-rules-text')

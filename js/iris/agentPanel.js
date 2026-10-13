@@ -728,6 +728,9 @@ function handleEvent (payload) {
     case 'remember':
       if (!payload.automatic) addNote('Noted: ' + payload.note, 'memo')
       break
+    case 'learn':
+      addNote('Learned for next time: ' + payload.tip, 'memo')
+      break
     case 'download':
       if (payload.state === 'started') setStatus(keep, 'Downloading ' + (payload.name || 'a file') + '…')
       else if (payload.state === 'completed') addNote('Downloaded ' + payload.name + ' to your Downloads folder', 'memo')

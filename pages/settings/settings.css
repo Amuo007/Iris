@@ -343,3 +343,34 @@ html {
   color: inherit;
   resize: vertical;
 }
+
+table.iris-usage {
+  border-collapse: collapse;
+  margin: 0.7rem 0 0.3rem;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+table.iris-usage th,
+table.iris-usage td {
+  padding: 0.35em 0.9em 0.35em 0;
+  text-align: right;
+  border-bottom: 1px solid rgba(127, 127, 127, 0.18);
+}
+table.iris-usage th:first-child {
+  text-align: left;
+  font-weight: 600;
+}
+table.iris-usage tr:first-child th {
+  font-weight: 500;
+  opacity: 0.65;
+}
+.iris-skill-row b {
+  flex: 0 0 170px;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.iris-skill-tip {
+  flex: 1;
+  font-size: 0.85rem;
+}

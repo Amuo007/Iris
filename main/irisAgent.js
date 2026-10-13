@@ -164,6 +164,110 @@ function irisFillSecrets (text) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Skills: short tips Iris learned about each website, offered on the next visit
+ * ------------------------------------------------------------------ */
+
+function irisSkillsPath () {
+  return path.join(userDataPath, 'iris-skills.json')
+}
+
+function irisSkillsLoad () {
+  try { return JSON.parse(fs.readFileSync(irisSkillsPath(), 'utf8')) || {} } catch (e) { return {} }
+}
+
+function irisSiteOf (url) {
+  try { return new URL(url).hostname.replace(/^www\./, '') || null } catch (e) { return null }
+}
+
+function irisSkillsFor (url) {
+  const site = irisSiteOf(url)
+  if (!site) return null
+  const all = irisSkillsLoad()
+  const tips = (all[site] || []).map(function (t) { return t.tip })
+  return tips.length ? { site: site, tips: tips } : null
+}
+
+/* host + path + parameter names of the first URL in a tip: "the same kind of link" */
+function irisUrlShape (text) {
+  const m = /https?:\/\/[^\s]+/.exec(String(text || ''))
+  if (!m) return null
+  try {
+    const u = new URL(m[0])
+    return u.hostname + u.pathname + '?' + Array.from(u.searchParams.keys()).sort().join('&')
+  } catch (e) { return null }
+}
+
+/** Tips for every site the task names (e.g. "on arxiv.org" → arxiv.org and export.arxiv.org). */
+function irisSkillsForTask (task) {
+  const all = irisSkillsLoad()
+  const words = String(task || '').toLowerCase()
+  const lines = []
+  Object.keys(all).forEach(function (site) {
+    const parts = site.split('.')
+    const name = parts.length > 1 ? parts[parts.length - 2] : site
+    if (name.length >= 3 && words.indexOf(name) !== -1) {
+      ;(all[site] || []).forEach(function (t) { lines.push('- ' + site + ': ' + t.tip) })
+    }
+  })
+  return lines.length ? 'Skills you learned before for this task:\n' + lines.slice(0, 15).join('\n') : ''
+}
+
+function irisLearn (url, tip) {
+  const site = irisSiteOf(url)
+  const text = String(tip || '').trim().slice(0, 240)
+  if (!site || !text) return
+  const all = irisSkillsLoad()
+  let list = all[site] || []
+  if (list.some(function (t) { return t.tip.toLowerCase() === text.toLowerCase() })) return
+  // one tip per kind of URL: a newer search URL with the same shape replaces the older one
+  const shape = irisUrlShape(text)
+  if (shape) list = list.filter(function (t) { return irisUrlShape(t.tip) !== shape })
+  list.push({ tip: text, added: Date.now() })
+  all[site] = list.slice(-12)
+  try { fs.writeFileSync(irisSkillsPath(), JSON.stringify(all, null, 1)) } catch (e) { DBUG('skills save failed: ' + e.message) }
+  settings.set('irisSkills', all)
+}
+
+/* the settings page removes tips through the synced setting; keep the file in step */
+settings.listen('irisSkills', function (value) {
+  if (!value || typeof value !== 'object') return
+  try { fs.writeFileSync(irisSkillsPath(), JSON.stringify(value, null, 1)) } catch (e) { /* ignore */ }
+})
+
+/* ------------------------------------------------------------------ *
+ * Usage: requests and tokens per day, shown in Settings → Iris AI → Usage
+ * ------------------------------------------------------------------ */
+
+function irisUsagePath () {
+  return path.join(userDataPath, 'iris-usage.json')
+}
+
+var irisUsage = null
+var irisUsageTimer = null
+function irisUsageRecord (kind, data) {
+  if (!irisUsage) {
+    try { irisUsage = JSON.parse(fs.readFileSync(irisUsagePath(), 'utf8')) } catch (e) { irisUsage = { days: {} } }
+  }
+  const d = new Date()
+  const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+  const day = irisUsage.days[key] || (irisUsage.days[key] = { tasks: 0, requests: 0, input: 0, output: 0, ms: 0 })
+  if (kind === 'task') day.tasks++
+  if (kind === 'request') {
+    day.requests++
+    day.input += (data && data.prompt_tokens) || 0
+    day.output += (data && data.completion_tokens) || 0
+    day.ms += (data && data.ms) || 0
+  }
+  if (!irisUsageTimer) {
+    irisUsageTimer = setTimeout(function () {
+      irisUsageTimer = null
+      try { fs.writeFileSync(irisUsagePath(), JSON.stringify(irisUsage)) } catch (e) { /* retry next time */ }
+      settings.set('irisUsage', irisUsage)
+    }, 10000)
+  }
+}
+
+/* ------------------------------------------------------------------ *
  * Tabs, as the browser UI reports them
  * ------------------------------------------------------------------ */
 
@@ -358,6 +462,7 @@ IrisComputer.prototype.screenshot = async function () {
   DBUG('capture ok ' + JSON.stringify(size) + (crop ? ' crop ' + JSON.stringify(crop) : ' view ' + bounds.width + 'x' + bounds.height) + ' url ' + url)
   const obs = this.finishCapture(image, size, crop || bounds, wc, sig)
   irisAttachEvents(this, obs)
+  obs.skills = irisSkillsFor(obs.url)
   if (this.pendingChooser) {
     const files = irisRecentFiles(12)
     obs.note = (obs.note ? obs.note + '\n' : '') + 'A file picker is open (' + (this.pendingChooser.mode === 'selectMultiple' ? 'several files allowed' : 'one file') + '). ' +
@@ -989,7 +1094,7 @@ function irisBindInput (tabId, cfg) {
   }
 }
 
-function irisSystemExtra (mode) {
+function irisSystemExtra (mode, task) {
   const parts = []
   const now = new Date()
   parts.push('Today is ' + now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + '.')
@@ -1003,6 +1108,8 @@ function irisSystemExtra (mode) {
       ? 'When a site needs an account, log in with the user\'s saved email or username and password. Never create new accounts; if logging in fails, use ask_user.'
       : 'When a site needs an account, first log in with the user\'s saved email or username and password. If the user has no account there, sign up with their saved details (name, email, password, and anything else the form asks that you know), accept the usual terms, then continue the task. If a sign-up asks for something you do not know, or sends a verification code or email link, use ask_user.')
   }
+  const skills = irisSkillsForTask(task)
+  if (skills) parts.push(skills)
   const rules = String(settings.get('irisRules') || '').trim()
   if (rules) parts.push('Rules from the user. Always follow these, they override everything else:\n' + rules)
   return parts.join('\n\n')
@@ -1081,7 +1188,7 @@ function startAgent (task, options) {
   const agent = irisLoop.createAgent({
     model: model,
     computer: computer,
-    config: { systemExtra: function () { return irisSystemExtra(mode) }, maxServerWaitMs: unlimited ? 0 : 10 * 60 * 1000 },
+    config: { systemExtra: function () { return irisSystemExtra(mode, session.title + '\n' + task) }, maxServerWaitMs: unlimited ? 0 : 10 * 60 * 1000 },
     safety: {
       maxSteps: unlimited ? 0 : cfg.maxSteps,
       maxModelMsPerStep: cfg.modelTimeoutMs + 5000,
@@ -1093,6 +1200,18 @@ function startAgent (task, options) {
     history: { keepImages: cfg.keepImages, maxMessages: unlimited ? 30 : 40 },
     log: DBUG,
     onEvent: function (type, payload) {
+      if (type === 'run:start') { irisUsageRecord('task'); session.runUrls = [] }
+      // remember direct URLs that led to a successful answer: next time they are the shortcut
+      if (type === 'action' && payload.action && payload.action.type === 'navigate') {
+        const resolved = irisResolveUrl(payload.action.url)
+        if (/\?/.test(resolved) && !/duckduckgo\.com\/\?q=/.test(resolved)) (session.runUrls = session.runUrls || []).push(resolved)
+      }
+      if (type === 'run:end' && payload.status === 'done' && session.runUrls && session.runUrls.length) {
+        session.runUrls.slice(-2).forEach(function (u) { irisLearn(u, 'A direct URL that worked before (change the search words): ' + u.slice(0, 200)) })
+        session.runUrls = []
+      }
+      if (type === 'learn') irisLearn(payload.url, payload.tip)
+      if (type === 'thought' && payload.usage) irisUsageRecord('request', Object.assign({ ms: payload.modelMs }, payload.usage))
       if (type === 'thought' && payload.usage) {
         DBUG('usage step ' + payload.step + ' prompt=' + payload.usage.prompt_tokens + ' completion=' + payload.usage.completion_tokens + ' ms=' + payload.modelMs)
       }
