@@ -67,6 +67,7 @@ const ACTION_LABELS = {
   back: 'Back',
   zoom: 'Zoom in',
   find: 'Find',
+  save_account: 'Saved account',
   dialog: 'Answer dialog',
   upload: 'Upload',
   ask_user: 'Asking you',
@@ -842,6 +843,21 @@ function bindProfileBridge () {
   webviews.bindIPC('irisProfileSet', function (tabId, args) {
     if (!urlParser.isInternalURL(tabs.get(tabId).url)) return
     ipc.send('iris-profile-set', { tabId, fields: args[0] && args[0].fields })
+  })
+  const forward = {
+    irisAccountsGet: 'iris-accounts-get',
+    irisAccountReveal: 'iris-account-reveal',
+    irisAccountDelete: 'iris-account-delete'
+  }
+  Object.keys(forward).forEach(function (name) {
+    webviews.bindIPC(name, function (tabId, args) {
+      if (!urlParser.isInternalURL(tabs.get(tabId).url)) return
+      ipc.send(forward[name], Object.assign({ tabId }, args[0] || {}))
+    })
+  })
+  ipc.on('iris-accounts-data', function (e, data) {
+    if (!data || !data.tabId || !tabs.get(data.tabId)) return
+    webviews.callAsync(data.tabId, 'send', ['irisAccountsData', { accounts: data.accounts, revealed: data.revealed }])
   })
   ipc.on('iris-profile-data', function (e, data) {
     if (!data || !data.tabId || !tabs.get(data.tabId)) return

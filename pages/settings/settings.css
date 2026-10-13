@@ -374,3 +374,36 @@ table.iris-usage tr:first-child th {
   flex: 1;
   font-size: 0.85rem;
 }
+
+.iris-account-row b {
+  flex: 0 0 160px;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.iris-account-user {
+  flex: 0 0 220px;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.iris-account-pw {
+  flex: 1;
+  font: 0.85rem "SF Mono", ui-monospace, Menlo, monospace;
+  opacity: 0.85;
+}
+
+/* Iris: the same white / black as the browser chrome */
+body {
+  background-color: #ffffff;
+}
+body.dark-mode {
+  background-color: #000000;
+  color: #f5f5f5;
+}
+body.dark-mode #iris-ai-settings-container input,
+body.dark-mode #iris-ai-settings-container select,
+body.dark-mode #iris-ai-settings-container textarea {
+  background-color: #111111;
+  border-color: #2a2a2a;
+}

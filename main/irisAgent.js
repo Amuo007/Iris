@@ -34,6 +34,7 @@ const IRIS_DEFAULT_SETTINGS = {
   apiKey: '',
   thinking: 'low', // off | low | medium | full
   accountMode: 'signup', // login: log in only · signup: log in, or create an account with My info
+  emailAccess: false, // may Iris open the user's inbox to read sign-up codes and links?
   maxSteps: 40,
   maxMinutes: 20,
   temperature: 0.2,
@@ -85,7 +86,8 @@ const IRIS_DEFAULT_PROFILE = [
   { label: 'Phone', value: '', secret: false },
   { label: 'Address', value: '', secret: false },
   { label: 'Username', value: '', secret: false },
-  { label: 'Password', value: '', secret: true }
+  { label: 'Password', value: '', secret: true },
+  { label: 'Email inbox URL', value: '', secret: false }
 ]
 
 function irisProfilePath () {
@@ -161,6 +163,57 @@ function irisFillSecrets (text) {
     const hit = profile.find(function (f) { return f.label.toLowerCase() === key })
     return hit && hit.value ? hit.value : all
   })
+}
+
+/* ------------------------------------------------------------------ *
+ * Accounts Iris created, so the user can find them later (Settings → Accounts)
+ * ------------------------------------------------------------------ */
+
+/* never treat a payment-looking placeholder as an account password */
+function irisCardLikeLabel (text) {
+  return /\{\{\s*(card|cvc|cvv|expiry)/i.test(String(text || ''))
+}
+
+function irisAccountsPath () {
+  return path.join(userDataPath, 'iris-accounts.json')
+}
+
+function irisAccountsLoad () {
+  try { return JSON.parse(fs.readFileSync(irisAccountsPath(), 'utf8')).accounts || [] } catch (e) { return [] }
+}
+
+function irisAccountSave (rec) {
+  const list = irisAccountsLoad().filter(function (a) { return !(a.site === rec.site && a.username === rec.username) })
+  const pw = String(rec.password || '')
+  const ref = /^\{\{\s*([^}]+?)\s*\}\}$/.exec(pw)
+  list.push({
+    site: rec.site,
+    username: rec.username,
+    url: rec.url || '',
+    // a placeholder points at My info; anything else is kept encrypted like other secrets
+    passwordRef: ref ? ref[1] : null,
+    password: ref ? '' : irisEncrypt(pw),
+    created: Date.now()
+  })
+  fs.writeFileSync(irisAccountsPath(), JSON.stringify({ accounts: list }, null, 1), { mode: 0o600 })
+}
+
+/* For the settings page: everything except the passwords themselves. */
+function irisAccountsForPage () {
+  return irisAccountsLoad().map(function (a) {
+    return { site: a.site, username: a.username, url: a.url, created: a.created, passwordFrom: a.passwordRef ? 'My info › ' + a.passwordRef : (a.password ? 'saved here' : '') }
+  })
+}
+
+/* "Show" in settings: the one password the user asked to see. */
+function irisAccountPassword (site, username) {
+  const a = irisAccountsLoad().find(function (x) { return x.site === site && x.username === username })
+  if (!a) return ''
+  if (a.passwordRef) {
+    const f = irisProfileLoad().find(function (p) { return p.label.toLowerCase() === a.passwordRef.toLowerCase() })
+    return f ? f.value : ''
+  }
+  return irisDecrypt(a.password)
 }
 
 /* ------------------------------------------------------------------ *
@@ -582,6 +635,14 @@ IrisComputer.prototype.act = async function (action) {
       return { ok: true }
     case 'find':
       return this.findInPage(wc, action.text)
+    case 'save_account':
+      try {
+        irisAccountSave({ site: action.site, username: action.username, password: action.password, url: wc.getURL() })
+      } catch (e) {
+        return { ok: false, error: 'could not save the account: ' + e.message }
+      }
+      this.notes = (this.notes || []).concat('Saved the account for ' + action.site + ' (' + action.username + ') in Settings → Accounts.')
+      return { ok: true }
     case 'dialog': {
       if (!this.pendingDialog) return { ok: false, error: 'no dialog is open' }
       try {
@@ -1106,7 +1167,10 @@ function irisSystemExtra (mode, task) {
   if (irisProfileForPrompt().length) {
     parts.push(accountMode === 'login'
       ? 'When a site needs an account, log in with the user\'s saved email or username and password. Never create new accounts; if logging in fails, use ask_user.'
-      : 'When a site needs an account, first log in with the user\'s saved email or username and password. If the user has no account there, sign up with their saved details (name, email, password, and anything else the form asks that you know), accept the usual terms, then continue the task. If a sign-up asks for something you do not know, or sends a verification code or email link, use ask_user.')
+      : 'When a site needs an account, first log in with the user\'s saved email or username and password. If the user has no account there, sign up with their saved details (name, email, password, and anything else the form asks that you know), accept the usual terms, then continue the task. If a sign-up asks for something you do not know, use ask_user. After creating an account, record it with save_account.')
+    parts.push(irisSettings().emailAccess
+      ? 'If a site emails a verification code or link: open a new tab, go to the user\'s email inbox (the "Email inbox URL" in their details, or their usual webmail), sign in with their saved details if needed, open the newest message from that site, read the code or click the link, then close that tab and switch back. Codes sent by text message or phone: use ask_user.'
+      : 'If a site sends a verification code or link (email or phone), use ask_user: the user will tell you the code or open the link.')
   }
   const skills = irisSkillsForTask(task)
   if (skills) parts.push(skills)
@@ -1205,6 +1269,31 @@ function startAgent (task, options) {
       if (type === 'action' && payload.action && payload.action.type === 'navigate') {
         const resolved = irisResolveUrl(payload.action.url)
         if (/\?/.test(resolved) && !/duckduckgo\.com\/\?q=/.test(resolved)) (session.runUrls = session.runUrls || []).push(resolved)
+      }
+      // a sign-up during this run is recorded even if the model forgets save_account
+      if (type === 'thought' && payload.thought && /sign ?up|create (an |your |a new )?account|register|create one/i.test(payload.thought)) {
+        session.signup = session.signup || { saved: false }
+        session.signup.active = true
+      }
+      if (type === 'action' && payload.action && session.signup && session.signup.active) {
+        const a = payload.action
+        if (a.type === 'save_account') session.signup.saved = true
+        if (a.type === 'type' && /\{\{[^}]+\}\}/.test(a.text) && !irisCardLikeLabel(a.text)) {
+          session.signup.password = a.text.trim()
+          session.signup.site = irisSiteOf(computer.state().url)
+        } else if (a.type === 'type' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.text.trim())) {
+          session.signup.username = a.text.trim()
+        }
+      }
+      if (type === 'run:end' && session.signup) {
+        const su = session.signup
+        if (payload.status === 'done' && !su.saved && su.site && su.username && su.password) {
+          try {
+            irisAccountSave({ site: su.site, username: su.username, password: su.password, url: computer.state().url })
+            broadcastEvent({ type: 'remember', note: 'Saved the new ' + su.site + ' account in Settings → Accounts', sessionId: session.id })
+          } catch (e) { DBUG('auto account save failed: ' + e.message) }
+        }
+        session.signup = null
       }
       if (type === 'run:end' && payload.status === 'done' && session.runUrls && session.runUrls.length) {
         session.runUrls.slice(-2).forEach(function (u) { irisLearn(u, 'A direct URL that worked before (change the search words): ' + u.slice(0, 200)) })
@@ -1379,6 +1468,20 @@ ipc.on('iris-overlay-sync', function () {
 
 ipc.on('iris-agent-settings-changed', function () {
   broadcast('iris-agent-settings', irisSettings())
+})
+
+ipc.on('iris-accounts-get', function (event, data) {
+  event.reply('iris-accounts-data', { tabId: data && data.tabId, accounts: irisAccountsForPage() })
+})
+
+ipc.on('iris-account-reveal', function (event, data) {
+  event.reply('iris-accounts-data', { tabId: data && data.tabId, accounts: irisAccountsForPage(), revealed: { site: data.site, username: data.username, password: irisAccountPassword(data.site, data.username) } })
+})
+
+ipc.on('iris-account-delete', function (event, data) {
+  const list = irisAccountsLoad().filter(function (a) { return !(a.site === data.site && a.username === data.username) })
+  try { fs.writeFileSync(irisAccountsPath(), JSON.stringify({ accounts: list }, null, 1), { mode: 0o600 }) } catch (e) { /* ignore */ }
+  event.reply('iris-accounts-data', { tabId: data && data.tabId, accounts: irisAccountsForPage() })
 })
 
 /* the settings page asks for / saves the profile through the browser UI (see agentPanel.js) */

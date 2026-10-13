@@ -686,6 +686,7 @@ var IRIS_AI_DEFAULTS = {
   apiKey: '',
   thinking: 'low',
   accountMode: 'signup',
+  emailAccess: false,
   maxSteps: 40,
   maxMinutes: 20,
   temperature: 0.2,
@@ -716,6 +717,7 @@ var irisFields = [
 
 var irisMarkerCheckbox = document.getElementById('checkbox-iris-marker')
 var irisTakeoverCheckbox = document.getElementById('checkbox-iris-takeover')
+var irisEmailCheckbox = document.getElementById('checkbox-iris-email')
 
 function irisSave () {
   // settings.set() is forwarded to the main process, which notifies the agent
@@ -731,6 +733,7 @@ function irisRenderAll () {
   })
   irisMarkerCheckbox.checked = irisAI.markerEnabled !== false
   irisTakeoverCheckbox.checked = irisAI.autoPauseOnUserInput !== false
+  irisEmailCheckbox.checked = irisAI.emailAccess === true
 }
 
 irisFields.forEach(function (field) {
@@ -768,6 +771,11 @@ irisMarkerCheckbox.addEventListener('change', function () {
 
 irisTakeoverCheckbox.addEventListener('change', function () {
   irisAI.autoPauseOnUserInput = this.checked
+  irisSave()
+})
+
+irisEmailCheckbox.addEventListener('change', function () {
+  irisAI.emailAccess = this.checked
   irisSave()
 })
 
@@ -973,6 +981,57 @@ window.addEventListener('message', function (e) {
 })
 
 postMessage({ message: 'irisProfileGet' })
+
+/* --- Accounts Iris created -------------------------------------------- */
+
+var irisAccountsList = document.getElementById('iris-accounts-list')
+
+function irisRenderAccounts (data) {
+  var accounts = (data && data.accounts) || []
+  irisAccountsList.innerHTML = ''
+  if (!accounts.length) {
+    irisAccountsList.textContent = 'None yet.'
+    return
+  }
+  accounts.forEach(function (a) {
+    var row = document.createElement('div')
+    row.className = 'iris-row iris-account-row'
+    var site = document.createElement('b')
+    site.textContent = a.site
+    var user = document.createElement('span')
+    user.className = 'iris-account-user'
+    user.textContent = a.username
+    var pw = document.createElement('span')
+    pw.className = 'iris-account-pw'
+    var shown = data.revealed && data.revealed.site === a.site && data.revealed.username === a.username
+    pw.textContent = shown ? data.revealed.password : '••••••••' + (a.passwordFrom ? '  (' + a.passwordFrom + ')' : '')
+    var show = document.createElement('button')
+    show.type = 'button'
+    show.className = 'iris-button'
+    show.textContent = shown ? 'Hide' : 'Show'
+    show.addEventListener('click', function () {
+      if (shown) irisRenderAccounts({ accounts: accounts })
+      else postMessage({ message: 'irisAccountReveal', site: a.site, username: a.username })
+    })
+    var del = document.createElement('button')
+    del.type = 'button'
+    del.className = 'iris-row-delete'
+    del.title = 'Remove from this list'
+    del.textContent = '×'
+    del.addEventListener('click', function () { postMessage({ message: 'irisAccountDelete', site: a.site, username: a.username }) })
+    row.appendChild(site)
+    row.appendChild(user)
+    row.appendChild(pw)
+    row.appendChild(show)
+    row.appendChild(del)
+    irisAccountsList.appendChild(row)
+  })
+}
+
+window.addEventListener('message', function (e) {
+  if (e.data && e.data.message === 'irisAccountsData') irisRenderAccounts(e.data.data)
+})
+postMessage({ message: 'irisAccountsGet' })
 
 /* --- Schedule ---------------------------------------------------------- */
 

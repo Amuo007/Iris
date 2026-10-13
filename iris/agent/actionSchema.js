@@ -45,6 +45,7 @@ const SPEC = {
   dialog: { required: ['accept'], optional: ['text'] },
   upload: { required: ['file'], optional: [] },
   ask_user: { required: ['question'], optional: [] },
+  save_account: { required: ['site', 'username'], optional: ['password'] },
   move: { required: ['x', 'y'], optional: [] },
   done: { required: [], optional: ['answer'] },
   fail: { required: [], optional: ['reason'] }
@@ -499,6 +500,9 @@ function validateAction (obj, limits) {
         else action.tab = n
         break
       }
+      case 'site':
+      case 'username':
+      case 'password':
       case 'file':
       case 'question': {
         const v = toStringValue(value)
@@ -653,6 +657,7 @@ function describeAction (action) {
     case 'dialog': return action.accept ? 'Answer the dialog: OK' + (action.text ? ` ("${action.text}")` : '') : 'Answer the dialog: Cancel'
     case 'upload': return `Upload ${action.file}`
     case 'ask_user': return `Ask you: ${action.question}`
+    case 'save_account': return `Save the account for ${action.site}`
     case 'done': return action.answer ? `Done \u2014 ${action.answer}` : 'Done'
     case 'fail': return action.reason ? `Stopped \u2014 ${action.reason}` : 'Stopped'
     default: return action.type
@@ -691,6 +696,8 @@ const ACTION_SPEC_TEXT = [
   '  dialog       {"accept":bool,"text":str?}  answer a browser dialog (alert / confirm / prompt) Iris tells you about',
   '  upload       {"file":str}       choose a file in an open file picker (a name from the list Iris gives you, or a full path)',
   '  ask_user     {"question":str}   pause and ask the user (CAPTCHA, a one-time code, a missing detail, a choice only they can make)',
+  '  save_account {"site":str,"username":str,"password":str}  after creating an account, record it for the user',
+  '               (password: the placeholder you typed, e.g. "{{Password}}")',
   '  navigate     {"url":str}        open a URL, or give plain words to search the web',
   '  back         {}                 browser Back button',
   '  new_tab      {"url":str?}       open a new tab (and switch to it)',
@@ -717,6 +724,7 @@ const ACTION_SPEC_TEXT = [
   '- To upload a file, click the upload button or "Choose file"; Iris then lists files you can pick with upload.',
   '- Date and time fields: click the field and type the digits (for 23 Oct 2026 type "10232026"); do not use the calendar pop-up.',
   '- Never try to solve a CAPTCHA or "verify you are human" check yourself: use ask_user so the user can do it.',
+  '- Close tabs you opened only to help (an email inbox, a pop-up) once you are done with them.',
   '- As soon as the screenshot shows the answer, reply "done" with the answer. If you found a faster way',
   '  around this site than the obvious one, include "learn" in that same reply.'
 ].join('\n')

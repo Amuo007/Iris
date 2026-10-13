@@ -19,6 +19,16 @@ window.addEventListener('message', function (e) {
   if (e.data && e.data.message === 'irisProfileSet') {
     ipc.send('irisProfileSet', { fields: e.data.fields })
   }
+
+  if (e.data && ['irisAccountsGet', 'irisAccountReveal', 'irisAccountDelete'].includes(e.data.message)) {
+    ipc.send(e.data.message, { site: e.data.site, username: e.data.username })
+  }
+})
+
+ipc.on('irisAccountsData', function (e, data) {
+  if (window.location.toString().startsWith('min://')) {
+    window.postMessage({ message: 'irisAccountsData', data: data }, window.location.toString())
+  }
 })
 
 ipc.on('irisProfileData', function (e, data) {

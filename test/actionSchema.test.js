@@ -172,6 +172,7 @@ test('validateAction covers every declared action type', () => {
     dialog: { accept: true },
     upload: { file: 'cv.pdf' },
     ask_user: { question: 'What is the code?' },
+    save_account: { site: 'shop.test', username: 'me@x.test', password: '{{Password}}' },
     done: {},
     fail: {}
   }
