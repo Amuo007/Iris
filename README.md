@@ -57,36 +57,49 @@ timeline without typing. The real model server is never contacted by any test.
 | What | How |
 | --- | --- |
 | Open the Iris panel | `⌘⇧Space`, or the **Ask Iris** button |
-| Run a task | Type the outcome you want, press **Run** (or `⌘↵`) |
-| Pause / resume / stop | Buttons in the panel, mid-run |
-| Take over | Click or type in the page — the agent notices and yields |
-| Where it will click | A pulsing marker appears on the page at the target point |
-| Point Iris at your model | **Settings → Iris AI** (or *AI settings* at the bottom of the panel) |
+| Run a task | Type what you want and press Enter |
+| Continue the chat | Reply after a run ends; Iris keeps the context. **+** starts a new chat |
+| Past chats | The clock button: reopen any saved chat and continue it |
+| Pause / resume / stop | Buttons in the status bar while Iris works |
+| Take over | Click or type in the page; Iris pauses. Type a message to tell it something, or press ▶ |
+| Iris asks you | For a CAPTCHA, a phone code or a missing detail, Iris pauses and asks; type the answer |
+| Thinking | **Fast** (no thinking) · **Balanced** · **Careful** · **Deep** |
+| Run | **Once** · **Non-stop** (no step or time limit, resumes itself after errors) · **Every 15 min … every day** |
 
-Every step in the panel shows what Iris saw (the screenshot it used), what it decided, and what
-it did — including the translation from image pixels to real CSS-pixel input coordinates.
+Each step shows what Iris did, why, and the screenshot it decided from (click the thumbnail).
 
-The marker is a separate transparent, click-through window, so it can never steal a click from you:
+![Iris panel after a task](docs/screenshots/agent-panel.png)
 
-![On-page action marker](docs/screenshots/marker.png)
+### What Iris can do
 
-![Command bar and tabs](docs/screenshots/command-bar.png)
+Iris works like a person: it looks at a screenshot of the tab and uses the mouse and keyboard.
+It never runs scripts inside the sites you visit.
 
-### Configuring the model
+- **Pages:** click, double-click, hover, drag, scroll, type (replaces the field's text), keys,
+  ⌘A/C/V/X/Z, find on page (⌘F), zoom into a small area before clicking
+- **Several actions per step:** fill a whole form in one go
+- **Tabs:** follows links that open new tabs, closes ad pop-ups, switches and opens tabs
+- **Browser UI pages cannot draw:** dropdowns are drawn inside the page so Iris can see them;
+  alert / confirm / prompt dialogs and the file picker are answered like a person would
+- **Downloads** go straight to `~/Downloads`; **uploads** pick from your recent files
+- **Accounts:** logs in with **My info**, or signs up when you allow it; with permission it opens
+  your inbox to read a verification code; every account it creates is listed in Settings
+- **Memory:** notes and a downloaded-files list survive long runs; old steps are compacted in
+  chunks so the server's prompt cache keeps working
+- **Skills:** shortcuts it learns about a site (for example a direct search URL) are reused next time
 
-**Settings → Iris AI** holds everything the loop needs, persisted in the browser's settings store
-under the `irisAI` key and broadcast to open panels on change:
+### Settings → Iris AI
 
-- model server base URL (any OpenAI-compatible `/v1` endpoint) and model name, optional API key
-- max steps per task, temperature, max tokens, per-request timeout
-- screenshot longest edge, JPEG quality, how many screenshots stay in the model's context
-- on-page marker, auto-pause when you touch the page, and whether Iris may confirm purchases,
-  payments and form submissions
+- model server (any OpenAI-compatible `/v1` URL), model, API key, thinking level
+- steps and minutes per task (Once mode), seconds to wait for each answer, screenshot size
+- **When a site needs an account:** log in only, or log in / sign up with My info
+- **Usage:** tasks, requests, input and output tokens, time per step — today, 7 and 30 days, all time
+- **Rules:** things Iris must always or never do
+- **My info:** your details for forms and logins. Secret fields are encrypted with the macOS
+  keychain and never shown to the model: it types `{{Password}}` and Iris fills in the real value
+- **Accounts Iris created**, **Skills**, and a **Schedule** for tasks that start on their own
 
-Numbers are clamped to their `min`/`max`, and blank or unparseable values fall back to defaults,
-so a typo in a text box can never wedge the agent.
-
-![Iris AI settings](docs/screenshots/settings.png)
+![Iris settings](docs/screenshots/settings.png)
 
 ---
 
