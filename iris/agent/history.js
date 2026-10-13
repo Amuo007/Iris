@@ -24,6 +24,7 @@ const DEFAULTS = {
   maxMessages: 40,
   maxSteps: 0,
   maxNotes: 120,
+  notesShown: 15,
   maxDigest: 40,
   maxFiles: 400
 }
@@ -196,7 +197,7 @@ function createHistory (options) {
             if (e.skills) text += '\n' + prompts.skillsText(e.skills)
             if (digest.length) text += '\n' + prompts.digestText(digest, digestDropped)
             if (files.length) text += '\n' + prompts.filesText(files)
-            if (notes.length) text += '\n' + prompts.notesText(notes)
+            if (notes.length) text += '\n' + prompts.notesText(notes.slice(-cfg.notesShown), Math.max(0, notes.length - cfg.notesShown))
           }
           const parts = [textPart(text)]
           if (e.dataUrl && withImage.has(e) && e.dataUrl !== 'omitted') parts.push(imagePart(e.dataUrl))

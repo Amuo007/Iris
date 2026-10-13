@@ -14,7 +14,7 @@
 const COORD_TYPES = new Set(['click', 'double_click', 'right_click', 'drag', 'scroll'])
 
 /* Actions after which the page (or the tab) is different, so a batch must stop there. */
-const PAGE_CHANGING = new Set(['navigate', 'back', 'switch_tab', 'new_tab', 'close_tab', 'zoom', 'find', 'dialog', 'upload', 'ask_user'])
+const PAGE_CHANGING = new Set(['navigate', 'back', 'switch_tab', 'new_tab', 'close_tab', 'zoom', 'find', 'dialog', 'upload', 'ask_user', 'recall'])
 
 const MAX_BATCH = 6
 
@@ -46,6 +46,7 @@ const SPEC = {
   upload: { required: ['file'], optional: [] },
   ask_user: { required: ['question'], optional: [] },
   save_account: { required: ['site', 'username'], optional: ['password'] },
+  recall: { required: ['query'], optional: [] },
   move: { required: ['x', 'y'], optional: [] },
   done: { required: [], optional: ['answer'] },
   fail: { required: [], optional: ['reason'] }
@@ -500,6 +501,7 @@ function validateAction (obj, limits) {
         else action.tab = n
         break
       }
+      case 'query':
       case 'site':
       case 'username':
       case 'password':
@@ -658,6 +660,7 @@ function describeAction (action) {
     case 'upload': return `Upload ${action.file}`
     case 'ask_user': return `Ask you: ${action.question}`
     case 'save_account': return `Save the account for ${action.site}`
+    case 'recall': return `Recall "${action.query}"`
     case 'done': return action.answer ? `Done \u2014 ${action.answer}` : 'Done'
     case 'fail': return action.reason ? `Stopped \u2014 ${action.reason}` : 'Stopped'
     default: return action.type
@@ -696,6 +699,8 @@ const ACTION_SPEC_TEXT = [
   '  dialog       {"accept":bool,"text":str?}  answer a browser dialog (alert / confirm / prompt) Iris tells you about',
   '  upload       {"file":str}       choose a file in an open file picker (a name from the list Iris gives you, or a full path)',
   '  ask_user     {"question":str}   pause and ask the user (CAPTCHA, a one-time code, a missing detail, a choice only they can make)',
+  '  recall       {"query":str}      search everything saved in this chat (notes, downloads, pages visited),',
+  '               e.g. a paper title or ID; the best matches come back on the next step',
   '  save_account {"site":str,"username":str,"password":str}  after creating an account, record it for the user',
   '               (password: the placeholder you typed, e.g. "{{Password}}")',
   '  navigate     {"url":str}        open a URL, or give plain words to search the web',

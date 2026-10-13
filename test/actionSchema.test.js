@@ -173,6 +173,7 @@ test('validateAction covers every declared action type', () => {
     upload: { file: 'cv.pdf' },
     ask_user: { question: 'What is the code?' },
     save_account: { site: 'shop.test', username: 'me@x.test', password: '{{Password}}' },
+    recall: { query: 'PhoneCLI' },
     done: {},
     fail: {}
   }

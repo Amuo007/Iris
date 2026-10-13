@@ -24,6 +24,7 @@ const irisInputPlan = require('./iris/agent/inputPlan.js')
 const irisLoop = require('./iris/agent/agentLoop.js')
 const irisModelClient = require('./iris/agent/modelClient.js')
 const irisPrompts = require('./iris/agent/prompts.js')
+const irisMemoryLib = require('./iris/agent/memory.js')
 
 const IRIS_SETTINGS_VERSION = 2
 
@@ -163,6 +164,35 @@ function irisFillSecrets (text) {
     const hit = profile.find(function (f) { return f.label.toLowerCase() === key })
     return hit && hit.value ? hit.value : all
   })
+}
+
+/* ------------------------------------------------------------------ *
+ * Memory beyond the context window
+ *   • every download Iris made, in any chat (iris-downloads.json): duplicates are skipped by code
+ *   • per chat: notes, downloads and pages visited, searchable with `recall`
+ * ------------------------------------------------------------------ */
+
+function irisDownloadsPath () {
+  return path.join(userDataPath, 'iris-downloads.json')
+}
+
+var irisDownloadLog = null
+function irisDownloads () {
+  if (!irisDownloadLog) {
+    let items = []
+    try { items = JSON.parse(fs.readFileSync(irisDownloadsPath(), 'utf8')).items || [] } catch (e) { /* first download */ }
+    irisDownloadLog = irisMemoryLib.createMemory(items)
+  }
+  return irisDownloadLog
+}
+
+function irisDownloadsSave () {
+  try { fs.writeFileSync(irisDownloadsPath(), JSON.stringify({ items: irisDownloads().items().slice(-5000) })) } catch (e) { DBUG('download log: ' + e.message) }
+}
+
+function irisSessionMemory (session) {
+  if (!session.memoryStore) session.memoryStore = irisMemoryLib.createMemory(session.memory || [])
+  return session.memoryStore
 }
 
 /* ------------------------------------------------------------------ *
@@ -516,6 +546,10 @@ IrisComputer.prototype.screenshot = async function () {
   const obs = this.finishCapture(image, size, crop || bounds, wc, sig)
   irisAttachEvents(this, obs)
   obs.skills = irisSkillsFor(obs.url)
+  if (this.memory && obs.url && obs.url !== this.lastVisit) {
+    this.lastVisit = obs.url
+    this.memory.add('visit', obs.title || obs.url, { url: obs.url, title: obs.title })
+  }
   if (this.pendingChooser) {
     const files = irisRecentFiles(12)
     obs.note = (obs.note ? obs.note + '\n' : '') + 'A file picker is open (' + (this.pendingChooser.mode === 'selectMultiple' ? 'several files allowed' : 'one file') + '). ' +
@@ -635,6 +669,20 @@ IrisComputer.prototype.act = async function (action) {
       return { ok: true }
     case 'find':
       return this.findInPage(wc, action.text)
+    case 'recall': {
+      const found = []
+      const seen = new Set()
+      const add = function (it) {
+        const line = irisMemoryLib.describeItem(it)
+        if (!seen.has(line)) { seen.add(line); found.push(line) }
+      }
+      if (this.memory) this.memory.search(action.query, 8).forEach(add)
+      irisDownloads().search(action.query, 5).forEach(add)
+      this.notes = (this.notes || []).concat(found.length
+        ? 'Recall "' + action.query + '":\n' + found.slice(0, 10).join('\n')
+        : 'Recall "' + action.query + '": nothing saved matches that.')
+      return { ok: true }
+    }
     case 'save_account':
       try {
         irisAccountSave({ site: action.site, username: action.username, password: action.password, url: wc.getURL() })
@@ -1010,7 +1058,8 @@ function irisSessionSave (session, now) {
     irisSaveTimer = null
     try {
       session.updated = Date.now()
-      fs.writeFileSync(irisSessionFile(session.id), JSON.stringify(session))
+      if (session.memoryStore) session.memory = session.memoryStore.items().slice(-3000)
+      fs.writeFileSync(irisSessionFile(session.id), JSON.stringify(session, function (k, v) { return k === 'memoryStore' ? undefined : v }))
     } catch (e) { DBUG('session save failed: ' + e.message) }
   }
   if (now) {
@@ -1222,6 +1271,7 @@ function startAgent (task, options) {
       irisBindInput(newTabId, cfg)
     }
   }, options.viewBounds)
+  computer.memory = irisSessionMemory(session)
   irisComputer = computer
   irisBindInput(tabId, cfg)
 
@@ -1265,6 +1315,7 @@ function startAgent (task, options) {
     log: DBUG,
     onEvent: function (type, payload) {
       if (type === 'run:start') { irisUsageRecord('task'); session.runUrls = [] }
+      if (type === 'remember' && payload.note && !payload.automatic) irisSessionMemory(session).add('note', payload.note)
       // remember direct URLs that led to a successful answer: next time they are the shortcut
       if (type === 'action' && payload.action && payload.action.type === 'navigate') {
         const resolved = irisResolveUrl(payload.action.url)
@@ -1511,6 +1562,15 @@ settings.listen('irisAI', function () {
 function irisOnDownload (event, item) {
   if (!irisIsBusy() || !irisComputer) return
   const computer = irisComputer
+  // already have it? Checked by code (paper IDs, DOIs, cleaned-up URLs), so the model never has to
+  const earlier = irisDownloads().findDownload(item.getURL(), item.getFilename())
+  if (earlier && earlier.path && fs.existsSync(earlier.path)) {
+    event.preventDefault()
+    computer.notes = (computer.notes || []).concat('Skipped a download: "' + item.getFilename() + '" is already in Downloads as "' + path.basename(earlier.path) +
+      '" (from ' + new Date(earlier.at).toLocaleDateString() + '). Move on to the next one.')
+    broadcastEvent({ type: 'download', state: 'skipped', name: item.getFilename(), existing: path.basename(earlier.path) })
+    return
+  }
   try {
     const dir = app.getPath('downloads')
     const name = (item.getFilename() || 'download').replace(/[/\\:]/g, '_')
@@ -1523,8 +1583,15 @@ function irisOnDownload (event, item) {
     DBUG('download path failed: ' + e.message)
   }
   broadcastEvent({ type: 'download', state: 'started', name: item.getFilename() })
+  const sourceUrl = item.getURL()
   item.once('done', function (e, state) {
     const rec = { name: path.basename(item.getSavePath() || item.getFilename()), state: state, bytes: item.getReceivedBytes(), path: item.getSavePath() }
+    if (state === 'completed') {
+      const entry = { name: rec.name, url: sourceUrl, path: rec.path, bytes: rec.bytes, session: irisSession && irisSession.id }
+      irisDownloads().add('download', 'Downloaded ' + rec.name, entry)
+      irisDownloadsSave()
+      if (computer.memory) computer.memory.add('download', 'Downloaded ' + rec.name, entry)
+    }
     computer.downloads = (computer.downloads || []).concat(rec)
     DBUG('download ' + state + ': ' + rec.path)
     broadcastEvent(Object.assign({ type: 'download' }, rec))

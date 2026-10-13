@@ -408,7 +408,7 @@ test('remembered notes are shown on later steps', async () => {
     (ctx) => { h.last = ctx.messages[ctx.messages.length - 1].content[0].text; return json('done', { type: 'done' }) }
   ])
   await h.agent.run('research')
-  assert.match(h.last, /Your notes so far:\n- price is \$42/)
+  assert.match(h.last, /Your notes:\n- price is \$42/)
   assert.deepStrictEqual(h.agent.notes(), ['price is $42'])
 })
 
@@ -499,7 +499,7 @@ test('finished downloads are listed on every later step', async () => {
   }
   await h.agent.run('get the paper')
   assert.match(h.last, /Downloaded "paper.pdf"/)
-  assert.match(h.last, /Files already downloaded in this chat \(1, never download these again\): paper.pdf/)
+  assert.match(h.last, /Downloaded in this chat so far: 1 file \(latest: paper.pdf\)/)
   assert.deepStrictEqual(h.agent.exportHistory().files, ['paper.pdf'])
 })
 
@@ -526,4 +526,15 @@ test('a learned tip is emitted, and site skills are shown on the newest step onl
   const texts = h.msgs.filter(m => Array.isArray(m.content)).map(m => m.content[0].text)
   assert.strictEqual(texts.filter(t => /What you learned before on example.com/.test(t)).length, 1)
   assert.match(texts[texts.length - 1], /PDF button is top right/)
+})
+
+test('only the latest notes are shown; older ones are left to recall', async () => {
+  const replies = []
+  for (let i = 0; i < 20; i++) replies.push(JSON.stringify({ thought: 't' + i, remember: 'fact number ' + i, action: { type: 'scroll', direction: 'down', amount: 1, x: 5, y: 5 + i } }))
+  replies.push((ctx) => { h.last = ctx.messages[ctx.messages.length - 1].content[0].text; return json('done', { type: 'done' }) })
+  const h = harness(replies, null, { safety: { maxSteps: 100 } })
+  await h.agent.run('many notes')
+  assert.match(h.last, /latest 15; 5 older ones: use recall/)
+  assert.ok(!/fact number 0\b/.test(h.last))
+  assert.match(h.last, /fact number 19/)
 })

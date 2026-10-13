@@ -304,6 +304,7 @@ function planInputEvents (action, opts) {
     case 'upload':
     case 'ask_user':
     case 'save_account':
+    case 'recall':
     case 'back':
     case 'navigate':
     case 'done':

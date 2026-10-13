@@ -68,6 +68,7 @@ const ACTION_LABELS = {
   zoom: 'Zoom in',
   find: 'Find',
   save_account: 'Saved account',
+  recall: 'Recall',
   dialog: 'Answer dialog',
   upload: 'Upload',
   ask_user: 'Asking you',
@@ -598,6 +599,7 @@ function actionDetail (action, description) {
     case 'type': return '“' + action.text + '”' + (action.enter ? ' ↵' : '')
     case 'navigate': return action.url
     case 'find': return '“' + action.text + '”'
+    case 'recall': return '“' + action.query + '”'
     case 'dialog': return action.accept ? 'OK' : 'Cancel'
     case 'upload': return action.file
     case 'ask_user': return ''
@@ -735,6 +737,7 @@ function handleEvent (payload) {
     case 'download':
       if (payload.state === 'started') setStatus(keep, 'Downloading ' + (payload.name || 'a file') + '…')
       else if (payload.state === 'completed') addNote('Downloaded ' + payload.name + ' to your Downloads folder', 'memo')
+      else if (payload.state === 'skipped') addNote('Skipped ' + payload.name + ' — already downloaded as ' + payload.existing, 'memo')
       else addNote('Download failed: ' + payload.name + ' (' + payload.state + ')', 'warn')
       break
     case 'action':

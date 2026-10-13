@@ -44,17 +44,18 @@ function digestText (lines, dropped) {
 }
 
 function filesText (files) {
-  const shown = files.slice(-200)
-  return 'Files already downloaded in this chat (' + files.length + ', never download these again): ' +
-    (files.length > shown.length ? '… ' : '') + shown.join(', ')
+  const latest = files.slice(-5)
+  return 'Downloaded in this chat so far: ' + files.length + ' file' + (files.length === 1 ? '' : 's') +
+    ' (latest: ' + latest.join(', ') + '). Iris skips anything already downloaded by itself; use recall to check a specific one.'
 }
 
 function skillsText (skills) {
   return 'What you learned before on ' + skills.site + ':\n' + skills.tips.map(function (t) { return '- ' + t }).join('\n')
 }
 
-function notesText (notes) {
-  return 'Your notes so far:\n' + notes.map(function (n) { return '- ' + n }).join('\n')
+function notesText (notes, older) {
+  return 'Your notes' + (older ? ' (latest ' + notes.length + '; ' + older + ' older ones: use recall to search them)' : '') + ':\n' +
+    notes.map(function (n) { return '- ' + n }).join('\n')
 }
 
 /** What Iris knows about the user. Secrets appear only as {{placeholders}}. */
