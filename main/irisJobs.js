@@ -396,6 +396,11 @@ function irisJobsPrompt (task, mode) {
     const today = irisAppliedToday()
     live.push('Daily limit: ' + p.dailyLimit + ' applications; ' + today + ' sent today.' + (today >= p.dailyLimit ? ' The limit is reached: do not submit more today; finish.' : ''))
   }
+  // contact details for forms (My info has them too; these come from the career profile / the resume's header)
+  const b = bank.basics
+  const contact = [b.name && 'name ' + b.name, b.email && 'email ' + b.email, b.phone && 'phone ' + b.phone, b.location && 'location ' + b.location]
+    .concat((b.links || []).map(function (l) { return 'link ' + l.url })).filter(Boolean)
+  if (contact.length) lines.push('The user\'s details for forms (My info wins if it differs): ' + contact.join('; ') + '.')
   const answers = bank.answers.filter(function (a) { return a.value })
   if (answers.length) lines.push('Answers for application questions (turn them into the form\'s own options, e.g. a citizen is "Yes" to "authorized to work"): ' + answers.map(function (a) { return a.label + ': ' + a.value }).join('; ') + '.')
   if (p.salary) lines.push('Salary expectation: ' + p.salary + '.')
