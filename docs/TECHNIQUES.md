@@ -95,7 +95,19 @@ Updated 2026-10-16.
 - **Now:** the instructions are split. The **stable** part (rules, your profile, how to apply) opens
   the prompt and never changes during a run. The **live** part (jobs handled, today's count,
   project notes) is attached to the newest screenshot at the end.
-- **Result:** measured below once the run finishes.
+- **Result** (the same 7-job board run, 47 steps): the server re-read the whole prompt only on
+  step 1. Before, it had to after every job logged (that step took 22.6 s instead of ~7 s). Every
+  ~8 steps it still re-reads the conversation part once, when Iris forgets older steps in a chunk
+  (technique 11) — by design, and much cheaper than every step.
+
+### 9b. One model call at a time, across every Iris window (new today)
+- **What:** two copies of Iris (or Iris plus a test copy) never send your server two requests at
+  the same time — that is what made llama-server stop answering on Oct 16 at 00:31.
+- **How:** before each request Iris creates a small lock file for that server
+  (`$TMPDIR/iris-model-<server>.lock`) holding its process ID and a timestamp it refreshes every
+  30 s. A second Iris finds the file, shows "Waiting for another Iris window to finish with the
+  model…", and retries every 0.25 s. A lock whose owner quit, or that was not refreshed for 90 s,
+  is taken over, so a crash can never block Iris forever.
 
 ### 10. Only the newest screenshot is sent
 - **What:** older screenshots are replaced by "[older screenshot omitted]".
@@ -113,6 +125,19 @@ Updated 2026-10-16.
   (Settings → Jobs → Tailoring has "Careful" if you want it).
 
 ---
+
+### 12b. Weekdays are read, not computed (new today)
+- **Before:** the prompt listed the coming Mondays; the model still had to count ("next Friday is
+  Mondays + 4 days") and sometimes got it wrong.
+- **Now:** the prompt lists the next 14 days with their weekdays ("Sat Oct 17, Sun Oct 18, …"),
+  plus later Mondays, and says "read weekdays from this list, never work them out."
+
+### 12c. A higher bar when everything gets kept (new today)
+- **Before:** on broad research topics Iris kept almost every paper it opened (46 of 47 in one run):
+  "related to the topic" was enough.
+- **Now:** after 10 or more judgements, if 85 % or more were kept, Iris is told (once every 15
+  judgements) to keep only what clearly meets every point of its plan's "Good result means" and is
+  strong on its own, and to skip what is merely on the topic, surveys, or small variations.
 
 ## Memory
 
@@ -202,6 +227,15 @@ Updated 2026-10-16.
   (Staff Frontend: fit 15), a job wanting a transcript marked Needs you without submitting.
 
 ---
+
+### 21b. Sign-up with an email confirmation (tested today)
+- **Flow:** fill the sign-up form (secrets typed from placeholders) → the site says "check your
+  email" → Iris opens your inbox (the "Email inbox URL" in My info, if "Let Iris open my email"
+  is on) in a **new tab**, signs in with your saved details if needed, opens the newest message from
+  that site, clicks the link → records the account in Settings → Accounts → closes the mail tab.
+- **Test:** a local fake site (Acme Notes) and a local fake webmail (Postbox): **11 steps, 1:53**,
+  account confirmed. (I did not sign in to your real Gmail; with Gmail signed in inside Iris, it
+  works the same way.)
 
 ## Safety
 

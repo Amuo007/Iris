@@ -951,6 +951,7 @@ IrisComputer.prototype.screenshot = async function () {
 
   const size = image.getSize()
   DBUG('capture ok ' + JSON.stringify(size) + (crop ? ' crop ' + JSON.stringify(crop) : ' view ' + bounds.width + 'x' + bounds.height) + ' url ' + url)
+  if (crop) this.lastClick = null // a close-up has its own coordinates: no marks on it
   const obs = this.finishCapture(image, size, crop || bounds, wc, sig)
   irisAttachEvents(this, obs)
   obs.skills = irisSkillsFor(obs.url)
@@ -1008,12 +1009,44 @@ IrisComputer.prototype.emptyTabObservation = function (bounds) {
   }
 }
 
+/* A small red ✕ drawn into the screenshot (BGRA bitmap), 2 px thick, with a white outline. */
+function irisDrawMiss (image, x, y) {
+  const size = image.getSize()
+  const buf = Buffer.from(image.toBitmap())
+  const put = function (px, py, r, g, b) {
+    if (px < 0 || py < 0 || px >= size.width || py >= size.height) return
+    const i = (py * size.width + px) * 4
+    buf[i] = b; buf[i + 1] = g; buf[i + 2] = r; buf[i + 3] = 255
+  }
+  const arm = Math.max(7, Math.round(size.width / 160))
+  for (const pass of [[255, 255, 255, 2], [225, 29, 72, 1]]) {
+    for (let d = -arm; d <= arm; d++) {
+      for (let t = -pass[3]; t <= pass[3]; t++) {
+        put(x + d + t, y + d, pass[0], pass[1], pass[2]); put(x + d + t, y - d, pass[0], pass[1], pass[2])
+      }
+    }
+  }
+  return nativeImage.createFromBitmap(buf, { width: size.width, height: size.height })
+}
+
 IrisComputer.prototype.finishCapture = function (image, size, bounds, wc, sig) {
   const fitted = irisMapper.fitDimensions(size.width, size.height, this.config.screenshotMaxDimension)
   let payload = image
   if (fitted.width !== size.width || fitted.height !== size.height) {
     payload = image.resize({ width: fitted.width, height: fitted.height, quality: 'better' })
   }
+  // a click that changed nothing: mark the spot, so the model sees how far off it was
+  let missNote = null
+  const click = this.lastClick
+  this.lastClick = null
+  if (click && sig && click.fingerprint && sig.fingerprint === click.fingerprint && bounds.width) {
+    const k = fitted.width / bounds.width
+    try {
+      payload = irisDrawMiss(payload, Math.round(click.x * k), Math.round(click.y * k))
+      missNote = 'The red ✕ marks where your last click landed; nothing happened there. Aim at the centre of what you meant (zoom in if it is small).'
+    } catch (e) { DBUG('miss mark: ' + e.message) }
+  }
+  if (sig) this.lastFingerprint = sig.fingerprint
   return {
     dataUrl: 'data:image/jpeg;base64,' + payload.toJPEG(this.config.screenshotQuality || 82).toString('base64'),
     width: fitted.width,
@@ -1027,7 +1060,8 @@ IrisComputer.prototype.finishCapture = function (image, size, bounds, wc, sig) {
     title: wc.getTitle(),
     loading: wc.isLoading(),
     blank: !!(sig && sig.blank),
-    fingerprint: sig ? sig.fingerprint : null
+    fingerprint: sig ? sig.fingerprint : null,
+    note: missNote || undefined
   }
 }
 
@@ -1252,6 +1286,8 @@ IrisComputer.prototype.act = async function (action) {
     self.injectingUntil = Date.now() + 400
   }
   this.pointer = irisInputPlan.pointerAfter(action) || this.pointer
+  // where this click landed, so the next look can show it if nothing happened
+  this.lastClick = (action.type === 'click' || action.type === 'double_click') ? { x: action.x, y: action.y, fingerprint: this.lastFingerprint || null } : null
   if (action.type === 'type') {
     // say exactly what went in, so a box that merely looks cut off is not "fixed" by mistake
     const secret = action.text.indexOf('{{') !== -1
