@@ -135,6 +135,15 @@ Updated 2026-10-16.
 - **Why:** dropping one step per step would change the start of the prompt every time and defeat
   the cache (technique 9). The task, the plan and your messages are never dropped.
 
+### 11b. Auto thinking (new today, experimental)
+- **What:** Settings → Thinking → *Auto*. Iris thinks (Balanced) on the first look, on a new page,
+  after a miss, an error or an unusable reply, and when it has a note about the page; on routine steps
+  on the same page (scrolling on, filling the rest of a form, after an upload) it answers straight away
+  (Fast) — at most 4 quick steps in a row.
+- **Why:** thinking costs most of each step's time but routine steps don't need it; Fast for every step
+  made more mistakes (night test).
+- **Result:** A/B test pending (after the 5-hour run frees the server).
+
 ### 12. Tailoring without "thinking"
 - **What:** picking what goes on a resume runs with the model's thinking off.
 - **Result:** ~25 s per job instead of 50–100 s, with picks just as good in our tests
@@ -232,6 +241,13 @@ Updated 2026-10-16.
   content into the profile. **Check:** each section, refilled with its own content, must read the
   same as before; any section that does not is left exactly as you wrote it.
 - **Result:** a Jake-style resume: Education, Experience, Projects and Skills all mapped.
+- **Also read (added today):** Awesome-CV (`\cvsection`, `\cventry{…}{…}{…}{…}{\begin{cvitems}…}`,
+  `\cvskill`) and moderncv (`\cventry` with the bullets inside its last argument, `\cvitem` skills),
+  comments between arguments, and a lone city ("Ottawa") as the place. The header gives your name, email,
+  phone and links, so the PDF is named after you. Tested through Settings: import → profile filled
+  (3 jobs, 2 projects, 26 skills, 18 bullets) → a tailored resume in the imported layout.
+- **Anything else:** sections Iris cannot follow stay as written; you can add markers by hand
+  ([RESUME-TEMPLATES.md](RESUME-TEMPLATES.md)).
 
 ### 20b. Paste anything into the profile (new today)
 - **What:** Settings → Career profile → "Add from text": paste an old resume, notes or an export;
