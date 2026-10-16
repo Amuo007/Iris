@@ -2171,14 +2171,16 @@ function startAgent (task, options) {
     const jobsLimitReached = computer.jobsMode && irisCareerLoad().prefs.dailyLimit > 0 && irisAppliedToday() >= irisCareerLoad().prefs.dailyLimit
     if (mode === 'continuous' && result.status === 'done' && irisPrompts.isOpenEnded(original.text) && !jobsLimitReached && (session.autoResumes || 0) < 200) {
       session.autoResumes = (session.autoResumes || 0) + 1
-      broadcastEvent({ type: 'repeat:scheduled', at: Date.now() + 20000, minutes: 1 / 3, sessionId: session.id, resume: true })
+      // research finds more right away; new job postings appear slowly, so a job run looks again in 30 minutes
+      const waitMs = computer.jobsMode ? 30 * 60000 : 20000
+      broadcastEvent({ type: 'repeat:scheduled', at: Date.now() + waitMs, minutes: waitMs / 60000, sessionId: session.id, resume: true })
       irisRepeatTimer = setTimeout(function () {
         irisRepeatTimer = null
         const tabId = irisComputer ? irisComputer.tabId : options.tabId
         const again = startAgent('Keep going (you were asked to continue until stopped): find more that you have not covered yet, ' +
-          'and skip everything you already judged or downloaded. The task: ' + original.text, Object.assign({}, options, { tabId: tabId, sessionId: session.id, plan: false }))
+          'and skip everything you already judged, downloaded or applied to. The task: ' + original.text, Object.assign({}, options, { tabId: tabId, sessionId: session.id, plan: false }))
         if (!again.ok) DBUG('continue failed: ' + again.error)
-      }, 20000)
+      }, waitMs)
       return
     }
     // a non-stop run that hit trouble overnight picks itself back up (only Stop ends it)
