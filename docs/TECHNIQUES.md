@@ -116,6 +116,16 @@ Updated 2026-10-16.
   ~8 steps it still re-reads the conversation part once, when Iris forgets older steps in a chunk
   (technique 11) — by design, and much cheaper than every step.
 
+### 9a. The summary of older steps sits where the cache keeps it (found in the 5-hour run)
+- **Found:** in the long run, of ~11,500 prompt tokens per step only ~5,000 were reused; ~6,500 were
+  read again every step (about 22 s per step). The 40-line summary of steps Iris had forgotten rode on
+  the newest screenshot, so ~2,000 tokens of it were re-read each time although it only changes when
+  Iris forgets another chunk of steps.
+- **Now:** that summary is a message right after the task and plan. It changes only when a chunk of
+  steps is forgotten — which changes the prompt right there anyway — so between those times the server
+  reuses it from its cache.
+- **Result:** measured after the 5-hour run (section in the day report).
+
 ### 9b. One model call at a time, across every Iris window (new today)
 - **What:** two copies of Iris (or Iris plus a test copy) never send your server two requests at
   the same time — that is what made llama-server stop answering on Oct 16 at 00:31.
@@ -330,7 +340,7 @@ Updated 2026-10-16.
   with the saved account → 4 pages → submitted: **30 steps, every field correct**, account stored
   encrypted.
 
-### 21e. A strong password for every new sign-up (new today)
+### 21d. A strong password for every new sign-up (new today)
 - **Before:** every sign-up used your one password from My info — job hunting on Workday means one
   account per company, so one leak would open all of them.
 - **Now:** for a sign-up the model types `{{New password}}`. At typing time Iris makes a 20-character
@@ -339,7 +349,7 @@ Updated 2026-10-16.
   never sees it. Saved accounts are listed in Iris's instructions with `{{account:site}}` placeholders,
   so the next visit logs in with them. Your inbox still uses your own password.
 
-### 21d. Waiting for you is not Iris's time (fixed today)
+### 21e. Waiting for you is not Iris's time (fixed today)
 - A question, an approval or a takeover pauses the run; that time is now added back to the task's
   time budget, so a 20-minute task is 20 minutes of Iris working, however long you take to answer.
 
