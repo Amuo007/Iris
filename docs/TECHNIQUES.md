@@ -88,6 +88,13 @@ Updated 2026-10-16 (evening).
 - **How:** if nothing changed, the next step is told so ("you probably missed: zoom in or aim at
   the centre"), so the model does not repeat the same miss.
 
+### 6b. Menus that open on hover (new today)
+- **Before:** after clicking an item in a hover menu, the pointer stayed on the menu, the menu stayed
+  open over the result, and Iris clicked the item again and again to "make sure" (9 steps, 5:24).
+- **Now:** one rule: a hover menu stays open while the pointer rests on it; if it covers what you need
+  to see, move the pointer to an empty spot — do not click the item again.
+- **Result:** the same task in 4 steps, 2:33 (one run).
+
 ### 7. Zoom
 - **What:** the model can ask for a 2× close-up of part of the page to read small text before
   clicking. Coordinates in the close-up are mapped back to the page.
