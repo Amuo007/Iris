@@ -57,3 +57,11 @@ notification) so I know to come back and take over, instead of the task silently
   longer prompts — worth an A/B.
 - **A "why not applied" view.** Applications already keep fit, focus and what was missing; a column for
   the gaps would show which skills keep costing jobs.
+- **Clicking a list that changed while the model was deciding.** *Tried Oct 16 evening, not shipped:* a
+  suggestion list that refreshes 2 s after typing makes Iris click the wrong row (the screenshot shows the
+  first list, the click lands on the second). Comparing a small patch around the click point with the
+  screenshot did not separate the cases: a changed row measured a mean difference of 5.6, unchanged
+  clicks 0.6–8.5 (hover highlights and resampling are as large as a changed word). Ideas that might work:
+  compare text (OCR) instead of pixels, or wait for the page to be still for ~1 s after typing before the
+  screenshot (costs time on every step). Test page: `stale.html` in the test site.
+
