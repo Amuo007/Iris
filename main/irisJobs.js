@@ -69,20 +69,41 @@ function irisTemplateImport (file) {
   const result = irisCareerLib.templatize(src)
   if (!result.template) return { ok: false, error: result.error || 'Iris could not read this file.' }
   const dir = irisTemplateDir()
-  fs.readdirSync(dir).forEach(function (n) { try { fs.unlinkSync(path.join(dir, n)) } catch (e) { /* ignore */ } })
+  fs.readdirSync(dir).forEach(function (n) { try { fs.rmSync(path.join(dir, n), { recursive: true, force: true }) } catch (e) { /* ignore */ } })
   fs.writeFileSync(path.join(dir, 'template.tex'), result.template)
   fs.writeFileSync(path.join(dir, 'original.tex'), src)
+  // the resume's own files live in files/, so one called template.tex cannot replace Iris's copy
   const from = path.dirname(file)
+  const filesDir = path.join(dir, 'files')
+  // a resume picked from a busy folder (Documents) must not drag every PDF along: at most 80 files, 60 MB
   let assets = 0
-  try {
-    fs.readdirSync(from).forEach(function (n) {
-      if (!/\.(cls|sty|bst|bib|ttf|otf|png|jpe?g|pdf|eps|tex)$/i.test(n) || n === path.basename(file)) return
-      const full = path.join(from, n)
-      if (!fs.statSync(full).isFile() || fs.statSync(full).size > 15 * 1024 * 1024) return
-      fs.copyFileSync(full, path.join(dir, n))
+  let bytes = 0
+  // what the build needs first (class, styles, fonts), then other .tex files, images, PDFs last
+  const rank = function (n) {
+    if (/\.(cls|sty|bst|bib|ttf|otf)$/i.test(n) || /^fonts?$/i.test(n)) return 0
+    if (/\.tex$/i.test(n)) return 1
+    if (/\.(png|jpe?g|eps)$/i.test(n)) return 2
+    return 3
+  }
+  const take = function (srcDir, dest, sub) {
+    fs.readdirSync(srcDir).sort(function (a, b) { return rank(a) - rank(b) }).forEach(function (n) {
+      const full = path.join(srcDir, n)
+      let st = null
+      try { st = fs.statSync(full) } catch (e) { return } // a broken link
+      if (st.isDirectory()) {
+        // Awesome-CV and others keep their fonts in a fonts/ folder next to the resume
+        if (!sub && /^fonts?$/i.test(n)) take(full, path.join(dest, n), true)
+        return
+      }
+      if (!/\.(cls|sty|bst|bib|ttf|otf|png|jpe?g|pdf|eps|tex)$/i.test(n) || (!sub && (n === path.basename(file) || n === 'resume.tex'))) return
+      if (st.size > 15 * 1024 * 1024 || assets >= 80 || bytes + st.size > 60 * 1024 * 1024) return
+      fs.mkdirSync(dest, { recursive: true })
+      fs.copyFileSync(full, path.join(dest, n))
       assets++
+      bytes += st.size
     })
-  } catch (e) { DBUG('template assets: ' + e.message) }
+  }
+  try { take(from, filesDir, false) } catch (e) { DBUG('template assets: ' + e.message) }
   const info = { kind: 'custom', name: path.basename(file), imported: Date.now(), report: result.report, sections: result.sections, assets: assets, engine: irisTexEngineFor(src) }
   settings.set('irisResumeTemplate', info)
   return { ok: result.ok, info: info, bank: result.bank }
@@ -124,7 +145,11 @@ function irisCompileTex (tex, engine) {
       try {
         if (irisTemplateInfo().kind === 'custom') {
           const tdir = irisTemplateDir()
-          fs.readdirSync(tdir).forEach(function (n) { if (!/^(template|original)\.tex$/.test(n)) fs.copyFileSync(path.join(tdir, n), path.join(dir, n)) })
+          fs.readdirSync(tdir).forEach(function (n) { // templates imported before files/ existed
+            const full = path.join(tdir, n)
+            if (!/^(template|original)\.tex$/.test(n) && fs.statSync(full).isFile()) fs.copyFileSync(full, path.join(dir, n))
+          })
+          if (fs.existsSync(path.join(tdir, 'files'))) fs.cpSync(path.join(tdir, 'files'), dir, { recursive: true })
         }
       } catch (e) { DBUG('tex assets: ' + e.message) }
       fs.writeFileSync(path.join(dir, 'resume.tex'), tex)
