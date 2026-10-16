@@ -125,13 +125,23 @@ function parseDuckDuckGo (html, max) {
   return out
 }
 
+/* Bing wraps results in bing.com/ck/a?…&u=a1<base64url of the real address> */
+function unwrapBing (href) {
+  const m = /^https?:\/\/(?:www\.)?bing\.com\/ck\/a\?.*?[?&]u=a1([A-Za-z0-9_-]+)/.exec(href)
+  if (!m) return href
+  try {
+    const real = Buffer.from(m[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')
+    return /^https?:\/\//.test(real) ? real : href
+  } catch (e) { return href }
+}
+
 function parseBing (html, max) {
   const out = []
   const re = /<li class="b_algo"[\s\S]*?<h2[^>]*>\s*<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>([\s\S]*?)<\/li>/gi
   let m
   while ((m = re.exec(html)) !== null && out.length < max) {
-    const href = decodeEntities(m[1])
-    if (!/^https?:/.test(href)) continue
+    const href = unwrapBing(decodeEntities(m[1]))
+    if (!/^https?:/.test(href) || /^https?:\/\/(www\.)?bing\.com\/ck\//.test(href)) continue
     const p = /<p[^>]*>([\s\S]*?)<\/p>/i.exec(m[3])
     out.push({ title: stripTags(m[2]), url: href, snippet: p ? stripTags(p[1]) : '' })
   }
@@ -233,16 +243,23 @@ function createLookup (opts) {
   }
 
   async function web (query) {
+    const ddg = 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(query)
+    // "site:example.com …" — results from elsewhere are no answer (Bing ignores site: for simple clients)
+    const site = (/(?:^|\s)site:([^\s]+)/i.exec(query) || [])[1]
+    const onSite = function (items) { return site ? items.filter(function (it) { const h = hostOf(it.url); const d = site.toLowerCase().replace(/^www\./, ''); return h === d || h.endsWith('.' + d) }) : items }
     const tries = [
-      ['https://html.duckduckgo.com/html/?q=' + encodeURIComponent(query), parseDuckDuckGo, 'DuckDuckGo'],
+      [ddg, parseDuckDuckGo, 'DuckDuckGo'],
+      // DuckDuckGo sometimes turns away one request in a row of quick ones: one more try after a pause
+      [ddg, parseDuckDuckGo, 'DuckDuckGo', 2500],
       ['https://www.bing.com/search?q=' + encodeURIComponent(query) + '&setlang=en', parseBing, 'Bing']
     ]
     let lastError = 'no results'
     for (const t of tries) {
       try {
+        if (t[3]) await delay(t[3])
         const r = await get(t[0])
         if (looksBlocked(r.status, r.body)) { lastError = t[2] + ' refused the request'; continue }
-        const items = t[1](r.body, cfg.maxResults)
+        const items = onSite(t[1](r.body, cfg.maxResults * (site ? 2 : 1))).slice(0, cfg.maxResults)
         if (items.length) return { source: t[2], items }
         lastError = t[2] + ' returned no results'
       } catch (e) {

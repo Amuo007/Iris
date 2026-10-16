@@ -2,7 +2,7 @@
 
 const test = require('node:test')
 const assert = require('node:assert')
-const { createLookup, parseLookups, parseDuckDuckGo, parseOpenAlex, parseArxiv, readableText, looksBlocked, isNever } = require('../iris/agent/lookup')
+const { createLookup, parseLookups, parseDuckDuckGo, parseBing, parseOpenAlex, parseArxiv, readableText, looksBlocked, isNever } = require('../iris/agent/lookup')
 
 function fakeFetch (routes, log) {
   return async (url) => {
@@ -76,7 +76,7 @@ test('web falls back to Bing when DuckDuckGo refuses, and results are cached', a
   assert.ok(r.ok)
   assert.match(r.text, /\(Bing\)[\s\S]*B title — https:\/\/b\.test\//)
   await lk.lookup({ kind: 'web', query: 'Q' })
-  assert.strictEqual(log.length, 2, 'the second identical look-up came from the cache')
+  assert.strictEqual(log.length, 3, 'DuckDuckGo twice, then Bing; the second identical look-up came from the cache')
 })
 
 test('annotate marks things seen before', async () => {
@@ -134,4 +134,31 @@ test('arXiv: long queries fall back to fewer key words when nothing matches', as
   assert.strictEqual(r.count, 1)
   assert.strictEqual(log.length, 2)
   assert.ok(!/all:2026|all:papers/.test(log[0]), 'years and filler words are not search terms')
+})
+
+test('Bing redirect links become the real addresses', () => {
+  const real = Buffer.from('https://jobs.lever.co/acme/123').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const html = '<li class="b_algo"><h2><a href="https://www.bing.com/ck/a?!&amp;&amp;p=abc&amp;u=a1' + real + '&amp;ntb=1">ML Engineer - Acme</a></h2><p>Remote</p></li>'
+  const r = parseBing(html, 5)
+  assert.strictEqual(r[0].url, 'https://jobs.lever.co/acme/123')
+})
+
+test('site: searches only return that site; DuckDuckGo gets a second try', async () => {
+  const log = []
+  let ddgCalls = 0
+  const fetch = async (url) => {
+    log.push(url)
+    if (/duckduckgo/.test(url)) {
+      ddgCalls++
+      return { status: ddgCalls === 1 ? 202 : 200, url, text: async () => ddgCalls === 1 ? '' : '<a class="result__a" href="https://jobs.lever.co/acme/1">ML Engineer</a><a class="result__a" href="https://example.com/x">Other</a>', headers: { get: () => 'text/html' } }
+    }
+    return { status: 404, url, text: async () => '', headers: { get: () => 'text/html' } }
+  }
+  const lk = createLookup({ fetch, delay: async () => {}, now: () => 0 })
+  const r = await lk.lookup({ kind: 'web', query: 'site:jobs.lever.co ml engineer' })
+  assert.ok(r.ok)
+  assert.strictEqual(r.count, 1)
+  assert.match(r.text, /jobs\.lever\.co\/acme\/1/)
+  assert.ok(!/example\.com/.test(r.text))
+  assert.strictEqual(ddgCalls, 2)
 })
