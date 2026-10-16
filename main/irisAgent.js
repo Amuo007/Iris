@@ -84,42 +84,11 @@ function irisModelLockFile (baseUrl) {
   return path.join(app.getPath('temp'), 'iris-model-' + key + '.lock')
 }
 
-function irisPidAlive (pid) {
-  try { process.kill(pid, 0); return true } catch (e) { return e.code === 'EPERM' }
-}
-
-async function irisModelTurn (baseUrl, fn, onWait) {
+var irisModelLocks = {}
+function irisModelTurn (baseUrl, fn, onWait) {
   const file = irisModelLockFile(baseUrl)
-  const me = process.pid + '-' + Math.random().toString(36).slice(2)
-  let waited = false
-  for (let tries = 0; ; tries++) {
-    try {
-      fs.writeFileSync(file, JSON.stringify({ owner: me, pid: process.pid, at: Date.now() }), { flag: 'wx' })
-      break
-    } catch (e) {
-      if (e.code !== 'EEXIST') break // no lock possible here (odd file system): just go
-      let held = null
-      try { held = JSON.parse(fs.readFileSync(file, 'utf8')) } catch (err) { /* being written */ }
-      if (held && (Date.now() - held.at > 90000 || !irisPidAlive(held.pid))) {
-        try { fs.unlinkSync(file) } catch (err) { /* someone else took it */ }
-        continue
-      }
-      if (!waited && onWait) { waited = true; onWait() }
-      await sleep(250)
-    }
-  }
-  const beat = setInterval(function () {
-    try {
-      const held = JSON.parse(fs.readFileSync(file, 'utf8'))
-      if (held.owner === me) fs.writeFileSync(file, JSON.stringify({ owner: me, pid: process.pid, at: Date.now() }))
-    } catch (e) { /* gone */ }
-  }, 30000)
-  try {
-    return await fn()
-  } finally {
-    clearInterval(beat)
-    try { if (JSON.parse(fs.readFileSync(file, 'utf8')).owner === me) fs.unlinkSync(file) } catch (e) { /* already gone */ }
-  }
+  if (!irisModelLocks[file]) irisModelLocks[file] = require('./iris/agent/modelLock.js').createModelLock({ fs: fs, file: file })
+  return irisModelLocks[file].turn(fn, onWait)
 }
 
 /* a model client whose every request waits for its turn */
