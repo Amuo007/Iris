@@ -122,8 +122,22 @@ All code is pushed to GitHub (`Amuo007/Iris`, branch `main`); the packaged app i
 | Long Non-stop research, part 2 (new chat, 21 min) | 62 steps, 9 more kept, the cross-chat "you kept this before" warning fired; it still re-downloaded once (thought the file was missing) → the warning now says whether the file exists; it wrote long progress notes every step → told not to (Iris tracks that itself) |
 | Long Non-stop research, part 3 (new chat, 30 min) | 95 steps (~13 s each, down from ~20 s once the progress notes stopped), 14 kept, 5 skipped, 0 re-judged within the chat; it re-judged 2 papers from earlier chats → earlier chats' IDs now go into the instructions up front |
 | Long Non-stop research, part 4 (new chat, final build, 26 min) | 85 steps, 18 kept, 1 skipped, **0 re-judged — in the chat or from earlier chats** |
-| **Final regression, 14 tasks on the final build** | **14/14 done**: date field (3 steps), hover menu, slider, confirm dialog, file upload, sign-up with email code (11 steps), GitHub trending, YouTube channel, OpenStreetMap directions (143 km, 1 h 53), Google Translate, a real form on httpbin, banana bread on allrecipes (18 steps, ads), Tokyo population/area on Wikipedia. Found one problem: on the sign-up Iris picked a country the site suggested instead of asking → rule fixed (not re-checked live) |
+| **Final regression, 14 tasks on the final build** | **14/14 done**: date field (3 steps), hover menu, slider, confirm dialog, file upload, sign-up with email code (11 steps), GitHub trending, YouTube channel, OpenStreetMap directions (143 km, 1 h 53), Google Translate, a real form on httpbin, banana bread on allrecipes (18 steps, ads), Tokyo population/area on Wikipedia. Found one problem: on the sign-up Iris picked a country the site suggested instead of asking → rule fixed, re-checked: it now asks |
 | **All parts together** | **59 PDFs, 59 different papers — zero duplicate files** over ~2 hours and 4 chats, one server reset survived |
+
+## Fast vs Balanced thinking (same tasks, final build)
+
+| Task | Balanced | Fast (no thinking) |
+| --- | --- | --- |
+| Weather in Chicago | 35 s | 29 s |
+| Open the report from a link that opens a new tab | 58 s | 24 s |
+| Date field | 39 s | 24 s |
+| Slider to 75 (needs precise dragging) | 37 s, 3 steps | **1 min 40 s, 14 steps** |
+| Confirm dialog | 24 s | 25 s |
+| GitHub trending top 3 | 43 s | 24 s |
+
+Fast is up to 2× quicker on simple tasks but thrashes on fiddly ones. Balanced stays the default; Fast is
+fine for quick look-ups and simple forms.
 
 ## Your server (amd-halo) overnight
 
@@ -174,7 +188,7 @@ All code is pushed to GitHub (`Amuo007/Iris`, branch `main`); the packaged app i
 - **Things Iris cannot see**: Min's own bars ("Save password?"), native right-click menus.
 - **One bridge per Mac.** If the dev build and the packaged app both run, only the first one can
   serve coding agents (the second says so in Settings).
-- **Not re-checked live:** the very last fix (never guess personal details on a sign-up).
+- The last fix (never guess personal details) was re-checked on a fresh profile: Iris asked "What country should I select?".
 
 ## Next steps I'd suggest
 

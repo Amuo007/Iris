@@ -557,6 +557,12 @@ body.is-edit-mode #searchbar:not([hidden]) {
   font-size: 13px !important;
 }
 
+/* the downloads card floats over the page, never over the Iris panel (380px) */
+body.iris-panel-open #download-bar {
+  right: 392px;
+  max-width: min(560px, calc(100vw - 404px));
+}
+
 #download-bar {
   bottom: 12px;
   right: 12px;
