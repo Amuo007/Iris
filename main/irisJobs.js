@@ -381,6 +381,8 @@ function irisJobsPrompt (task, mode) {
       : '   A required question you cannot answer from them, a CAPTCHA that stays, or a login you cannot do: ask_user.',
     '   Optional fields with no saved answer: leave them empty (no need to scroll back to them). Voluntary',
     '   self-identification (gender, race, veteran, disability): leave empty unless required; then "Decline to self-identify".',
+    '   "How did you hear about us?": where you found the posting (the company\'s own site → Company Website; a job board →',
+    '   that board, or Job Board); if none fits, Other.',
     '   Cover letter optional: skip it. Required as a file: cover_letter {"company":str,"title":str,"requirements":str} makes',
     '   a one-page PDF from the profile; upload it with {"type":"upload","file":"cover letter"}. Required as a text box: type',
     '   three short honest paragraphs from the profile.',

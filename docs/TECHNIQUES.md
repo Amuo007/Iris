@@ -325,6 +325,20 @@ Updated 2026-10-16.
 - **Second try:** signed in with the account it had made, kept the saved pages, answered all four
   questions, ticked the declaration, reviewed, submitted — **14 steps**, every field correct.
 
+- **From scratch (with per-site passwords, below):** create account with a new password made for
+  that site → confirm by email (inbox signed in with your own mail password) → account saved → signed in
+  with the saved account → 4 pages → submitted: **30 steps, every field correct**, account stored
+  encrypted.
+
+### 21e. A strong password for every new sign-up (new today)
+- **Before:** every sign-up used your one password from My info — job hunting on Workday means one
+  account per company, so one leak would open all of them.
+- **Now:** for a sign-up the model types `{{New password}}`. At typing time Iris makes a 20-character
+  password (letters, digits, symbols almost every site accepts) for that one site — the same one again
+  for "confirm password" — and saves it encrypted with the account in Settings → Accounts. The model
+  never sees it. Saved accounts are listed in Iris's instructions with `{{account:site}}` placeholders,
+  so the next visit logs in with them. Your inbox still uses your own password.
+
 ### 21d. Waiting for you is not Iris's time (fixed today)
 - A question, an approval or a takeover pauses the run; that time is now added back to the task's
   time budget, so a 20-minute task is 20 minutes of Iris working, however long you take to answer.
