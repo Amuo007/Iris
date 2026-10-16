@@ -83,6 +83,30 @@ Updated 2026-10-16 (evening).
   search or a dropdown pick (dropdown picks are typed with `clear:false`).
 - **Retest:** the form was filled completely and Iris stopped at "Submit Application" — nothing sent.
 
+### 5c. Lists that search as you type (Greenhouse-style forms, tested today)
+- **The test:** a local copy of a Greenhouse application form — type-to-search dropdowns, a city and a
+  school list that load after you type ("Loading…" for 0.6 s), an "Attach" button that opens a hidden
+  file chooser, range answers ("Less than 1 year", "1-2 years"), voluntary self-identification.
+- **Found:** (1) Enter came 8 ms after the last letter, while the list still said "Loading…": nothing
+  was picked, and a click planned in the same step landed on the open list ("Toronto, Ohio" chosen).
+  (2) For "years with an RTOS" the model typed `1`; the first option containing "1" was "Less than
+  1 year" (wrong — FreeRTOS since Jul 2025).
+- **Now:** (1) a dropdown pick (`clear:false` + Enter) waits 1.2 s before Enter, as a person waits for
+  the list; searches keep a 150 ms pause. (2) Options that are ranges or numbers: open the list first
+  and type the whole option; if the field shows another option than meant, pick again. Years with a
+  skill are counted from the dates of the jobs that mention it.
+- **Result:** run 1: 20 steps, one wrong answer. Run 2 (range rule): every field right, RTOS "1-2
+  years". Run 3 with the pause: see the day report.
+
+### 5d. Replies that are almost JSON (new today)
+- **Before:** a reply like `{"thought":"the list shows "Toronto, Ontario" first", …}` — quotes the model
+  forgot to escape inside its own sentence — was refused and the model asked again (a lost step,
+  7–30 s). Same for `"x":295,y":828` and `"x":141,896`.
+- **Now:** after a plain read fails, Iris repairs: a double quote ends a string only where JSON can go
+  on after it (a colon, a comma and the next value, a closing brace); any other one is text and is
+  escaped. A key that lost its opening quote gets it back; a lone number after x becomes y.
+- **Result:** of 16 replies refused as broken JSON in today's logs (1,886 model calls), 15 now parse.
+
 ### 6. "Did my last action do anything?"
 - **What:** after each action, a 32×20 grey thumbnail of the page is compared with the last one.
 - **How:** if nothing changed, the next step is told so ("you probably missed: zoom in or aim at
@@ -319,6 +343,13 @@ Updated 2026-10-16 (evening).
   degree) is answered "No"; personal facts are never assumed.
 
 ### 21. Applying
+- **The posting's own words (new today):** Iris sees one screenshot at a time. By the time it called
+  `tailor_resume`, the must-haves had scrolled away and its summary invented some ("JTAG", "Zigbee",
+  "1+ years" where the posting said 2+) and dropped others (Python). Now (a) it saves must-haves with
+  `remember` in the same reply as the scroll, and (b) when the posting's link can be read without the
+  browser — a plain request in the empty look-up session, never LinkedIn and the like, never a site
+  you have an account on — the page's text (up to 8,000 characters) goes to the tailoring next to the
+  summary. Pages that need JavaScript, or whose text does not name the job, give nothing and are skipped.
 - **When Jobs mode is on (fixed today):** only for job hunting. Before, any task with "apply" or
   "resume" in it switched it on — "apply the coupon at checkout" or "resume the download" would
   have got the job instructions and the pause before submitting. Now it needs job words around them
