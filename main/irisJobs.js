@@ -375,15 +375,8 @@ function irisJobsLearnAnswer (question, answer) {
 
 /* ---------- what the agent is told in Jobs mode ---------- */
 
-/* "apply to jobs", "find me an internship", "tailor my resume" — not "papers about job scheduling" */
-const IRIS_JOB_TASK = [
-  /\b(apply|applying|job applications?|resume|résumé|tailor)\b/i,
-  /\b(find|search|look for|looking for|hunt|get)\b[^.\n]{0,40}\b(jobs?|internships?|positions?|roles?|openings?)\b/i
-]
-
 function irisJobsActive (task) {
-  const t = String(task || '')
-  return IRIS_JOB_TASK.some(function (re) { return re.test(t) }) && !irisCareerLib.bankIsEmpty(irisCareerLoad())
+  return irisCareerLib.isJobTask(task) && !irisCareerLib.bankIsEmpty(irisCareerLoad())
 }
 
 function irisJobsPrompt (task, mode) {

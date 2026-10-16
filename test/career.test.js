@@ -237,3 +237,30 @@ test('the header gives the name, email, phone and links', () => {
   assert.deepStrictEqual(r.bank.basics.links.map(l => l.url), ['https://github.com/samrivera'])
   assert.strictEqual(career.templatize(fs.readFileSync(path.join(__dirname, 'fixtures', 'resume-moderncv.tex'), 'utf8')).bank.basics.name, 'Riley Chen')
 })
+
+test('job tasks are told apart from tasks that merely say "apply" or "resume"', () => {
+  const yes = [
+    'Find jobs that match my career profile and apply to them one by one, with a resume tailored to each. Keep going until I stop you.',
+    'Find new jobs that match my career profile and apply to them one by one, with a resume tailored to each. Skip jobs already handled. Stop when there are no new ones today.',
+    'Find jobs that fit my career profile and apply with a resume tailored to each',
+    'Apply for software engineer roles in Toronto',
+    'find me an internship in embedded systems',
+    'Look for firmware positions at AMD',
+    'Apply here: https://boards.greenhouse.io/acme/jobs/123',
+    'tailor my résumé for this posting',
+    'Tailor my resume for the Tenstorrent opening',
+    'send my CV to the hiring manager for the role',
+    'Write a cover letter for the Ramp posting',
+    'Go through my job applications and finish the ones that need me'
+  ]
+  const no = [
+    'apply the coupon SAVE10 at checkout',
+    'Apply a price filter under $50 on Amazon',
+    'resume the download in the other tab',
+    'Find papers about job scheduling on GPUs',
+    'apply dark mode in the settings',
+    'Book a table for two on Friday'
+  ]
+  for (const t of yes) assert.ok(career.isJobTask(t), 'should be a job task: ' + t)
+  for (const t of no) assert.ok(!career.isJobTask(t), 'should not be a job task: ' + t)
+})

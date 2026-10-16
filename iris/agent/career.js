@@ -1594,6 +1594,27 @@ async function fitToPage (opts) {
   return { ok: true, pages: r.pages, fill: r.fill, tex: r.tex, pdf: r.pdf, pdfData: r.pdfData, layout: layout, doc: layoutToDoc(bank, layout, pick.rewrite), compiles: compiles, steps: steps }
 }
 
+/*
+ * Is this a job-hunting task? "apply to jobs", "find me an internship", "tailor my resume" — but not
+ * "apply the coupon at checkout", "resume the download" or "papers about job scheduling".
+ */
+const JOB_WORDS = '(jobs?|positions?|roles?|internships?|co-?ops?|openings?|postings?|vacanc(y|ies)|careers? pages?|greenhouse|lever|ashby|workday)'
+const JOB_TASK = [
+  new RegExp('\\b(apply|applying)\\b[^\\n]{0,80}\\b' + JOB_WORDS + '\\b', 'i'),
+  /\bjob (applications?|hunt(ing)?|search(es|ing)?|boards?)\b/i,
+  // after "find": plurals, or one job/role followed by where or what it is ("a job in Toronto", "a role as …"),
+  // so "papers about job scheduling" and "the role of …" stay out
+  new RegExp('\\b(find|search|look for|looking for|hunt|get)\\b[^.\\n]{0,40}\\b((jobs|positions|roles|internships|co-?ops|openings|postings|vacancies)\\b|(job|position|role|internship|co-?op|opening|posting|vacancy)(\\s+(at|in|for|with|near|as|on|that|which)\\b|\\s*([.,!?;]|$)))', 'i'),
+  /\btailor(ed|ing)?\b[^.\n]{0,40}\b(resume|résumé|cv)(?![\w])/i,
+  /\b(my|a|the|this)\s+(resume|résumé|cv)(?![\w])[^\n]{0,60}\b(for|to|job|posting|role|position)\b/i,
+  /\bcover letters?\b/i
+]
+
+function isJobTask (text) {
+  const t = String(text || '')
+  return JOB_TASK.some(function (re) { return re.test(t) })
+}
+
 /** Read a pdfLaTeX log: page count and how full the last page is. */
 function readLatexLog (log) {
   const text = String(log || '')
@@ -1608,6 +1629,7 @@ function readLatexLog (log) {
 
 module.exports = {
   SECTION_KINDS,
+  isJobTask,
   DEFAULT_TEMPLATE,
   DEFAULT_PREFS,
   normalizeBank,
