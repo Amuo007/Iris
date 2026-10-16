@@ -162,3 +162,21 @@ test('site: searches only return that site; DuckDuckGo gets a second try', async
   assert.ok(!/example\.com/.test(r.text))
   assert.strictEqual(ddgCalls, 2)
 })
+
+test('job boards: the address picks the board, words pick the openings', async () => {
+  const { parseJobBoardQuery } = require('../iris/agent/lookup')
+  assert.deepStrictEqual(parseJobBoardQuery('https://jobs.ashbyhq.com/ramp software engineer Canada'), { ats: 'ashby', company: 'ramp', words: ['software', 'engineer', 'canada'] })
+  assert.strictEqual(parseJobBoardQuery('boards.greenhouse.io/gitlab').ats, 'greenhouse')
+  assert.strictEqual(parseJobBoardQuery('jobs.lever.co/palantir backend').company, 'palantir')
+  const board = { jobs: [
+    { title: 'Security Engineer', location: 'New York', secondaryLocations: [{ location: 'Remote (Canada)' }], department: 'Engineering', jobUrl: 'https://jobs.ashbyhq.com/ramp/1', isRemote: true },
+    { title: 'Account Executive', location: 'Toronto', department: 'Sales', jobUrl: 'https://jobs.ashbyhq.com/ramp/2' },
+    { title: 'Software Engineer, Backend', location: 'Remote (Canada)', department: 'Engineering', jobUrl: 'https://jobs.ashbyhq.com/ramp/3' }
+  ] }
+  const lk = createLookup({ fetch: async (url) => ({ status: 200, url, text: async () => JSON.stringify(board), headers: { get: () => 'application/json' } }), delay: async () => {}, now: () => 0 })
+  const r = await lk.lookup({ kind: 'jobs', query: 'jobs.ashbyhq.com/ramp software engineer canada' })
+  assert.ok(r.ok)
+  assert.match(r.text, /Openings for .*\(ramp on ashby, 3 open\)/)
+  assert.match(r.text.split('\n')[1], /Software Engineer, Backend/, 'the best match comes first')
+  assert.ok(!/Account Executive/.test(r.text))
+})

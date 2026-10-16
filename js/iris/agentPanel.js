@@ -840,7 +840,7 @@ function addResult (payload) {
 }
 
 /* A quick look-up outside the browser: one line, updated when the results arrive. */
-const LOOKUP_KINDS = { web: 'Web', papers: 'Papers', arxiv: 'arXiv', wiki: 'Wikipedia', page: 'Page' }
+const LOOKUP_KINDS = { web: 'Web', papers: 'Papers', arxiv: 'arXiv', wiki: 'Wikipedia', page: 'Page', jobs: 'Jobs' }
 
 function addLookup (p) {
   removeEmpty()

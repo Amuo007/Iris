@@ -18,7 +18,7 @@
  * Pure apart from the injected `fetch`.
  */
 
-const KINDS = ['web', 'papers', 'arxiv', 'wiki', 'page']
+const KINDS = ['web', 'papers', 'arxiv', 'wiki', 'page', 'jobs']
 const ARXIV_STOP = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this', 'about', 'into', 'using', 'based', 'via', 'of', 'in', 'on', 'to', 'a', 'an', 'new', 'recent', 'latest', 'paper', 'papers', '2024', '2025', '2026', 'or'])
 
 /* Never contacted directly (search results that merely mention them are fine). */
@@ -199,6 +199,58 @@ function parseArxiv (xml, max) {
   return out
 }
 
+/* ---- job boards: Greenhouse, Lever and Ashby publish every opening as a public list ---- */
+
+/** "jobs.ashbyhq.com/ramp software engineer toronto" → { ats, company, words } or null */
+function parseJobBoardQuery (query) {
+  const q = String(query || '')
+  const m = /(?:https?:\/\/)?(?:boards|job-boards)\.greenhouse\.io\/(?:embed\/job_board\?for=)?([A-Za-z0-9_-]+)/i.exec(q) ||
+    null
+  if (m) return { ats: 'greenhouse', company: m[1], words: jobWords(q.replace(m[0], '')) }
+  const l = /(?:https?:\/\/)?jobs\.(?:eu\.)?lever\.co\/([A-Za-z0-9_.-]+)/i.exec(q)
+  if (l) return { ats: 'lever', company: l[1], words: jobWords(q.replace(l[0], '')) }
+  const a = /(?:https?:\/\/)?jobs\.ashbyhq\.com\/([A-Za-z0-9_.%-]+)/i.exec(q)
+  if (a) return { ats: 'ashby', company: decodeURIComponent(a[1]), words: jobWords(q.replace(a[0], '')) }
+  return null
+}
+
+function jobWords (s) {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9+#.\s-]/g, ' ').split(/\s+/).filter(function (w) { return w.length > 1 && !/^(and|or|the|in|at|for|of|jobs?|roles?)$/.test(w) })
+}
+
+function boardApiUrl (b) {
+  if (b.ats === 'greenhouse') return 'https://boards-api.greenhouse.io/v1/boards/' + encodeURIComponent(b.company) + '/jobs'
+  if (b.ats === 'lever') return 'https://api.lever.co/v0/postings/' + encodeURIComponent(b.company) + '?mode=json'
+  return 'https://api.ashbyhq.com/posting-api/job-board/' + encodeURIComponent(b.company)
+}
+
+/** The board's JSON → [{ title, location, team, url }] */
+function parseBoardJobs (ats, json) {
+  if (ats === 'greenhouse') {
+    return (json && json.jobs || []).map(function (j) { return { title: clip(j.title, 120), location: clip(j.location && j.location.name, 80), team: '', url: j.absolute_url } })
+  }
+  if (ats === 'lever') {
+    return (Array.isArray(json) ? json : []).map(function (j) {
+      const c = j.categories || {}
+      return { title: clip(j.text, 120), location: clip((c.allLocations && c.allLocations.join(' / ')) || c.location, 80), team: clip(c.team, 40), url: j.hostedUrl }
+    })
+  }
+  return (json && json.jobs || []).filter(function (j) { return j.isListed !== false }).map(function (j) {
+    const more = (j.secondaryLocations || []).map(function (x) { return x.location }).filter(Boolean)
+    return { title: clip(String(j.title || '').trim(), 120), location: clip([j.location].concat(more).join(' / ') + (j.isRemote ? ' (remote ok)' : ''), 100), team: clip(j.department, 40), url: j.jobUrl }
+  })
+}
+
+/* the best matches for the words, by how many of them appear in the title, team and place */
+function filterBoardJobs (jobs, words, max) {
+  if (!words.length) return jobs.slice(0, max)
+  return jobs.map(function (j) {
+    const hay = (j.title + ' ' + j.team + ' ' + j.location).toLowerCase()
+    const score = words.filter(function (w) { return hay.indexOf(w) !== -1 }).length
+    return { j: j, score: score }
+  }).filter(function (x) { return x.score >= Math.min(2, words.length) }).sort(function (a, b) { return b.score - a.score }).slice(0, max).map(function (x) { return x.j })
+}
+
 /**
  * @param {object} opts
  * @param {function} opts.fetch      fetch(url, {headers, signal}) -> Response (isolated session)
@@ -312,6 +364,17 @@ function createLookup (opts) {
     return { source: 'Wikipedia', items }
   }
 
+  async function jobs (query) {
+    const board = parseJobBoardQuery(query)
+    if (!board) throw new Error('give a Greenhouse, Lever or Ashby board address (e.g. jobs.lever.co/acme) and the words to match')
+    const r = await get(boardApiUrl(board), 'application/json')
+    if (r.status === 404) throw new Error('no job board called "' + board.company + '" on ' + board.ats)
+    if (r.status !== 200) throw new Error(board.ats + ' answered ' + r.status)
+    const all = parseBoardJobs(board.ats, JSON.parse(r.body))
+    const items = filterBoardJobs(all, board.words, 15)
+    return { source: board.company + ' on ' + board.ats + ', ' + all.length + ' open', items: items }
+  }
+
   async function page (url) {
     if (!/^https?:\/\//i.test(url)) url = 'https://' + String(url).replace(/^\/+/, '')
     const r = await get(url)
@@ -342,7 +405,7 @@ function createLookup (opts) {
       result = hit.result
     } else {
       try {
-        result = await ({ web, papers, arxiv, wiki, page })[kind](query)
+        result = await ({ web, papers, arxiv, wiki, page, jobs })[kind](query)
       } catch (e) {
         return { ok: false, text: 'Lookup (' + kind + ') "' + clip(query, 80) + '" failed: ' + (e && e.message ? e.message : e), count: 0 }
       }
@@ -355,7 +418,7 @@ function createLookup (opts) {
     const annotate = extra && typeof extra.annotate === 'function' ? extra.annotate : function () { return null }
     const head = kind === 'page'
       ? 'Text of ' + (result.items[0] && result.items[0].url) + ':'
-      : (kind === 'papers' || kind === 'arxiv' ? 'Papers' : kind === 'wiki' ? 'Encyclopedia' : 'Web search') + ' for "' + clip(query, 100) + '" (' + result.source + '):'
+      : (kind === 'papers' || kind === 'arxiv' ? 'Papers' : kind === 'wiki' ? 'Encyclopedia' : kind === 'jobs' ? 'Openings' : 'Web search') + ' for "' + clip(query, 100) + '" (' + result.source + '):'
     if (!result.items.length) return head + ' nothing found.'
     if (kind === 'page') {
       const it = result.items[0]
@@ -364,6 +427,8 @@ function createLookup (opts) {
     const lines = [head]
     result.items.forEach(function (it, i) {
       const meta = []
+      if (it.location) meta.push(it.location)
+      if (it.team) meta.push(it.team)
       if (it.year) meta.push(it.year)
       if (typeof it.cited === 'number') meta.push('cited ' + it.cited)
       if (it.id) meta.push(it.id)
@@ -394,4 +459,4 @@ function parseLookups (text, max) {
   }
 }
 
-module.exports = { createLookup, parseLookups, parseDuckDuckGo, parseBing, parseOpenAlex, parseArxiv, readableText, looksBlocked, isNever, KINDS, NEVER }
+module.exports = { createLookup, parseJobBoardQuery, parseBoardJobs, filterBoardJobs, parseLookups, parseDuckDuckGo, parseBing, parseOpenAlex, parseArxiv, readableText, looksBlocked, isNever, KINDS, NEVER }

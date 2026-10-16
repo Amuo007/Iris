@@ -342,8 +342,10 @@ function irisJobsPrompt (task, mode) {
   const p = bank.prefs
   const lines = ['JOBS — the user keeps a career profile in Iris (Settings → Jobs). Applying for one job:',
     '1. Find postings that match' + (p.roles ? ': ' + p.roles : ' the profile') + (p.locations ? '; places: ' + p.locations : '') + (p.workplace !== 'any' ? '; ' + p.workplace + ' only' : '') + '.',
-    '   Company career pages and boards that need no account (boards.greenhouse.io, jobs.lever.co, jobs.ashbyhq.com) are quickest;',
-    '   a look-up like "site:boards.greenhouse.io <role> <place>" lists many postings at once.',
+    '   Company boards that need no account (boards.greenhouse.io, jobs.lever.co, jobs.ashbyhq.com) are quickest. To find',
+    '   companies, search the web in the browser (navigate with words like "site:jobs.lever.co software engineer Toronto")',
+    '   and open the results; never guess a company\'s board address. On a board with many openings, a jobs look-up',
+    '   ({"kind":"jobs","query":"jobs.lever.co/<company> <role words> <place>"}) lists the matching ones at once.',
     '2. Open the posting and read all of it (scroll). Remember its must-haves.',
     '3. tailor_resume {"company":str,"title":str,"requirements":str}: requirements = what the posting asks for, as exact',
     '   as you can (skills, tools, years, duties). Iris builds a one-page PDF from the profile and says how well it fits.',

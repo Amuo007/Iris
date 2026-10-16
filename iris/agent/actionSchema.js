@@ -525,7 +525,7 @@ function validateAction (obj, limits) {
       case 'kind': {
         const k = toStringValue(value)
         const kl = k === null ? '' : k.trim().toLowerCase()
-        action.kind = ['web', 'papers', 'arxiv', 'wiki', 'page'].includes(kl) ? kl : 'web'
+        action.kind = ['web', 'papers', 'arxiv', 'wiki', 'page', 'jobs'].includes(kl) ? kl : 'web'
         break
       }
       case 'status': {
@@ -780,9 +780,11 @@ const ACTION_SPEC_TEXT = [
   '               e.g. a paper title or ID; the best matches come back on the next step',
   '  save_account {"site":str,"username":str,"password":str,"purpose":str}  after creating an account, record it',
   '               for the user (password: the placeholder you typed, e.g. "{{Password}}"; purpose: why it was made)',
-  '  lookup       {"kind":"web|papers|arxiv|wiki|page","query":str}  a quick look-up OUTSIDE the browser, as text:',
+  '  lookup       {"kind":"web|papers|arxiv|wiki|page|jobs","query":str}  a quick look-up OUTSIDE the browser, as text:',
   '               web = search results with snippets, papers = papers with abstracts and citation counts,',
-  '               arxiv = newest arXiv preprints, wiki = encyclopedia summary, page = text of one public page (query = its URL).',
+  '               arxiv = newest arXiv preprints, wiki = encyclopedia summary, page = text of one public page (query = its URL),',
+  '               jobs = every opening on one company\'s Greenhouse/Lever/Ashby board, filtered (query = board address + words,',
+  '               e.g. "jobs.lever.co/acme software engineer toronto").',
   '               Use it to decide where to go, to check a fact, or to read a long public list (jobs, products,',
   '               papers) in one step instead of scrolling. Do the task itself (forms, accounts, downloads,',
   '               purchases) in the browser. A few per task.',
