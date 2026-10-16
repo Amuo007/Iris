@@ -269,3 +269,30 @@ test('job tasks are told apart from tasks that merely say "apply" or "resume"', 
   for (const t of yes) assert.ok(career.isJobTask(t), 'should be a job task: ' + t)
   for (const t of no) assert.ok(!career.isJobTask(t), 'should not be a job task: ' + t)
 })
+
+test('years a posting asks for, and years the profile shows', () => {
+  assert.strictEqual(career.yearsAsked('3+ years running production systems on AWS; Kubernetes'), 3)
+  assert.strictEqual(career.yearsAsked('At least 5 years of Go. 2-4 years in a startup is a plus'), 5)
+  assert.strictEqual(career.yearsAsked('3 years of professional experience with C'), 3)
+  assert.strictEqual(career.yearsAsked('We have been building sensors for 10 years. Python, C.'), 0)
+  const bank = career.normalizeBank({ experience: [
+    { title: 'Software Engineer', company: 'A', dates: 'Jul 2025 -- Present', bullets: ['x'] },
+    { title: 'Intern', company: 'B', dates: 'May 2024 -- Aug 2024', bullets: ['y'] },
+    { title: 'Intern', company: 'C', dates: 'Jun 2024 -- Jul 2024', bullets: ['z'] } // overlaps B: counted once
+  ] })
+  const years = career.yearsWorked(bank, Date.UTC(2026, 9, 16))
+  assert.ok(years > 1.5 && years < 1.75, 'about 1.6 years, got ' + years)
+})
+
+test('a job asking for more years than the profile shows cannot get a high fit', () => {
+  const bank = career.normalizeBank(SAMPLE)
+  const reply = JSON.stringify({ fit: 85, focus: 'Cloud', why: 'Strong AWS', missing: [], experience: [{ id: 'E1', bullets: ['E1.1'] }], projects: [], skills: [] })
+  const now = Date.UTC(2026, 9, 16)
+  const far = career.parseTailorReply(reply, bank, { title: 'Senior PM', requirements: '6+ years of product management' }, parseObjectLoose, now)
+  assert.ok(far.fit <= 50)
+  assert.match(far.missing[0], /6\+ years asked/)
+  const near = career.parseTailorReply(reply, bank, { title: 'Platform Engineer', requirements: '3+ years running production systems on AWS' }, parseObjectLoose, now)
+  assert.ok(near.fit <= 65 && near.fit > 50)
+  const ok = career.parseTailorReply(reply, bank, { title: 'Embedded', requirements: '1+ years writing C' }, parseObjectLoose, now)
+  assert.strictEqual(ok.fit, 85)
+})

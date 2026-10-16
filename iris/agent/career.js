@@ -992,7 +992,9 @@ function tailorMessages (bank, job) {
     '  projects; Iris trims the list to fit one page, so the order matters more than the count.',
     '- Keep every job in "experience" unless it has nothing relevant and there are 3 or more others.',
     '- skills: the groups and skills that matter for this job, most relevant first; leave out unrelated ones.',
-    '- fit: 0-100, how well the bank covers the job\'s must-haves (100 = every must-have is clearly there).',
+    '- fit: 0-100, how well the bank covers the job\'s must-haves (100 = every must-have is clearly there). Each',
+    '  must-have the bank does not show lowers it a lot; years of experience the person does not have (count them',
+    '  from the job dates) keep it at 60 or below.',
     '- summary: one or two sentences aimed at this job, built only from bank facts, no numbers and no job title',
     '  the person has not held; or "" if nothing fits.',
     'Reply with one JSON object and nothing else:',
@@ -1135,7 +1137,50 @@ function keywordPick (bank, job) {
  * The model's reply → a checked selection. Unknown IDs and skills are dropped, rewrites that add
  * facts are undone (listed in `undone`), and anything the reply left out falls back to keyword ranking.
  */
-function parseTailorReply (text, bank, job, parseObject) {
+/* "3+ years", "at least 5 years", "2-4 years", "3 years of experience": the most a posting asks for (0: none) */
+function yearsAsked (text) {
+  const t = String(text || '')
+  let most = 0
+  const take = function (n) { n = Number(n); if (n > 0 && n <= 15 && n > most) most = n }
+  const patterns = [
+    /(\d{1,2})\s*\+\s*(?:years?|yrs?)\b/gi,
+    /\b(?:at least|minimum(?: of)?|min\.?)\s+(\d{1,2})\s*(?:years?|yrs?)\b/gi,
+    /\b(\d{1,2})\s*(?:-|–|to)\s*\d{1,2}\s*(?:years?|yrs?)\b/gi,
+    /\b(\d{1,2})\s*(?:years?|yrs?)\s+(?:of\s+)?(?:professional\s+|relevant\s+|industry\s+|hands-on\s+|work\s+|related\s+)?experience\b/gi
+  ]
+  patterns.forEach(function (re) { let m; while ((m = re.exec(t))) take(m[1]) })
+  return most
+}
+
+const MONTH_INDEX = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 }
+
+/* Years of work in the bank, from each job's dates ("Jul 2025 -- Present", "2019 - 2021"), overlaps counted once. */
+function yearsWorked (bank, now) {
+  const today = new Date(now || Date.now())
+  const spans = []
+  ;(bank.experience || []).forEach(function (e) {
+    const d = String(e.dates || '').toLowerCase()
+    const points = []
+    const re = /\b(?:(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+)?((?:19|20)\d{2})\b|\b(present|current|now|today)\b/g
+    let m
+    while ((m = re.exec(d))) {
+      if (m[3]) points.push(today.getFullYear() + today.getMonth() / 12)
+      else points.push(Number(m[2]) + (m[1] ? MONTH_INDEX[m[1]] / 12 : 0))
+    }
+    if (points.length >= 2 && points[1] > points[0]) spans.push([points[0], points[1] + (/present|current|now|today/.test(d) ? 0 : 1 / 12)])
+  })
+  spans.sort(function (a, b) { return a[0] - b[0] })
+  let total = 0
+  let end = -Infinity
+  spans.forEach(function (sp) {
+    const from = Math.max(sp[0], end)
+    if (sp[1] > from) total += sp[1] - from
+    end = Math.max(end, sp[1])
+  })
+  return total
+}
+
+function parseTailorReply (text, bank, job, parseObject, now) {
   let obj = null
   if (parseObject) {
     const raw = String(text || '')
@@ -1230,13 +1275,21 @@ function parseTailorReply (text, bank, job, parseObject) {
   const moreProjects = fallback.projects.concat(bank.projects.map(function (p, i) { return { id: 'P' + (i + 1), bullets: p.bullets.map(function (b, j) { return 'P' + (i + 1) + '.' + (j + 1) }).slice(0, 2) } }))
     .filter(function (p, k, all) { return !projects.some(function (x) { return x.id === p.id }) && all.findIndex(function (y) { return y.id === p.id }) === k })
 
-  const fit = Number.isFinite(Number(obj.fit)) ? Math.max(0, Math.min(100, Math.round(Number(obj.fit)))) : null
+  let fit = Number.isFinite(Number(obj.fit)) ? Math.max(0, Math.min(100, Math.round(Number(obj.fit)))) : null
+  const missing = (Array.isArray(obj.missing) ? obj.missing : []).map(function (x) { return str(x, 80) }).filter(Boolean).slice(0, 8)
+  // the model tends to rate a job it could fill well even when the person is years short of what it asks
+  const asked = yearsAsked(job && job.requirements)
+  const have = yearsWorked(bank, now)
+  if (fit !== null && asked > 0 && asked - have >= 1) {
+    fit = Math.min(fit, asked - have >= 2 ? 50 : 65)
+    if (!missing.some(function (x) { return /\byears?\b/i.test(x) })) missing.unshift(asked + '+ years asked; the profile shows about ' + (Math.round(have * 10) / 10) + '')
+  }
   return {
     usedModel: usedModel,
     fit: fit,
     focus: str(obj.focus, 80),
     why: str(obj.why, 300),
-    missing: (Array.isArray(obj.missing) ? obj.missing : []).map(function (x) { return str(x, 80) }).filter(Boolean).slice(0, 8),
+    missing: missing,
     summary: summary,
     skills: skills,
     experience: experience,
@@ -1637,6 +1690,8 @@ function readLatexLog (log) {
 module.exports = {
   SECTION_KINDS,
   isJobTask,
+  yearsAsked,
+  yearsWorked,
   DEFAULT_TEMPLATE,
   DEFAULT_PREFS,
   normalizeBank,
