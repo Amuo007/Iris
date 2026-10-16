@@ -147,8 +147,15 @@ Updated 2026-10-16 (evening).
 
 ### 8. Find on page
 - **What:** Cmd+F, used the way a person does: jump to "Directions", "Price", "Apply".
-- **Fix today:** the first search on a page that has only just loaded sometimes got no answer
+- **Fix this morning:** the first search on a page that has only just loaded sometimes got no answer
   from the browser; Iris now asks once more after 2 s.
+- **The real cause (found this evening):** Electron's `findNext` option means "start a new search
+  session" when true — not "find the next match". Iris sent `false` for every new search, so Chromium
+  took it as a follow-up to a session that did not exist and never answered; finds only worked when some
+  earlier search happened to be open. On a recipe page Iris then scrolled up and down past the directions
+  for 8 steps (22 steps, 3:36). Now a new search starts a session and a repeat goes to the next match:
+  every find answers at once, right after a page loads too (Wikipedia, allrecipes). The same recipe
+  task: **10 steps, 1:16**.
 
 ---
 
