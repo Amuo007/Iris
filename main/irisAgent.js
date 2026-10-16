@@ -493,7 +493,13 @@ function irisSkillsForTask (task) {
 
 function irisLearn (url, tip) {
   const site = irisSiteOf(url)
-  const text = String(tip || '').trim().slice(0, 240)
+  // at most 240 characters, ending at a sentence or a word, never mid-word
+  let text = String(tip || '').trim()
+  if (text.length > 240) {
+    const cut = text.slice(0, 240)
+    const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('; '))
+    text = end > 120 ? cut.slice(0, end + 1) : cut.replace(/\s+\S*$/, '') + '…'
+  }
   if (!site || !text) return
   const all = irisSkillsLoad()
   let list = all[site] || []
