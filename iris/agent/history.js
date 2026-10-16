@@ -256,14 +256,20 @@ function createHistory (options) {
       const newest = obs[obs.length - 1]
 
       const out = [{ role: 'system', content: prompts.systemPrompt(systemExtra) }]
+      // the summary of forgotten steps sits right after the task and plan: it changes only when Iris
+      // forgets a chunk of steps (which changes the prompt right there anyway), so the server keeps it
+      // cached between those times instead of reading ~2,000 tokens again on every step
+      let digestAt = entries.findIndex(e => e.kind !== 'task' && e.kind !== 'plan')
+      if (digestAt === -1) digestAt = entries.length
 
-      for (const e of entries) {
+      for (let ei = 0; ei < entries.length; ei++) {
+        const e = entries[ei]
+        if (ei === digestAt && digest.length) out.push({ role: 'user', content: prompts.digestText(digest, digestDropped) })
         if (e.kind === 'observation') {
           let text = e.text
           if (e === newest) {
             if (e.tabs && e.tabs.length > 1) text += '\n' + prompts.tabsText(e.tabs)
             if (e.skills) text += '\n' + prompts.skillsText(e.skills)
-            if (digest.length) text += '\n' + prompts.digestText(digest, digestDropped)
             const visited = Object.keys(sites).map(h => Object.assign({ host: h }, sites[h])).sort((a, b) => b.order - a.order)
             if (visited.length > 1 || (visited[0] && visited[0].host !== hostOf(e.url))) text += '\n' + prompts.sitesText(visited.slice(0, 6), hostOf(e.url))
             if (kept.length || skipped) text += '\n' + prompts.decisionsText(kept, skipped, judgedIds)
@@ -283,6 +289,7 @@ function createHistory (options) {
           out.push({ role: 'user', content: e.text })
         }
       }
+      if (digestAt === entries.length && digest.length) out.push({ role: 'user', content: prompts.digestText(digest, digestDropped) })
 
       return out
     },

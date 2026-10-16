@@ -473,15 +473,17 @@ test('a full context drops old steps first, then explains if that is not enough'
 test('steps that fall out of the window are kept as a one-line summary', async () => {
   const replies = []
   for (let i = 0; i < 30; i++) replies.push(json('reading item ' + i, { type: 'scroll', direction: 'down', amount: 1, x: 10, y: 10 + i }))
-  replies.push((ctx) => { h.last = ctx.messages[ctx.messages.length - 1].content[0].text; h.count = ctx.messages.length; return json('done', { type: 'done' }) })
+  replies.push((ctx) => { h.all = ctx.messages; h.count = ctx.messages.length; return json('done', { type: 'done' }) })
   const h = harness(replies, null, { history: { maxMessages: 12 }, safety: { maxSteps: 100 } })
   const sizes = []
   const next = h.model.next.bind(h.model)
   h.model.next = function (ctx) { sizes.push(ctx.messages.length); return next(ctx) }
   await h.agent.run('long research')
-  assert.match(h.last, /Earlier steps \(summary/)
-  assert.match(h.last, /Scroll down/)
-  assert.ok(Math.max.apply(null, sizes) <= 14, 'the conversation itself stays small: ' + Math.max.apply(null, sizes))
+  // the summary sits right after the task (and plan), where it stays cached between compactions
+  const summary = h.all.findIndex(m => typeof m.content === 'string' && /^Earlier steps \(summary/.test(m.content))
+  assert.strictEqual(summary, 2, 'right after the system message and the task')
+  assert.match(h.all[summary].content, /Scroll down/)
+  assert.ok(Math.max.apply(null, sizes) <= 15, 'the conversation itself stays small: ' + Math.max.apply(null, sizes))
   // compaction happens in chunks, so most steps keep the same prefix (prompt cache hits)
   let shrinks = 0
   for (let i = 1; i < sizes.length; i++) if (sizes[i] < sizes[i - 1]) shrinks++
