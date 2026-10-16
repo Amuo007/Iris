@@ -271,7 +271,15 @@ function finishReminder (stepsLeft) {
     '(say what is missing). A partial answer is far better than none.'
 }
 
+/* Too many kept: most "related" things are not what the user wanted. */
+function stricterNote (kept, judged) {
+  return 'You have kept ' + kept + ' of the ' + judged + ' things you judged. The user wants the best ones, not everything related: ' +
+    'from now on keep only what clearly meets every point of "Good result means" in your plan (or the task\'s own words) and ' +
+    'is strong on its own (new results, clear method, real evaluation); skip what is merely on the topic, a survey of it, or a small variation.'
+}
+
 module.exports = {
+  stricterNote,
   systemPrompt,
   taskMessage,
   followUpMessage,

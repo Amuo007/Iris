@@ -248,7 +248,9 @@ function createHistory (options) {
     },
 
     /** Render the chat messages for a chat-completions call. */
-    messages (systemExtra) {
+    messages (systemExtra, liveExtra) {
+      // systemExtra stays the same from step to step (the server keeps it cached); liveExtra is
+      // what changes during a run, so it rides on the newest observation instead
       const obs = entries.filter(e => e.kind === 'observation')
       const withImage = new Set(obs.slice(Math.max(0, obs.length - cfg.keepImages)))
       const newest = obs[obs.length - 1]
@@ -269,6 +271,7 @@ function createHistory (options) {
             if (notes.length) text += '\n' + prompts.notesText(notes.slice(-cfg.notesShown), Math.max(0, notes.length - cfg.notesShown))
             const plan = entries.find(x => x.kind === 'plan')
             if (plan) { const r = prompts.planReminder(plan.plan); if (r) text += '\n' + r }
+            if (liveExtra) text += '\n' + liveExtra
           }
           const parts = [textPart(text)]
           if (e.dataUrl && withImage.has(e) && e.dataUrl !== 'omitted') parts.push(imagePart(e.dataUrl))

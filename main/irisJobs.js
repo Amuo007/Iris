@@ -177,7 +177,7 @@ async function irisTailorResume (job, hooks) {
   let modelError = null
   if (!text && !(hooks && hooks.noModel) && !(process.env.IRIS_FAKE_MODEL || cfg.useFakeModel)) {
     try {
-      const model = irisModelClient.createModelClient({ baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0.2, thinking: tailorThinking, timeoutMs: cfg.modelTimeoutMs })
+      const model = irisLockedModel(irisModelClient.createModelClient({ baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0.2, thinking: tailorThinking, timeoutMs: cfg.modelTimeoutMs }), cfg.baseUrl)
       const reply = await model.next({ messages: irisCareerLib.tailorMessages(bank, job), thinking: tailorThinking, signal: hooks && hooks.signal })
       text = typeof reply === 'string' ? reply : (reply && reply.content) || ''
       if (reply && reply.usage) irisUsageRecord('request', Object.assign({ ms: reply.ms }, reply.usage))
@@ -314,9 +314,11 @@ function irisJobsPrompt (task, mode) {
     '   as you can (skills, tools, years, duties). Iris builds a one-page PDF from the profile and says how well it fits.',
     '   No need to judge the job yourself: the fit Iris reports is the decision.',
     '4. If Iris says the fit is below the cutoff: log_application {"status":"skipped",…} and go to the next job.',
+    '   A job you rule out from the list without opening it (wrong place, role or level): log it as skipped too, with the reason.',
     '5. Otherwise apply: fill the form from My info and the answers below. When it asks for a resume, upload the PDF',
     '   tailor_resume made. Answer every question truthfully from the profile and the answers; never claim a skill or',
-    '   experience the profile does not show.',
+    '   experience the profile does not show. "Do you have X?" (a clearance, a licence, a certification, a degree) when the',
+    '   profile does not show X: the true answer is No — the profile lists everything the user has.',
     nonStop
       ? '   Only the user can finish it (a CAPTCHA that stays, a login you have no account for, a required question or file the profile does not have): log_application {"status":"needs_you","note":"<what is missing>"} — Iris tells the user — and go on to the next job. Do not wait.'
       : '   A required question you cannot answer from them, a CAPTCHA that stays, or a login you cannot do: ask_user.',
@@ -329,9 +331,11 @@ function irisJobsPrompt (task, mode) {
     '   a question); failed when the site broke. Then the next job.',
     '   log_application {"status":…} takes company, title and url of the job you were on.'
   ]
+  // what changes while Iris works goes in the live part (sent last, so the cached start stays the same)
+  const live = []
   if (p.dailyLimit > 0) {
     const today = irisAppliedToday()
-    lines.push('Daily limit: ' + p.dailyLimit + ' applications; ' + today + ' sent today.' + (today >= p.dailyLimit ? ' The limit is reached: do not submit more today; finish.' : ''))
+    live.push('Daily limit: ' + p.dailyLimit + ' applications; ' + today + ' sent today.' + (today >= p.dailyLimit ? ' The limit is reached: do not submit more today; finish.' : ''))
   }
   const answers = bank.answers.filter(function (a) { return a.value })
   if (answers.length) lines.push('Answers for application questions (turn them into the form\'s own options, e.g. a citizen is "Yes" to "authorized to work"): ' + answers.map(function (a) { return a.label + ': ' + a.value }).join('; ') + '.')
@@ -343,11 +347,11 @@ function irisJobsPrompt (task, mode) {
   if (summary.length) lines.push('Profile in short — ' + summary.join('. ') + '.')
   const done = irisApplicationsLoad().slice(-60)
   if (done.length) {
-    lines.push('Already handled — never apply to these again: ' + done.map(function (a) {
+    live.push('Jobs already handled — never apply to these again: ' + done.map(function (a) {
       return (a.title || '?') + ' at ' + (a.company || '?') + ' (' + a.status + ')'
     }).join('; ') + '.')
   }
-  return lines.join('\n')
+  return { stable: lines.join('\n'), live: live.join('\n') }
 }
 
 /* ---------- settings page ---------- */

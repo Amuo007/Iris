@@ -73,6 +73,66 @@ function DBUG (m) {
   try { fs.appendFileSync(DEBUG_LOG, new Date().toISOString() + ' ' + m + '\n') } catch (e) { /* logging must never break the agent */ }
 }
 
+/*
+ * One model request at a time across every copy of Iris on this Mac. Two Iris windows asking the
+ * same local server at once made llama-server stop answering; now the second one waits its turn.
+ * A small lock file per server, refreshed while a request runs; a lock whose owner quit or that has
+ * not been refreshed for 90 s is taken over.
+ */
+function irisModelLockFile (baseUrl) {
+  const key = require('crypto').createHash('sha1').update(String(baseUrl || '')).digest('hex').slice(0, 12)
+  return path.join(app.getPath('temp'), 'iris-model-' + key + '.lock')
+}
+
+function irisPidAlive (pid) {
+  try { process.kill(pid, 0); return true } catch (e) { return e.code === 'EPERM' }
+}
+
+async function irisModelTurn (baseUrl, fn, onWait) {
+  const file = irisModelLockFile(baseUrl)
+  const me = process.pid + '-' + Math.random().toString(36).slice(2)
+  let waited = false
+  for (let tries = 0; ; tries++) {
+    try {
+      fs.writeFileSync(file, JSON.stringify({ owner: me, pid: process.pid, at: Date.now() }), { flag: 'wx' })
+      break
+    } catch (e) {
+      if (e.code !== 'EEXIST') break // no lock possible here (odd file system): just go
+      let held = null
+      try { held = JSON.parse(fs.readFileSync(file, 'utf8')) } catch (err) { /* being written */ }
+      if (held && (Date.now() - held.at > 90000 || !irisPidAlive(held.pid))) {
+        try { fs.unlinkSync(file) } catch (err) { /* someone else took it */ }
+        continue
+      }
+      if (!waited && onWait) { waited = true; onWait() }
+      await sleep(250)
+    }
+  }
+  const beat = setInterval(function () {
+    try {
+      const held = JSON.parse(fs.readFileSync(file, 'utf8'))
+      if (held.owner === me) fs.writeFileSync(file, JSON.stringify({ owner: me, pid: process.pid, at: Date.now() }))
+    } catch (e) { /* gone */ }
+  }, 30000)
+  try {
+    return await fn()
+  } finally {
+    clearInterval(beat)
+    try { if (JSON.parse(fs.readFileSync(file, 'utf8')).owner === me) fs.unlinkSync(file) } catch (e) { /* already gone */ }
+  }
+}
+
+/* a model client whose every request waits for its turn */
+function irisLockedModel (client, baseUrl) {
+  return {
+    next: function (opts) {
+      return irisModelTurn(baseUrl, function () { return client.next(opts) }, function () {
+        if (opts && typeof opts.onProgress === 'function') opts.onProgress({ phase: 'queued' })
+      })
+    }
+  }
+}
+
 function withTimeout (promise, ms, message) {
   let timer = null
   return Promise.race([
@@ -1779,21 +1839,35 @@ var irisSkillsLogged = null
 
 /* Models are bad at weekday arithmetic: name the coming Mondays so dates can be checked, not guessed. */
 function irisCalendarHint (now) {
+  // the next 14 days with their weekdays: "next Friday" or "this weekend" is read off, not computed
+  const day = new Date(now)
+  day.setHours(12, 0, 0, 0)
+  const next = []
+  for (let i = 1; i <= 14; i++) {
+    day.setDate(day.getDate() + 1)
+    next.push(day.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).replace(',', ''))
+  }
   const d = new Date(now)
   d.setHours(12, 0, 0, 0)
-  d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)) // next Monday
+  d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7) + 14) // Mondays after those two weeks
   const mondays = []
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 6; i++) {
     mondays.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
     d.setDate(d.getDate() + 7)
   }
-  return 'Coming Mondays: ' + mondays.join(', ') + ' (use them to work out weekdays).'
+  return 'Next 14 days: ' + next.join(', ') + '. Later Mondays: ' + mondays.join(', ') + '. Read weekdays from this list, never work them out.'
 }
 
+/*
+ * What Iris is told besides the task: { stable, live }. The stable part opens every request and
+ * stays byte-identical during a run, so the model server reuses its cache; whatever changes while
+ * Iris works (a project's latest notes, the jobs handled so far) is the live part, sent last.
+ */
 function irisSystemExtra (mode, task, projectId, sessionId) {
   const parts = []
+  const live = []
   const brief = irisProjectBrief(projectId)
-  if (brief) parts.push(brief)
+  if (brief) live.push(brief)
   const now = new Date()
   parts.push('Today is ' + now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + '. ' + irisCalendarHint(now))
   const profile = irisPrompts.profileText(irisProfileForPrompt())
@@ -1818,14 +1892,18 @@ function irisSystemExtra (mode, task, projectId, sessionId) {
   if (userSkills) parts.push(userSkills)
   const prior = irisPriorJudged(task, sessionId)
   if (prior) parts.push(prior)
-  if (irisJobsActive(task)) parts.push(irisJobsPrompt(task, mode))
+  if (irisJobsActive(task)) {
+    const jobs = irisJobsPrompt(task, mode)
+    parts.push(jobs.stable)
+    if (jobs.live) live.push(jobs.live)
+  }
   if ((playbook || userSkills) && irisSkillsLogged !== task) {
     irisSkillsLogged = task
     DBUG('prompt extras: playbook=' + !!playbook + ' userSkills=' + (userSkills ? userSkills.split('\n').length - 1 : 0))
   }
   const rules = String(settings.get('irisRules') || '').trim()
   if (rules) parts.push('Rules from the user. Always follow these, they override everything else:\n' + rules)
-  return parts.join('\n\n')
+  return { stable: parts.join('\n\n'), live: live.join('\n\n') }
 }
 
 /**
@@ -1900,14 +1978,14 @@ function startAgent (task, options) {
   const useFakeModel = !!process.env.IRIS_FAKE_MODEL || !!cfg.useFakeModel
   const model = useFakeModel
     ? require('./iris/agent/fakeModel.js').createFakeModel({})
-    : irisModelClient.createModelClient({
+    : irisLockedModel(irisModelClient.createModelClient({
       baseUrl: cfg.baseUrl,
       model: cfg.model,
       apiKey: cfg.apiKey,
       temperature: cfg.temperature,
       thinking: cfg.thinking,
       timeoutMs: cfg.modelTimeoutMs
-    })
+    }), cfg.baseUrl)
 
   const agent = irisLoop.createAgent({
     model: model,
@@ -2014,7 +2092,7 @@ function startAgent (task, options) {
       if (type === 'run:end' && payload.status !== 'stopped' && !(unlimited && payload.status === 'failed')) irisNotify(payload.status === 'done' ? 'Iris finished' : 'Iris could not finish', (payload.status === 'done' ? payload.answer : payload.reason) || session.title)
       if (type === 'thought' && payload.usage) irisUsageRecord('request', Object.assign({ ms: payload.modelMs }, payload.usage))
       if (type === 'thought' && payload.usage) {
-        DBUG('usage step ' + payload.step + ' prompt=' + payload.usage.prompt_tokens + ' completion=' + payload.usage.completion_tokens + ' ms=' + payload.modelMs)
+        DBUG('usage step ' + payload.step + ' prompt=' + payload.usage.prompt_tokens + ' cached=' + ((payload.usage.prompt_tokens_details && payload.usage.prompt_tokens_details.cached_tokens) || 0) + ' completion=' + payload.usage.completion_tokens + ' ms=' + payload.modelMs)
       }
       if (type !== 'model:progress') DBUG('event ' + type + ' ' + JSON.stringify(payload && (payload.status || payload.description || payload.error || payload.thought || '') || ''))
       if (type === 'rejected') DBUG('rejected raw: ' + String(payload.raw || '').slice(0, 2500))

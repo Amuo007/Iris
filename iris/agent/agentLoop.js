@@ -102,6 +102,7 @@ function createAgent (opts) {
   let runLookups = 0
   let smartLevel = null
   let asking = false // paused on an ask_user question (may time out in a non-stop run)
+  let strictNudgeAt = -100 // judgements counted when Iris was last told to be stricter
 
   /* a look-up never fails the run: an error comes back as text the model can read */
   async function runLookup (req) {
@@ -263,7 +264,8 @@ function createAgent (opts) {
     if (runOptions && runOptions.plan) {
       emit('plan:start', { level: smartLevel })
       try {
-        const extra = typeof cfg.systemExtra === 'function' ? cfg.systemExtra() : cfg.systemExtra
+        const extraRaw = typeof cfg.systemExtra === 'function' ? cfg.systemExtra() : cfg.systemExtra
+        const extra = extraRaw && typeof extraRaw === 'object' ? [extraRaw.stable, extraRaw.live].filter(Boolean).join('\n\n') : extraRaw
         const current = history.plan() || (runOptions.projectPlan || null)
         let budget = lookupFn ? (smartLevel === 'deep' ? cfg.planLookupsDeep : cfg.planLookupsQuick) : 0
         let rounds = smartLevel === 'deep' ? 2 : 1
@@ -480,7 +482,9 @@ function createAgent (opts) {
       emit('model:start', { step: state.step })
       try {
         const extra = typeof cfg.systemExtra === 'function' ? cfg.systemExtra() : cfg.systemExtra
-        raw = await modelNext(history.messages(extra || undefined), state.step, obs)
+        // { stable, live }: the stable part opens the prompt (cached), the live part goes last
+        const split = extra && typeof extra === 'object' ? extra : { stable: extra, live: '' }
+        raw = await modelNext(history.messages(split.stable || undefined, split.live || undefined), state.step, obs)
       } catch (err) {
         if (stopRequested) return finish('stopped', stopRequested)
         const message = err && err.message ? err.message : String(err)
@@ -666,6 +670,14 @@ function createAgent (opts) {
     if (action.type === 'judge') {
       history.addVerdict(action.item, action.keep, pageState.url || obs.url)
       emit('verdict', { step: state.step, item: action.item, keep: action.keep, why: action.why || '' })
+      // keeping nearly everything means the bar is too low: say so, once every 15 judgements
+      const d = history.decisions()
+      const judged = d.kept.length + d.skipped
+      if (judged >= 10 && judged - strictNudgeAt >= 15 && d.kept.length / judged >= 0.85) {
+        strictNudgeAt = judged
+        history.addSystemNote(prompts.stricterNote(d.kept.length, judged))
+        emit('remember', { step: state.step, note: 'Kept ' + d.kept.length + ' of ' + judged + ': raising the bar', automatic: true })
+      }
       return {}
     }
 

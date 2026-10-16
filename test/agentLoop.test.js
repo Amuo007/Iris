@@ -799,3 +799,31 @@ test('every judged paper ID stays listed on each step, even after its step is co
   const last = h.messages().pop().content[0].text
   assert.match(last, /Already judged — never open these again: 2610\.22234, 2609\.11111/)
 })
+
+test('what changes during a run rides on the newest observation; the prompt start stays the same', () => {
+  const { createHistory } = require('../iris/agent/history')
+  const h = createHistory({ keepImages: 1 })
+  h.start('apply to jobs')
+  h.addObservation({ dataUrl: 'data:image/jpeg;base64,AA', url: 'https://a.test/', width: 10, height: 10 }, 1)
+  const one = h.messages('STABLE PART', 'Jobs handled: A')
+  h.addAssistant('{"thought":"x","action":{"type":"wait"}}', 'x', { type: 'wait', ms: 1 }, 'https://a.test/')
+  h.addObservation({ dataUrl: 'data:image/jpeg;base64,BB', url: 'https://a.test/', width: 10, height: 10 }, 2)
+  const two = h.messages('STABLE PART', 'Jobs handled: A, B')
+  assert.strictEqual(one[0].content, two[0].content, 'the system message is byte-identical')
+  assert.match(two[two.length - 1].content[0].text, /Jobs handled: A, B$/)
+  assert.ok(!/Jobs handled/.test(JSON.stringify(two.slice(0, -1))), 'older messages do not carry the live part')
+})
+
+test('keeping almost everything gets a nudge to raise the bar', async () => {
+  const { createAgent } = require('../iris/agent/agentLoop')
+  const replies = []
+  for (let i = 0; i < 11; i++) replies.push(JSON.stringify({ thought: 'judge', action: { type: 'judge', item: 'Paper ' + i, keep: true, why: 'related' } }))
+  replies.push(JSON.stringify({ thought: 'ok', action: { type: 'done', answer: 'x' } }))
+  let i = 0
+  const seen = []
+  const model = { next: async (o) => { seen.push(JSON.stringify(o.messages)); return replies[i++] } }
+  const computer = { screenshot: async () => ({ dataUrl: 'data:image/jpeg;base64,AA', width: 100, height: 100, url: 'https://p.test/' + i }), act: async () => ({ ok: true }), state: () => ({}) }
+  const agent = createAgent({ model, computer, delay: async () => {}, config: { answerCheck: false }, safety: { maxSteps: 30 } })
+  await agent.run('find the best papers')
+  assert.ok(seen.some(m => /You have kept 10 of the 10/.test(m)), 'told after 10 kept out of 10')
+})

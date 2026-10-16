@@ -1033,6 +1033,7 @@ function handleEvent (payload) {
       break
     case 'model:progress':
       if (payload.planning) setStatus(keep, 'Planning · ' + Math.round((payload.elapsedMs || 0) / 1000) + 's')
+      else if (payload.phase === 'queued') setStatus(keep, 'Waiting for another Iris window to finish with the model…')
       else if (payload.phase === 'waiting') setStatus(keep, 'Reading the page…')
       else if (payload.phase === 'thinking') setStatus(keep, 'Thinking · ' + Math.round(payload.elapsedMs / 1000) + 's')
       else setStatus(keep, 'Deciding…')
