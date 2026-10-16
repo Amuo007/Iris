@@ -157,6 +157,11 @@ Updated 2026-10-16 (evening).
   reuses it from its cache.
 - **Result:** measured after the 5-hour run (section in the day report).
 
+- **Measured after the move (same task, 35 minutes, server to itself):** cached part 51 % → 70 %,
+  tokens read fresh per step 4,754 → 2,524. The cache now grows step by step and starts over only when
+  a chunk of old steps is forgotten (every 6–8 steps); before, the summary rode on the newest step and
+  was read fresh every time.
+
 ### 9b. One model call at a time, across every Iris window (new today)
 - **What:** two copies of Iris (or Iris plus a test copy) never send your server two requests at
   the same time — that is what made llama-server stop answering on Oct 16 at 00:31.
@@ -209,6 +214,8 @@ Updated 2026-10-16 (evening).
 - **Now:** after 10 or more judgements, if 85 % or more were kept, Iris is told (once every 15
   judgements) to keep only what clearly meets every point of its plan's "Good result means" and is
   strong on its own, and to skip what is merely on the topic, surveys, or small variations.
+- **Result (same research task, 35 minutes):** 72 judged, 50 kept (69 %) — the 5-hour run with the old code
+  kept 97 %. 10 of 10 kept before the first note, 40 of 62 (65 %) after it.
 
 ## Memory
 
