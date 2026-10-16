@@ -1745,6 +1745,8 @@ function irisRecord (session, type, p) {
     items.push({ kind: 'note', text: p.note })
   } else if (type === 'resume' && p.ok) {
     items.push({ kind: 'note', text: (p.file ? 'Made a resume for ' : 'Checked the fit for ') + p.title + (p.company ? ' at ' + p.company : '') + (p.fit !== null && p.fit !== undefined ? ' (fit ' + p.fit + ')' : '') + (p.file ? ': ' + path.basename(path.dirname(p.file)) : '') })
+  } else if (type === 'letter' && p.ok) {
+    items.push({ kind: 'note', text: 'Wrote a cover letter for ' + p.title + (p.company ? ' at ' + p.company : '') + ' (' + p.words + ' words)' })
   } else if (type === 'application' && p.item) {
     items.push({ kind: 'note', text: ({ applied: 'Applied', skipped: 'Skipped', needs_you: 'Needs you', failed: 'Could not apply' }[p.item.status] || p.item.status) + ': ' + (p.item.title || 'job') + (p.item.company ? ' — ' + p.item.company : '') })
   } else if (type === 'plan') {
