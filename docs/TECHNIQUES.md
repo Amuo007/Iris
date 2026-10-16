@@ -369,6 +369,10 @@ Updated 2026-10-16 (evening).
   sites — and returns the openings matching the role and place words (Ramp: 163 → 2 in 0.18 s).
 - **Result (same task, real boards, sharing the server with the 5-hour run):** 3 real Toronto postings
   (Tenstorrent) read and tailored in 15 minutes, no forms opened.
+- **Workday boards (added this evening):** a Workday board (e.g. 1,746 openings at NVIDIA) is searched
+  through the site's own JSON search instead of its slow page. Workday wants every word to match, and a
+  place often does not ("firmware Toronto" finds 0), so with no hits Iris drops words from the end and
+  ranks the results by them instead. The look-up says what it ranked by.
 
 ### 20e. Filling spare room by relevance (fixed today)
 - **Before:** when the model's picks left room on the page, Iris added the remaining bullets in profile
