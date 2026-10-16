@@ -467,6 +467,7 @@ function createAgent (opts) {
       if (planned && every > 0 && state.step > 1 && state.step % every === 0) {
         history.addSystemNote(prompts.reviewNote())
       }
+      if (state.step === 1 && !followUp && !obs.emptyTab) obs.firstOfTask = true
       const left = safety.config.maxSteps > 0 ? safety.config.maxSteps - state.step + 1 : 0
       if (left > 0 && left <= 3) obs.note = (obs.note ? obs.note + '\n' : '') + prompts.finishReminder(left)
       history.addObservation(obs, state.step)

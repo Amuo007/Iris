@@ -752,3 +752,49 @@ body.iris-has-bookmarks-bar #iris-bookmarks-bar {
   padding-right: 34px;
   padding-left: 34px;
 }
+
+/* --- Min's "Save password?" bar: under the Iris toolbar, in Iris colours ------------- */
+
+#password-capture-bar,
+.dark-mode #password-capture-bar {
+  top: calc(var(--control-space-top) + var(--iris-navbar-height));
+  box-sizing: border-box;
+  height: 49px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  background: var(--iris-bg-subtle);
+  color: var(--iris-text);
+  border-bottom: 1px solid var(--iris-border);
+  font-size: 13px;
+  z-index: 3;
+}
+#password-capture-bar[hidden] {
+  display: none;
+}
+#password-capture-bar input {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--iris-border-strong);
+  border-radius: var(--iris-r-sm);
+  background: var(--iris-bg);
+  color: var(--iris-text);
+}
+#password-capture-save,
+#password-capture-save:hover {
+  background: var(--iris-primary);
+  color: var(--iris-primary-ink);
+  border-radius: var(--iris-r-sm);
+  padding: 0 14px;
+  height: 28px;
+  font-size: 13px;
+}
+#password-capture-ignore,
+.dark-mode #password-capture-ignore {
+  background: var(--iris-bg-muted);
+  color: var(--iris-text);
+  border-radius: var(--iris-r-sm);
+  height: 28px;
+  font-size: 13px;
+}

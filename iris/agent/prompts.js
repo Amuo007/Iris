@@ -192,6 +192,7 @@ function observationIntro (obs, index, limits) {
   if (obs && obs.width) lines.push('Screenshot: ' + obs.width + 'x' + obs.height + ' px (x 0-' + (obs.width - 1) + ', y 0-' + (obs.height - 1) + ').')
   if (obs && obs.crop) lines.push('This is a 2x CLOSE-UP of part of the page. Coordinates you give refer to this close-up image. The next screenshot will show the whole page again.')
   if (obs && obs.tabChanged) lines.push(obs.tabChanged)
+  if (obs && obs.firstOfTask) lines.push('This page was already open when the task started; it may have nothing to do with the task. Ignore it unless it helps.')
   if (obs && obs.emptyTab) lines.push('This tab is empty (new tab). Use "navigate" to open a website or search.')
   else if (obs && obs.blank) lines.push('The page looks blank. It may still be loading: use "wait" once, then try something else.')
   return lines.join('\n')

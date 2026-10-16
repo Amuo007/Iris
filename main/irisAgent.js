@@ -1562,12 +1562,25 @@ function irisBindInput (tabId, cfg) {
   }
 }
 
+/* Models are bad at weekday arithmetic: name the coming Mondays so dates can be checked, not guessed. */
+function irisCalendarHint (now) {
+  const d = new Date(now)
+  d.setHours(12, 0, 0, 0)
+  d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)) // next Monday
+  const mondays = []
+  for (let i = 0; i < 10; i++) {
+    mondays.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
+    d.setDate(d.getDate() + 7)
+  }
+  return 'Coming Mondays: ' + mondays.join(', ') + ' (use them to work out weekdays).'
+}
+
 function irisSystemExtra (mode, task, projectId) {
   const parts = []
   const brief = irisProjectBrief(projectId)
   if (brief) parts.push(brief)
   const now = new Date()
-  parts.push('Today is ' + now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + '.')
+  parts.push('Today is ' + now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + '. ' + irisCalendarHint(now))
   const profile = irisPrompts.profileText(irisProfileForPrompt())
   if (profile) parts.push(profile)
   const modeText = irisPrompts.modeText(mode)

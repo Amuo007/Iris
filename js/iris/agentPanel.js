@@ -18,6 +18,7 @@ const urlParser = require('util/urlParser.js')
 
 const PANEL_WIDTH = 380
 const MAX_STEPS_SHOWN = 80
+const MAX_ITEMS_SHOWN = 400
 
 const SUGGESTIONS = [
   'What is the weather in Chicago today?',
@@ -945,6 +946,15 @@ function trimStream () {
     const first = streamEl.querySelector('.iris-step')
     if (!first) break
     first.remove()
+  }
+  // a run of many hours also piles up notes, decisions and look-ups: keep the newest ones
+  const items = streamEl.children
+  if (items.length > MAX_ITEMS_SHOWN) {
+    const drop = items.length - MAX_ITEMS_SHOWN
+    for (let i = 0; i < drop; i++) streamEl.removeChild(streamEl.firstElementChild)
+    if (!streamEl.querySelector('.iris-trimmed')) {
+      streamEl.insertBefore(el('div', 'iris-note iris-trimmed', 'Older steps are hidden to keep the panel fast. Everything is saved in History.'), streamEl.firstChild)
+    }
   }
 }
 
