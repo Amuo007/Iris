@@ -506,6 +506,31 @@ function irisJobsSettingsAction (action, args) {
       broadcast('iris-agent-scheduled-run', { task: 'Find jobs that match my career profile and apply to them one by one, with a resume tailored to each. Keep going until I stop you.', mode: 'continuous' })
       return Promise.resolve({ started: true })
     }
+    case 'applicationsExport': {
+      // a spreadsheet of every application, in the download folder, shown in Finder
+      const cell = function (v) { const t = String(v === undefined || v === null ? '' : v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t }
+      const rows = [['Date', 'Status', 'Job', 'Company', 'Fit', 'Link', 'Note', 'Resume']].concat(irisApplicationsLoad().map(function (a) {
+        return [new Date(a.updated || a.at).toISOString().slice(0, 10), a.status, a.title, a.company, a.fit, a.url, a.note, a.resume]
+      }))
+      const file = path.join(irisDownloadDir(), 'Iris applications ' + new Date().toISOString().slice(0, 10) + '.csv')
+      fs.writeFileSync(file, rows.map(function (r) { return r.map(cell).join(',') }).join('\n') + '\n')
+      shell.showItemInFolder(file)
+      return Promise.resolve({ items: irisApplicationsForPage(), today: irisAppliedToday(), exported: path.basename(file) })
+    }
+    case 'careerBackup': {
+      const file = path.join(irisDownloadDir(), 'Iris career profile ' + new Date().toISOString().slice(0, 10) + '.json')
+      fs.writeFileSync(file, JSON.stringify(irisCareerLoad(), null, 1))
+      shell.showItemInFolder(file)
+      return Promise.resolve(Object.assign(irisCareerForPage(), { backedUp: path.basename(file) }))
+    }
+    case 'careerRestore':
+      return dialog.showOpenDialog(windows.getCurrent(), { title: 'Choose a saved career profile', properties: ['openFile'], filters: [{ name: 'Iris career profile', extensions: ['json'] }] }).then(function (pick) {
+        if (pick.canceled || !pick.filePaths[0]) return irisCareerForPage()
+        let raw = null
+        try { raw = JSON.parse(fs.readFileSync(pick.filePaths[0], 'utf8')) } catch (e) { return Object.assign(irisCareerForPage(), { error: 'That file is not a career profile.' }) }
+        irisCareerSave(raw)
+        return Object.assign(irisCareerForPage(), { restored: true })
+      })
     case 'applicationsList':
       return Promise.resolve({ items: irisApplicationsForPage(), today: irisAppliedToday() })
     case 'applicationShow': {

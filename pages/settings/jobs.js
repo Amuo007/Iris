@@ -518,6 +518,12 @@ window.addEventListener('message', function (e) {
       (so.dropped && so.dropped.length ? ' Left out ' + so.dropped.length + ' line(s) that were not in your text: ' + so.dropped.slice(0, 3).join(' · ') : '')
     return
   }
+  if (d.action === 'careerBackup') { irisCareerStatus.textContent = r.backedUp ? 'Saved a copy: ' + r.backedUp + ' (in your download folder)' : 'Could not save a copy.'; return }
+  if (d.action === 'careerRestore') {
+    if (r.error) { irisCareerStatus.textContent = r.error; return }
+    if (r.restored) { irisCareer = r.bank; irisCareerLoadedAt = Date.now(); irisRenderCareer(); irisCareerStatus.textContent = 'Loaded · ' + irisCountsText(r.counts) }
+    return
+  }
   if (['careerGet', 'careerSave', 'templateImport', 'templateBuiltin', 'templateShow', 'resumePreview', 'resumeDirChoose'].indexOf(d.action) !== -1) {
     if (r.error && !r.bank) { irisCareerStatus.textContent = r.error; return }
     if (d.action === 'careerSave') {
@@ -560,8 +566,9 @@ window.addEventListener('message', function (e) {
     }
   } else if (d.action === 'jobsStart') {
     document.getElementById('iris-jobs-start-help').textContent = r.started ? 'Started in a new tab. Press Stop in the Iris panel to end it.' : (r.error || 'Could not start.')
-  } else if (['applicationsList', 'applicationShow', 'applicationDelete'].indexOf(d.action) !== -1) {
+  } else if (['applicationsList', 'applicationShow', 'applicationDelete', 'applicationsExport'].indexOf(d.action) !== -1) {
     irisRenderApplications(r)
+    if (r.exported) document.getElementById('iris-applications-summary').textContent += ' Exported ' + r.exported + '.'
   }
 })
 
@@ -603,3 +610,10 @@ irisDailyBox.addEventListener('change', function () {
   irisSaveDaily()
 })
 irisDailyTime.addEventListener('change', function () { if (irisDailyBox.checked) irisSaveDaily() })
+
+document.getElementById('iris-career-backup').addEventListener('click', function () { irisAction('careerBackup') })
+document.getElementById('iris-career-restore').addEventListener('click', function () {
+  if (!irisCareerEmpty() && !confirm('Replace your career profile with the copy you choose?')) return
+  irisAction('careerRestore')
+})
+document.getElementById('iris-applications-export').addEventListener('click', function () { irisAction('applicationsExport') })

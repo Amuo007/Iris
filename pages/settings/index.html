@@ -325,6 +325,8 @@
       <div class="iris-row-title iris-subtitle">Anything else about you</div>
       <textarea id="iris-career-about" class="iris-career-text" rows="3" spellcheck="true" placeholder="True facts Iris may use for a summary or to answer questions: languages you speak, what you are looking for, availability…"></textarea>
       <div class="setting-section iris-career-foot">
+        <button class="iris-button" id="iris-career-backup" type="button">Save a copy…</button>
+        <button class="iris-button" id="iris-career-restore" type="button">Load a copy…</button>
         <span class="iris-inline-status" id="iris-career-status"></span>
       </div>
     </div>
@@ -457,7 +459,10 @@
 
     <div class="settings-container" id="iris-applications-container">
       <h3>Applications</h3>
-      <div class="setting-secondary-label" id="iris-applications-summary">Every job Iris applied to, skipped, or left for you to finish.</div>
+      <div class="iris-row-setting">
+        <div class="setting-secondary-label" id="iris-applications-summary">Every job Iris applied to, skipped, or left for you to finish.</div>
+        <button class="iris-button" id="iris-applications-export" type="button">Export spreadsheet</button>
+      </div>
       <div id="iris-applications-list" class="iris-list"></div>
     </div>
 
