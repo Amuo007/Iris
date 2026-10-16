@@ -250,7 +250,10 @@ function initialize () {
 
   // the agent: bookmark the page it is on, and look bookmarks up
   ipc.on('iris-agent-bookmark', function (e, data) {
-    if (data && data.url) bookmarkPage(data.url, data.title)
+    if (data && data.url) {
+      if (data.remove) unbookmarkPage(data.url)
+      else bookmarkPage(data.url, data.title)
+    }
   })
   ipc.on('iris-agent-bookmarks-query', function (e, data) {
     const q = String((data && data.query) || '').toLowerCase().split(/\s+/).filter(Boolean)

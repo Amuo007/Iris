@@ -844,3 +844,70 @@
   background: transparent !important;
   color: var(--iris-text) !important;
 }
+
+/* --- Smart level, look-ups ---------------------------------------------- */
+
+.iris-smart-level {
+  height: 28px;
+  padding: 0 10px;
+  margin-left: 4px;
+  border: 1px solid var(--iris-border);
+  border-radius: var(--iris-r-sm);
+  color: var(--iris-text-2);
+  font-size: 12.5px !important;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--iris-fast), background var(--iris-fast), color var(--iris-fast);
+}
+.iris-smart-level[hidden] {
+  display: none;
+}
+.iris-smart-level:hover {
+  background: var(--iris-bg-subtle);
+  border-color: var(--iris-border-strong);
+  color: var(--iris-text);
+}
+.iris-smart-level.is-deep {
+  color: var(--iris-text);
+  border-color: var(--iris-text-3);
+}
+
+.iris-lookup {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 2px 0;
+  padding: 5px 10px;
+  border-radius: var(--iris-r-sm);
+  background: var(--iris-bg-subtle);
+  color: var(--iris-text-2);
+  font-size: 12.5px !important;
+  min-width: 0;
+}
+.iris-step-body .iris-lookup {
+  margin: 6px 0 2px;
+}
+.iris-lookup-kind {
+  flex: none;
+  font-size: 10.5px !important;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--iris-text-3);
+}
+.iris-lookup-query {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--iris-text);
+}
+.iris-lookup-meta {
+  flex: none;
+  color: var(--iris-text-3);
+  font-size: 12px !important;
+}
+.iris-lookup.is-failed .iris-lookup-meta {
+  color: var(--iris-warn);
+}

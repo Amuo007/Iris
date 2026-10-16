@@ -28,6 +28,7 @@ const { createMapping, mapActionToView, actionAnchorCss } = require('./coordinat
 const { createSafetyGate } = require('./safety')
 const { createHistory } = require('./history')
 const prompts = require('./prompts')
+const { parseLookups } = require('./lookup')
 
 const DEFAULTS = {
   maxAutoWaits: 4,
@@ -36,7 +37,10 @@ const DEFAULTS = {
   maxModelMsPerStep: 180 * 1000,
   maxCaptureFailures: 5,
   planThinking: 'medium', // the plan is one call: worth thinking about
-  reviewEvery: 20, // with a plan, a check-in every N steps
+  reviewEvery: 20, // with a plan, a check-in every N steps (Deep: every 15)
+  planLookupsQuick: 3, // look-ups the Smart planner may make (Quick / Deep)
+  planLookupsDeep: 8,
+  runLookups: 6, // look-ups during a run (the lookup action); 0 turns the action off
   maxServerWaitMs: 10 * 60 * 1000, // 0 = wait for the model server forever (non-stop runs)
   coordinateSpace: 'auto'
 }
@@ -68,6 +72,7 @@ function createAgent (opts) {
   const log = typeof opts.log === 'function' ? opts.log : function () {}
   const delay = opts.delay || wait
   const now = opts.now || Date.now
+  const lookupFn = typeof opts.lookup === 'function' ? opts.lookup : null
 
   const safety = createSafetyGate(Object.assign({ now }, opts.safety || {}))
   const history = createHistory(Object.assign({ maxSteps: safety.config.maxSteps }, opts.history || {}))
@@ -92,6 +97,18 @@ function createAgent (opts) {
   let planActive = false
   let lastAnswer = ''
   let finishChecked = false
+  let runLookups = 0
+  let smartLevel = null
+
+  /* a look-up never fails the run: an error comes back as text the model can read */
+  async function runLookup (req) {
+    try {
+      const r = await lookupFn(req)
+      return r && typeof r.text === 'string' ? r : { ok: false, text: 'Lookup returned nothing.', count: 0 }
+    } catch (err) {
+      return { ok: false, text: 'Lookup failed: ' + (err && err.message ? err.message : err), count: 0 }
+    }
+  }
 
   function resolveResume () {
     if (resumeDeferred) {
@@ -218,38 +235,74 @@ function createAgent (opts) {
     setStatus('running', null)
     emit('run:start', { task, followUp, limits: safety.snapshot().limits })
 
-    // ---- 0. plan first (optional): one deeper call turns a loose request into a plan ----
+    // ---- 0. Smart mode: questions → quick look-ups → a plan, before the first screenshot ----
     let planned = false
     planActive = false
     finishChecked = false
+    runLookups = 0
+    smartLevel = runOptions && runOptions.plan ? (runOptions.plan === 'deep' ? 'deep' : 'quick') : null
     if (runOptions && runOptions.plan) {
-      emit('plan:start', {})
+      emit('plan:start', { level: smartLevel })
       try {
         const extra = typeof cfg.systemExtra === 'function' ? cfg.systemExtra() : cfg.systemExtra
         const current = history.plan() || (runOptions.projectPlan || null)
-        const ask = function (o) {
-          return Promise.resolve(model.next({ messages: prompts.planMessages(task, extra, o), step: 0, thinking: cfg.planThinking, history: [] }))
-        }
-        let reply = await ask({ allowQuestions: !current && !runOptions.noQuestions, current })
-        let text = String(typeof reply === 'string' ? reply : (reply && reply.content) || '').trim()
+        let budget = lookupFn ? (smartLevel === 'deep' ? cfg.planLookupsDeep : cfg.planLookupsQuick) : 0
+        let rounds = smartLevel === 'deep' ? 2 : 1
+        let asked = !!current || !!runOptions.noQuestions
         let answers = ''
-        const questions = prompts.parseQuestions(text)
-        if (questions) {
-          // a short quiz before planning; the user answers in the panel (or skips)
-          lastAnswer = ''
-          emit('questions', { questions })
-          pauseRequested = true
-          if (!(await waitForResume())) return finish('stopped', stopRequested)
-          answers = lastAnswer
-          reply = await ask({ answers: answers || '(the user skipped the questions: use your best judgement)', current })
+        let reply = null
+        let text = ''
+        const convo = [] // look-up requests and their results, in order
+        for (let turn = 0; turn < 5; turn++) {
+          const canLook = budget > 0 && rounds > 0
+          const perRound = Math.min(budget, smartLevel === 'deep' ? 4 : 3)
+          const messages = prompts.planMessages(task, extra, {
+            allowQuestions: !asked,
+            answers: answers || undefined,
+            current,
+            level: smartLevel,
+            lookups: canLook ? { max: perRound } : null
+          }).concat(convo)
+          reply = await model.next({ messages, step: 0, thinking: cfg.planThinking, history: [], signal: undefined })
+          if (stopRequested) return finish('stopped', stopRequested)
           text = String(typeof reply === 'string' ? reply : (reply && reply.content) || '').trim()
+
+          const questions = !asked ? prompts.parseQuestions(text) : null
+          if (questions) {
+            // a short quiz before planning; the user answers in the panel (or skips)
+            asked = true
+            lastAnswer = ''
+            emit('questions', { questions })
+            pauseRequested = true
+            if (!(await waitForResume())) return finish('stopped', stopRequested)
+            answers = lastAnswer || '(the user skipped the questions: use your best judgement)'
+            continue
+          }
+          const wanted = canLook ? parseLookups(text, perRound) : null
+          if (wanted) {
+            rounds--
+            budget -= wanted.length
+            const results = []
+            for (const req of wanted) {
+              emit('lookup', { step: 0, kind: req.kind, query: req.query, planning: true })
+              const r = await runLookup(req)
+              results.push(r.text)
+              emit('lookup:result', { step: 0, kind: req.kind, query: req.query, ok: r.ok, count: r.count, items: r.items, planning: true })
+              if (stopRequested) return finish('stopped', stopRequested)
+            }
+            convo.push({ role: 'assistant', content: text })
+            convo.push({ role: 'user', content: prompts.lookupResultsMessage(results, budget > 0 && rounds > 0) })
+            continue
+          }
+          break
         }
-        if (text && !prompts.parseQuestions(text)) {
-          const full = (answers ? text + '\nThe user said: ' + answers.replace(/\n/g, '; ') : text).slice(0, 2400)
+        if (text && !prompts.parseQuestions(text) && !parseLookups(text)) {
+          const said = answers && !/^\(the user skipped/.test(answers) ? answers : ''
+          const full = (said ? text + '\nThe user said: ' + said.replace(/\n/g, '; ') : text).slice(0, 2600)
           history.setPlan(full)
           planned = true
           planActive = true
-          emit('plan', { text: full, usage: reply && reply.usage, modelMs: reply && reply.ms })
+          emit('plan', { text: full, usage: reply && reply.usage, modelMs: reply && reply.ms, level: smartLevel })
         }
       } catch (err) {
         if (stopRequested) return finish('stopped', stopRequested)
@@ -367,9 +420,12 @@ function createAgent (opts) {
       }
       if (!obs.loading) autoWaits = 0
 
-      if (planned && cfg.reviewEvery > 0 && state.step > 1 && state.step % cfg.reviewEvery === 0) {
+      const every = smartLevel === 'deep' ? Math.min(cfg.reviewEvery, 15) : cfg.reviewEvery
+      if (planned && every > 0 && state.step > 1 && state.step % every === 0) {
         history.addSystemNote(prompts.reviewNote())
       }
+      const left = safety.config.maxSteps > 0 ? safety.config.maxSteps - state.step + 1 : 0
+      if (left > 0 && left <= 3) obs.note = (obs.note ? obs.note + '\n' : '') + prompts.finishReminder(left)
       history.addObservation(obs, state.step)
 
       // ---- 4. think ----------------------------------------------------------
@@ -469,7 +525,8 @@ function createAgent (opts) {
     // ---- terminal states -----------------------------------------------------
     if (isTerminal(action)) {
       // a planned run must have looked at what it reports: send it back once if it judged nothing
-      if (action.type === 'done' && planActive && !finishChecked && history.decisions().kept.length === 0 && history.decisions().skipped === 0) {
+      const stepsLeft = safety.config.maxSteps > 0 ? safety.config.maxSteps - state.step : Infinity
+      if (action.type === 'done' && planActive && !finishChecked && stepsLeft > 2 && history.decisions().kept.length === 0 && history.decisions().skipped === 0) {
         finishChecked = true
         history.addSystemNote(prompts.finishCheckNote())
         emit('finish:check', { step: state.step })
@@ -530,6 +587,26 @@ function createAgent (opts) {
       history.addVerdict(action.item, action.keep)
       emit('verdict', { step: state.step, item: action.item, keep: action.keep, why: action.why || '' })
       return {}
+    }
+
+    // ---- a quick look-up outside the browser: the results arrive as text --------------
+    if (action.type === 'lookup') {
+      emit('action', { step: state.step, index, total, action, actionView: mapped, anchor: null, description: describeAction(action), automatic: false })
+      if (!lookupFn || cfg.runLookups <= 0) {
+        history.addSystemNote('Look-ups are turned off. Use the browser.')
+        return { stopBatch: true }
+      }
+      if (runLookups >= cfg.runLookups) {
+        history.addSystemNote('You have used all ' + cfg.runLookups + ' look-ups for this task. Use the browser.')
+        return { stopBatch: true }
+      }
+      runLookups++
+      const req = { kind: action.kind || 'web', query: action.query }
+      emit('lookup', { step: state.step, kind: req.kind, query: req.query })
+      const r = await runLookup(req)
+      emit('lookup:result', { step: state.step, kind: req.kind, query: req.query, ok: r.ok, count: r.count, items: r.items })
+      history.addSystemNote(r.text + '\n(' + (cfg.runLookups - runLookups) + ' look-ups left for this task.)')
+      return { stopBatch: true }
     }
 
     // ---- ask the human: pause until they answer (or just press Resume) ------------

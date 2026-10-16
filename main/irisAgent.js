@@ -25,6 +25,7 @@ const irisLoop = require('./iris/agent/agentLoop.js')
 const irisModelClient = require('./iris/agent/modelClient.js')
 const irisPrompts = require('./iris/agent/prompts.js')
 const irisMemoryLib = require('./iris/agent/memory.js')
+const irisLookupLib = require('./iris/agent/lookup.js')
 
 const IRIS_SETTINGS_VERSION = 2
 
@@ -44,7 +45,10 @@ const IRIS_DEFAULT_SETTINGS = {
   screenshotMaxDimension: 1280,
   screenshotQuality: 82,
   markerEnabled: true,
-  autoPauseOnUserInput: true
+  autoPauseOnUserInput: true,
+  lookups: true, // quick look-ups outside the browser (Smart planning + the lookup action)
+  runLookups: 6, // look-ups allowed during one run
+  smartLevel: 'quick' // quick | deep
 }
 
 /* settings from before v2 had limits tuned for the cloud (90 s, 700 tokens, 2 images); keep only who/where */
@@ -377,6 +381,8 @@ function irisAccountSave (rec) {
     // a placeholder points at My info; anything else is kept encrypted like other secrets
     passwordRef: ref ? ref[1] : null,
     password: ref ? '' : irisEncrypt(pw),
+    title: String(rec.title || '').slice(0, 120),
+    purpose: String(rec.purpose || '').slice(0, 200),
     created: Date.now()
   })
   fs.writeFileSync(irisAccountsPath(), JSON.stringify({ accounts: list }, null, 1), { mode: 0o600 })
@@ -385,7 +391,7 @@ function irisAccountSave (rec) {
 /* For the settings page: everything except the passwords themselves. */
 function irisAccountsForPage () {
   return irisAccountsLoad().map(function (a) {
-    return { site: a.site, username: a.username, url: a.url, created: a.created, passwordFrom: a.passwordRef ? 'My info › ' + a.passwordRef : (a.password ? 'saved here' : '') }
+    return { site: a.site, username: a.username, url: a.url, title: a.title || '', purpose: a.purpose || '', created: a.created, passwordFrom: a.passwordRef ? 'My info › ' + a.passwordRef : (a.password ? 'saved here' : '') }
   })
 }
 
@@ -472,6 +478,83 @@ settings.listen('irisSkills', function (value) {
 })
 
 /* ------------------------------------------------------------------ *
+ * Research log: every judgement Iris made, in any chat. When Iris lands on a page or sees a
+ * search result it already judged, it is told so — it never re-reads the same paper by accident.
+ * ------------------------------------------------------------------ */
+
+function irisSeenPath () {
+  return path.join(userDataPath, 'iris-seen.json')
+}
+
+var irisSeenLog = null
+var irisSeenTimer = null
+function irisSeen () {
+  if (!irisSeenLog) {
+    let items = []
+    try { items = JSON.parse(fs.readFileSync(irisSeenPath(), 'utf8')).items || [] } catch (e) { /* nothing judged yet */ }
+    irisSeenLog = irisMemoryLib.createMemory(items)
+  }
+  return irisSeenLog
+}
+
+function irisSeenAdd (kind, text, extra) {
+  irisSeen().add(kind, text, extra)
+  if (!irisSeenTimer) {
+    irisSeenTimer = setTimeout(function () {
+      irisSeenTimer = null
+      try { fs.writeFileSync(irisSeenPath(), JSON.stringify({ items: irisSeen().items().slice(-20000) })) } catch (e) { DBUG('seen log: ' + e.message) }
+    }, 1500)
+  }
+}
+
+/* "kept on Oct 14 (chat "harness papers"): fits the topic" — or null if never judged */
+function irisSeenNote (url, title) {
+  const hit = irisSeen().find(url, title, ['verdict'])
+  if (!hit) {
+    const dl = irisDownloads().findDownload(url, title)
+    return dl ? 'already downloaded as ' + (dl.name || dl.text) + ' on ' + new Date(dl.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null
+  }
+  const when = new Date(hit.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return (hit.keep ? 'kept' : 'skipped') + ' on ' + when + (hit.chat ? ' (chat "' + String(hit.chat).slice(0, 40) + '")' : '') + (hit.why ? ': ' + String(hit.why).slice(0, 120) : '')
+}
+
+/* ------------------------------------------------------------------ *
+ * Quick look-ups outside the browser (iris/agent/lookup.js). They go through an empty,
+ * in-memory Chromium session — never the tabs' cookies or logins — and never to sites that
+ * ban accounts for automated reading, nor to sites where the user has an account with Iris.
+ * ------------------------------------------------------------------ */
+
+var irisLookupInstance = null
+function irisLookup () {
+  if (!irisLookupInstance) {
+    const ses = session.fromPartition('iris-lookup') // no "persist:" prefix: memory only, nothing shared
+    irisLookupInstance = irisLookupLib.createLookup({
+      fetch: function (url, opts) { return ses.fetch(url, opts) },
+      never: irisLookupNever()
+    })
+  }
+  return irisLookupInstance
+}
+
+function irisLookupNever () {
+  const own = String(settings.get('irisLookupNever') || '').split(/[\s,]+/).filter(Boolean)
+  const accounts = irisAccountsLoad().map(function (a) { return a.site }).filter(Boolean)
+  return own.concat(accounts)
+}
+settings.listen('irisLookupNever', function () { irisLookupInstance = null })
+
+async function irisDoLookup (req) {
+  const result = await irisLookup().lookup(req, {
+    annotate: function (it) {
+      const note = irisSeenNote(it.url || '', (it.id || '') + ' ' + (it.title || ''))
+      return note ? 'you ' + note : null
+    }
+  })
+  irisUsageRecord('lookup')
+  return result
+}
+
+/* ------------------------------------------------------------------ *
  * Usage: requests and tokens per day, shown in Settings → Iris AI → Usage
  * ------------------------------------------------------------------ */
 
@@ -489,6 +572,7 @@ function irisUsageRecord (kind, data) {
   const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
   const day = irisUsage.days[key] || (irisUsage.days[key] = { tasks: 0, requests: 0, input: 0, output: 0, ms: 0 })
   if (kind === 'task') day.tasks++
+  if (kind === 'lookup') day.lookups = (day.lookups || 0) + 1
   if (kind === 'request') {
     day.requests++
     day.input += (data && data.prompt_tokens) || 0
@@ -703,6 +787,8 @@ IrisComputer.prototype.screenshot = async function () {
   if (this.memory && obs.url && obs.url !== this.lastVisit) {
     this.lastVisit = obs.url
     this.memory.add('visit', obs.title || obs.url, { url: obs.url, title: obs.title })
+    const seen = irisSeenNote(obs.url, obs.title)
+    if (seen) obs.note = (obs.note ? obs.note + '\n' : '') + 'You have seen this page before: you ' + seen + '. Do not spend steps on it again unless the task needs it.'
   }
   if (this.pendingChooser) {
     const files = irisRecentFiles(12)
@@ -838,10 +924,13 @@ IrisComputer.prototype.act = async function (action) {
         : 'Recall "' + action.query + '": nothing saved matches that.')
       return { ok: true }
     }
-    case 'bookmark':
-      broadcast('iris-agent-bookmark', { url: wc.getURL(), title: action.title || wc.getTitle() })
-      this.notes = (this.notes || []).concat('Bookmarked "' + (action.title || wc.getTitle()) + '" on the bookmarks bar.')
+    case 'bookmark': {
+      const url = action.url ? irisResolveUrl(action.url) : wc.getURL()
+      const title = action.title || (action.url ? url : wc.getTitle())
+      broadcast('iris-agent-bookmark', { url: url, title: title, remove: !!action.remove })
+      this.notes = (this.notes || []).concat(action.remove ? 'Removed the bookmark for ' + url + '.' : 'Bookmarked "' + title + '" on the bookmarks bar.')
       return { ok: true }
+    }
     case 'bookmarks': {
       const found = await irisAskBookmarks(action.query || '')
       this.notes = (this.notes || []).concat(found.bookmarks.length
@@ -852,7 +941,7 @@ IrisComputer.prototype.act = async function (action) {
     }
     case 'save_account':
       try {
-        irisAccountSave({ site: action.site, username: action.username, password: action.password, url: wc.getURL() })
+        irisAccountSave({ site: action.site, username: action.username, password: action.password, url: wc.getURL(), title: wc.getTitle(), purpose: action.purpose || this.taskTitle || '' })
       } catch (e) {
         return { ok: false, error: 'could not save the account: ' + e.message }
       }
@@ -1441,6 +1530,8 @@ function startAgent (task, options) {
 
   const mode = options.mode === 'continuous' || options.mode === 'repeat' ? options.mode : 'once'
   const unlimited = mode === 'continuous'
+  // Deep Smart runs research first and judge more: they get twice the steps and time
+  const budgetScale = options.plan === 'deep' ? 2 : 1
 
   const computer = new IrisComputer(tabId, cfg, {
     onTabChange: function (newTabId) {
@@ -1449,6 +1540,7 @@ function startAgent (task, options) {
     }
   }, options.viewBounds)
   computer.memory = irisSessionMemory(session)
+  computer.taskTitle = session.title
   computer.projectId = session.projectId || null
   computer.projectMemory = irisProjectMemory(session.projectId)
   irisComputer = computer
@@ -1481,15 +1573,17 @@ function startAgent (task, options) {
   const agent = irisLoop.createAgent({
     model: model,
     computer: computer,
+    lookup: cfg.lookups === false ? null : irisDoLookup,
     config: {
       systemExtra: function () { return irisSystemExtra(mode, session.title + '\n' + task, session.projectId) },
       maxServerWaitMs: unlimited ? 0 : 10 * 60 * 1000,
-      planThinking: cfg.thinking === 'full' ? 'full' : 'medium'
+      planThinking: cfg.thinking === 'full' ? 'full' : 'medium',
+      runLookups: cfg.lookups === false ? 0 : (Number(cfg.runLookups) >= 0 ? Number(cfg.runLookups) : 6)
     },
     safety: {
-      maxSteps: unlimited ? 0 : cfg.maxSteps,
+      maxSteps: unlimited ? 0 : cfg.maxSteps * budgetScale,
       maxModelMsPerStep: cfg.modelTimeoutMs + 5000,
-      maxWallClockMs: unlimited ? 0 : Math.max(1, cfg.maxMinutes) * 60 * 1000,
+      maxWallClockMs: unlimited ? 0 : Math.max(1, cfg.maxMinutes) * budgetScale * 60 * 1000,
       // a long run must survive a flaky moment instead of giving up after three errors
       maxConsecutiveFailures: unlimited ? 12 : 4,
       maxRetriesPerStep: unlimited ? 8 : 3
@@ -1503,6 +1597,18 @@ function startAgent (task, options) {
         if (session.projectId) irisProjectMemoryAdd(session.projectId, 'note', payload.note)
       }
       if (session.projectId && type === 'verdict') irisProjectMemoryAdd(session.projectId, 'verdict', (payload.keep ? 'Kept: ' : 'Skipped: ') + payload.item + (payload.why ? ' — ' + payload.why : ''))
+      if (type === 'verdict') {
+        let here = ''
+        try { here = computer.view().webContents.getURL() } catch (e) { /* tab gone */ }
+        irisSeenAdd('verdict', payload.item, { url: here, keep: !!payload.keep, why: payload.why || '', chat: session.title, name: payload.item })
+      }
+      // look-up results become searchable with recall, so a long run can find them again
+      if (type === 'lookup:result' && payload.items) {
+        payload.items.slice(0, 8).forEach(function (it) {
+          if (it.url) irisSessionMemory(session).add('found', (it.title || '') + (it.id ? ' (' + it.id + ')' : ''), { url: it.url, title: it.title })
+        })
+        payload = Object.assign({}, payload, { items: undefined })
+      }
       if (session.projectId && type === 'plan' && payload.text) irisProjectUpdate(session.projectId, { plan: payload.text })
       // remember direct URLs that led to a successful answer: next time they are the shortcut
       if (type === 'action' && payload.action && payload.action.type === 'navigate') {
@@ -1528,7 +1634,7 @@ function startAgent (task, options) {
         const su = session.signup
         if (payload.status === 'done' && !su.saved && su.site && su.username && su.password) {
           try {
-            irisAccountSave({ site: su.site, username: su.username, password: su.password, url: computer.state().url })
+            irisAccountSave({ site: su.site, username: su.username, password: su.password, url: computer.state().url, purpose: session.title })
             broadcastEvent({ type: 'remember', note: 'Saved the new ' + su.site + ' account in Settings → Accounts', sessionId: session.id })
           } catch (e) { DBUG('auto account save failed: ' + e.message) }
         }
@@ -1571,7 +1677,8 @@ function startAgent (task, options) {
   irisAgent = agent
 
   const project = irisProject(session.projectId)
-  agent.run(task, { followUp: !!previousHistory, plan: !!options.plan, projectPlan: project && project.plan }).then(function (result) {
+  const smart = options.plan ? (options.plan === 'deep' ? 'deep' : 'quick') : false
+  agent.run(task, { followUp: !!previousHistory, plan: smart, projectPlan: project && project.plan }).then(function (result) {
     irisAgentState.status = result.status
     irisAgentState.answer = result.answer
     irisAgentState.reason = result.reason

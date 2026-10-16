@@ -72,6 +72,10 @@ const ACTION_LABELS = {
   find: 'Find',
   save_account: 'Saved account',
   recall: 'Recall',
+  lookup: 'Look up',
+  bookmark: 'Bookmark',
+  bookmarks: 'Bookmarks',
+  update_plan: 'Update plan',
   judge: 'Judge',
   dialog: 'Answer dialog',
   upload: 'Upload',
@@ -90,6 +94,8 @@ let sendButton = null
 let thinkingSelect = null
 let modeSelect = null
 let planToggle = null
+let smartLevelBtn = null
+let lookupRows = {}
 let projectSelect = null
 let projectNewRow = null
 let projects = []
@@ -276,9 +282,21 @@ function buildPanel () {
     const on = !planToggle.classList.contains('is-on')
     planToggle.classList.toggle('is-on', on)
     planToggle.setAttribute('aria-pressed', String(on))
+    smartLevelBtn.hidden = !on
     settings.set('irisAI', Object.assign({}, settings.get('irisAI') || {}, { planFirst: on }))
   })
   meta.appendChild(planToggle)
+  // how much Smart does before it starts: Quick (a look-up or two) or Deep (researches the task)
+  smartLevelBtn = el('button', 'iris-smart-level', 'Quick')
+  smartLevelBtn.type = 'button'
+  smartLevelBtn.hidden = true
+  smartLevelBtn.title = 'Quick: plans in seconds, with a look-up or two.\nDeep: researches the task first (more look-ups, how others did it) and checks its progress more often.'
+  smartLevelBtn.addEventListener('click', function () {
+    const deep = smartLevel() !== 'deep'
+    settings.set('irisAI', Object.assign({}, settings.get('irisAI') || {}, { smartLevel: deep ? 'deep' : 'quick' }))
+    renderSmartLevel()
+  })
+  meta.appendChild(smartLevelBtn)
   composer.appendChild(meta)
   panelEl.appendChild(composer)
 
@@ -291,6 +309,18 @@ function buildPanel () {
   openButton.innerHTML = ICONS.spark + '<span>Ask Iris</span>'
   openButton.addEventListener('click', togglePanel)
   document.getElementById('navbar').appendChild(openButton)
+}
+
+function smartLevel () {
+  return currentSettings().smartLevel === 'deep' ? 'deep' : 'quick'
+}
+
+function renderSmartLevel () {
+  if (!smartLevelBtn) return
+  const deep = smartLevel() === 'deep'
+  smartLevelBtn.textContent = deep ? 'Deep' : 'Quick'
+  smartLevelBtn.classList.toggle('is-deep', deep)
+  smartLevelBtn.hidden = !planToggle.classList.contains('is-on')
 }
 
 function openSettings () {
@@ -457,7 +487,7 @@ function submitTask (taskText, options) {
     sessionId: options && options.newSession ? null : currentSessionId,
     mode: mode,
     everyMinutes: everyMinutes,
-    plan: options && options.plan !== undefined ? !!options.plan : planToggle.classList.contains('is-on'),
+    plan: options && options.plan !== undefined ? options.plan : (planToggle.classList.contains('is-on') ? smartLevel() : false),
     projectId: currentProjectId,
     // where the page is drawn, so Iris can see a tab that has no view attached yet
     viewBounds: webviews.getViewBounds()
@@ -708,6 +738,8 @@ function actionDetail (action, description) {
     case 'navigate': return action.url
     case 'find': return '“' + action.text + '”'
     case 'recall': return '“' + action.query + '”'
+    case 'lookup': return '“' + action.query + '”'
+    case 'bookmark': return action.remove ? 'remove' : (action.url || '')
     case 'dialog': return action.accept ? 'OK' : 'Cancel'
     case 'upload': return action.file
     case 'ask_user': return ''
@@ -771,6 +803,30 @@ function addResult (payload) {
     rec.row.classList.add('is-error')
     rec.body.appendChild(el('div', 'iris-step-error', payload.error || 'That did not work'))
   }
+}
+
+/* A quick look-up outside the browser: one line, updated when the results arrive. */
+const LOOKUP_KINDS = { web: 'Web', papers: 'Papers', arxiv: 'arXiv', wiki: 'Wikipedia', page: 'Page' }
+
+function addLookup (p) {
+  removeEmpty()
+  const key = p.step + '|' + p.kind + '|' + p.query
+  const row = el('div', 'iris-lookup')
+  row.appendChild(el('span', 'iris-lookup-kind', LOOKUP_KINDS[p.kind] || 'Web'))
+  row.appendChild(el('span', 'iris-lookup-query', p.query))
+  const meta = el('span', 'iris-lookup-meta', 'looking up…')
+  row.appendChild(meta)
+  lookupRows[key] = meta
+  if (p.step > 0 && steps[p.step]) steps[p.step].body.appendChild(row)
+  else streamEl.appendChild(row)
+  scrollToEnd()
+}
+
+function lookupDone (p) {
+  const meta = lookupRows[p.step + '|' + p.kind + '|' + p.query]
+  if (!meta) return
+  meta.textContent = p.ok ? p.count + (p.count === 1 ? ' result' : ' results') : 'unavailable'
+  meta.parentNode.classList.toggle('is-failed', !p.ok)
 }
 
 /* Planning questions: a small quiz. Answers go back as one message; "Just go" skips. */
@@ -910,7 +966,16 @@ function handleEvent (payload) {
       addNote('Learned for next time: ' + payload.tip, 'memo')
       break
     case 'plan:start':
-      setStatus(keep, 'Planning…')
+      lookupRows = {}
+      setStatus(keep, payload.level === 'deep' ? 'Researching the task…' : 'Planning…')
+      break
+    case 'lookup':
+      addLookup(payload)
+      setStatus(keep, 'Looking up ' + (LOOKUP_KINDS[payload.kind] || 'the web').toLowerCase() + '…')
+      break
+    case 'lookup:result':
+      lookupDone(payload)
+      if (payload.step === 0) setStatus(keep, 'Planning…')
       break
     case 'plan':
       addPlanCard(payload.text, payload.updated)
@@ -997,6 +1062,7 @@ function refreshModelBadge () {
   if (planToggle) {
     planToggle.classList.toggle('is-on', !!cfg.planFirst)
     planToggle.setAttribute('aria-pressed', String(!!cfg.planFirst))
+    renderSmartLevel()
   }
 }
 

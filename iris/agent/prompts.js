@@ -36,16 +36,33 @@ function planMessages (task, extra, opts) {
     lines.push(
       'If the request could mean quite different things and the answer would change what Iris looks for,',
       'ask first: reply with JSON only, {"questions":[{"q":"<short question>","options":["<a>","<b>","<c>"]}]},',
-      'at most 4 questions with 2-4 options each. If it is clear enough, do not ask: write the plan.'
+      'at most 4 questions with 2-4 options each. If it is clear enough, do not ask.'
+    )
+  }
+  if (o.lookups) {
+    lines.push(
+      'You can look things up before planning, outside the browser (fast, text only). Reply with JSON only:',
+      '{"lookups":[{"kind":"web|papers|arxiv|wiki|page","query":"..."}]}   (at most ' + o.lookups.max + ' now)',
+      'web = search results with snippets (add "reddit" to see how people do it), papers = academic papers with',
+      'abstracts and citation counts, arxiv = newest arXiv preprints, wiki = encyclopedia summary,',
+      'page = the text of one public page (query = its URL).',
+      'Look up only what changes the plan: which websites are best for this, what a good result looks like,',
+      'how others did it. ' + (o.level === 'deep'
+        ? 'Be thorough: compare a few sources before you plan.'
+        : 'Keep it quick: one or two look-ups, or none when the task is simple or you already know where to go.')
     )
   }
   lines.push(
-    'The plan is plain text, at most 12 short lines, exactly these parts:',
+    'The plan is plain text, at most 14 short lines, exactly these parts:',
     'Goal: <one line>',
     'Good result means: <2-4 short criteria Iris can check by reading a page>',
+    'Start at: <1-3 exact URLs or searches to begin with>',
     'How: <2-5 steps: where to look, which searches to try>',
     'Done when: <one line, e.g. a number of kept results>'
   )
+  if (o.lookups || o.hadLookups) {
+    lines.push('Known so far: <only if look-ups found candidates or facts worth checking, each with its URL>')
+  }
   const user = ['Request: ' + task]
   if (o.answers) user.push('The user answered your questions:\n' + o.answers + '\nNow write the plan (no more questions).')
   if (o.current) user.push('The current plan, to revise rather than restart:\n' + o.current)
@@ -68,6 +85,19 @@ function parseQuestions (text) {
   } catch (e) {
     return null
   }
+}
+
+/** The look-up results, handed back to the planner. */
+function lookupResultsMessage (results, more) {
+  return 'Look-up results:\n\n' + results.join('\n\n') + '\n\n' +
+    (more ? 'If something important is still missing, look up more (same JSON); otherwise write the plan now.'
+      : 'Now write the plan (no more look-ups).')
+}
+
+/** Goal and finish line, repeated on every step so a long run never drifts from them. */
+function planReminder (plan) {
+  const lines = String(plan || '').split('\n').filter(function (l) { return /^\s*(Goal|Done when)\s*:/i.test(l) })
+  return lines.length ? 'Remember the plan — ' + lines.map(function (l) { return l.trim() }).join(' | ') : ''
 }
 
 function planText (plan) {
@@ -108,6 +138,13 @@ function digestLine (action, thought) {
 
 function digestText (lines, dropped) {
   return 'Earlier steps (summary' + (dropped ? ', plus ' + dropped + ' older ones' : '') + '):\n' + lines.join('\n')
+}
+
+/** Where this task has been, newest first, with the last thing noted on each site. */
+function sitesText (visited, current) {
+  return 'Sites in this task (steps there; your last thought there):\n' + visited.map(function (v) {
+    return '- ' + v.host + (v.host === current ? ' (here now)' : '') + ': ' + v.steps + ' step' + (v.steps === 1 ? '' : 's') + (v.last ? '; "' + v.last + '"' : '')
+  }).join('\n') + '\nDo not go back to a site that already failed you (login wall, blocked, no results) unless something has changed.'
 }
 
 function filesText (files) {
@@ -187,7 +224,8 @@ function takeoverMessage (info) {
 }
 
 function finishReminder (stepsLeft) {
-  return 'You have ' + stepsLeft + ' step(s) left. If the task is complete, reply with {"thought":"...","action":{"type":"done","answer":"..."}}.'
+  return 'Only ' + stepsLeft + ' step' + (stepsLeft === 1 ? '' : 's') + ' left for this task. If you cannot finish in time, reply "done" now with what you have found so far ' +
+    '(say what is missing). A partial answer is far better than none.'
 }
 
 module.exports = {
@@ -197,12 +235,15 @@ module.exports = {
   planMessages,
   parseQuestions,
   planText,
+  planReminder,
+  lookupResultsMessage,
   reviewNote,
   finishCheckNote,
   decisionsText,
   digestLine,
   digestText,
   filesText,
+  sitesText,
   skillsText,
   tabsText,
   notesText,

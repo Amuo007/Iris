@@ -178,6 +178,7 @@ test('validateAction covers every declared action type', () => {
     update_plan: { plan: 'Goal: x' },
     bookmark: {},
     bookmarks: { query: 'news' },
+    lookup: { query: 'best ski boots', kind: 'web' },
     done: {},
     fail: {}
   }
@@ -238,4 +239,15 @@ test('tab actions and zoom validate', () => {
   assert.strictEqual(parseAction('{"action":{"type":"switch_tab"}}', LIMITS).ok, false)
   assert.strictEqual(parseAction('{"action":{"type":"new_tab","url":"example.com"}}', LIMITS).action.url, 'example.com')
   assert.deepStrictEqual(parseAction('{"action":{"type":"zoom","x":3,"y":4}}', LIMITS).action, { type: 'zoom', x: 3, y: 4 })
+})
+
+test('lookup keeps a known kind and falls back to web', () => {
+  assert.strictEqual(validateAction({ type: 'lookup', query: 'x', kind: 'Papers' }, LIMITS).action.kind, 'papers')
+  assert.strictEqual(validateAction({ type: 'lookup', query: 'x', kind: 'google' }, LIMITS).action.kind, 'web')
+  assert.strictEqual(validateAction({ type: 'web_search', query: 'x' }, LIMITS).action.type, 'lookup')
+})
+
+test('bookmark can name a URL and remove it', () => {
+  const r = validateAction({ type: 'bookmark', url: 'https://a.test', remove: 'true' }, LIMITS)
+  assert.deepStrictEqual(r.action, { type: 'bookmark', url: 'https://a.test', remove: true })
 })

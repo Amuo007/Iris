@@ -49,6 +49,21 @@ function createHistory (options) {
   let digest = [] // one line per step that fell out of the window
   let digestDropped = 0
   let observationCount = 0
+  let sites = {} // host -> { steps, last: thought on that site, order } : where this task has been
+
+  function hostOf (url) {
+    const m = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]+)/i.exec(String(url || ''))
+    return m ? m[1].replace(/^www\./, '').toLowerCase() : ''
+  }
+
+  function noteSite (url, thought) {
+    const h = hostOf(url)
+    if (!h || /^(duckduckgo\.com|www\.google\.|google\.|bing\.com)/.test(h)) return
+    const rec = sites[h] || (sites[h] = { steps: 0, last: '', order: 0 })
+    rec.steps++
+    rec.order = observationCount
+    if (thought) rec.last = String(thought).slice(0, 110)
+  }
 
   function remember (e) {
     if (e.kind !== 'assistant' || !e.action) return
@@ -90,6 +105,7 @@ function createHistory (options) {
       digest = []
       digestDropped = 0
       observationCount = 0
+      sites = {}
       push({ kind: 'task', role: 'user', text: prompts.taskMessage(task) })
       return this
     },
@@ -178,6 +194,7 @@ function createHistory (options) {
     },
 
     addAssistant (rawText, thought, action, url) {
+      noteSite(url, thought)
       return push({ kind: 'assistant', role: 'assistant', text: rawText, thought, action, url })
     },
 
@@ -224,9 +241,13 @@ function createHistory (options) {
             if (e.tabs && e.tabs.length > 1) text += '\n' + prompts.tabsText(e.tabs)
             if (e.skills) text += '\n' + prompts.skillsText(e.skills)
             if (digest.length) text += '\n' + prompts.digestText(digest, digestDropped)
+            const visited = Object.keys(sites).map(h => Object.assign({ host: h }, sites[h])).sort((a, b) => b.order - a.order)
+            if (visited.length > 1 || (visited[0] && visited[0].host !== hostOf(e.url))) text += '\n' + prompts.sitesText(visited.slice(0, 6), hostOf(e.url))
             if (kept.length || skipped) text += '\n' + prompts.decisionsText(kept, skipped)
             if (files.length) text += '\n' + prompts.filesText(files)
             if (notes.length) text += '\n' + prompts.notesText(notes.slice(-cfg.notesShown), Math.max(0, notes.length - cfg.notesShown))
+            const plan = entries.find(x => x.kind === 'plan')
+            if (plan) { const r = prompts.planReminder(plan.plan); if (r) text += '\n' + r }
           }
           const parts = [textPart(text)]
           if (e.dataUrl && withImage.has(e) && e.dataUrl !== 'omitted') parts.push(imagePart(e.dataUrl))
@@ -252,7 +273,8 @@ function createHistory (options) {
         skipped,
         digest: digest.slice(),
         digestDropped,
-        observationCount
+        observationCount,
+        sites: Object.assign({}, sites)
       }
     },
 
@@ -266,6 +288,7 @@ function createHistory (options) {
       skipped = data.skipped || 0
       digestDropped = data.digestDropped || 0
       observationCount = data.observationCount || entries.filter(e => e.kind === 'observation').length
+      sites = data.sites && typeof data.sites === 'object' ? Object.assign({}, data.sites) : {}
       return this
     },
 

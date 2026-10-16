@@ -48,3 +48,13 @@ test('memory survives a save and load', () => {
   assert.ok(again.findDownload('https://arxiv.org/abs/2601.00001', ''))
   assert.strictEqual(again.count('download'), 1)
 })
+
+test('find matches the same paper by id, page or long title — not by a search page', () => {
+  const m = createMemory([])
+  m.add('verdict', 'Code as Agent Harness', { url: 'https://arxiv.org/abs/2605.18747v2', keep: false })
+  m.add('verdict', 'A Survey of Browser Agents for the Web', { url: 'https://duckduckgo.com/?q=x', keep: true })
+  assert.ok(m.find('https://arxiv.org/pdf/2605.18747', '', ['verdict']))
+  assert.ok(m.find('', 'a survey of browser agents for the web!', ['verdict']))
+  assert.strictEqual(m.find('https://duckduckgo.com/?q=x', 'other', ['verdict']), null)
+  assert.strictEqual(m.find('https://arxiv.org/abs/2605.18747', '', ['download']), null)
+})

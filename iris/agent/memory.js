@@ -85,6 +85,24 @@ function createMemory (items) {
     return null
   }
 
+  /**
+   * The newest item of these kinds that is the same thing: same identifier (arXiv, DOI),
+   * same page, or — for titles of four words or more — the same title.
+   */
+  function find (url, text, kinds) {
+    const ids = extractIds(url).concat(extractIds(text))
+    const norm = url ? normalizeUrl(url) : null
+    const title = words(text).join(' ')
+    for (let i = list.length - 1; i >= 0; i--) {
+      const it = list[i]
+      if (kinds && kinds.indexOf(it.kind) === -1) continue
+      if (ids.length && it.ids && it.ids.some(function (id) { return ids.includes(id) })) return it
+      if (norm && it.url === norm && !/^(duckduckgo\.com|google\.[a-z.]+|bing\.com)([/?]|$)/.test(norm)) return it
+      if (title.split(' ').length >= 4 && words(it.text).join(' ') === title) return it
+    }
+    return null
+  }
+
   /** Best matches for a question: shared identifiers first, then shared words. */
   function search (query, limit) {
     const qIds = extractIds(query)
@@ -105,7 +123,7 @@ function createMemory (items) {
     return list.filter(function (it) { return !kind || it.kind === kind }).length
   }
 
-  return { add, findDownload, search, count, items: function () { return list.slice() } }
+  return { add, find, findDownload, search, count, items: function () { return list.slice() } }
 }
 
 /** One line per recalled item, for the model. */
@@ -113,6 +131,8 @@ function describeItem (it) {
   const when = new Date(it.at).toISOString().slice(0, 16).replace('T', ' ')
   if (it.kind === 'download') return '- downloaded ' + (it.name || it.text) + (it.url ? ' from ' + it.url : '') + ' (' + when + ')'
   if (it.kind === 'visit') return '- visited ' + (it.title ? '"' + it.title + '" ' : '') + it.url + ' (' + when + ')'
+  if (it.kind === 'found') return '- found by a look-up: ' + it.text + (it.url ? ' — ' + it.url : '') + ' (' + when + ')'
+  if (it.kind === 'verdict') return '- ' + (it.keep ? 'kept' : 'skipped') + ' ' + it.text + (it.why ? ' — ' + it.why : '') + (it.url ? ' (' + it.url + ')' : '') + ' (' + when + ')'
   return '- note: ' + it.text + ' (' + when + ')'
 }
 

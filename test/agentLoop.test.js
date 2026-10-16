@@ -621,3 +621,88 @@ test('update_plan replaces the plan in place and it survives compaction', async 
   assert.match(h.msgs, /Goal: NEW plan/)
   assert.ok(!/Goal: old plan/.test(h.msgs))
 })
+
+/* ---------- Smart mode look-ups ----------------------------------------- */
+
+test('Smart planning can look things up first; results go back to the planner, then the plan', async () => {
+  const asked = []
+  const lookup = async (req) => { asked.push(req); return { ok: true, text: 'Web search for "' + req.query + '": 1. Ski Shop — https://ski.test', count: 1 } }
+  const h = harness([
+    (ctx) => { h.first = ctx; return JSON.stringify({ lookups: [{ kind: 'web', query: 'best ski boots 2026 reddit' }] }) },
+    (ctx) => { h.second = ctx; return 'Goal: pick boots\nStart at: https://ski.test\nDone when: 3 kept' },
+    json('look', { type: 'done', answer: 'ok' })
+  ], {}, { lookup })
+  await h.agent.run('which ski boots should I buy', { plan: 'quick', noQuestions: true })
+  assert.deepStrictEqual(asked, [{ kind: 'web', query: 'best ski boots 2026 reddit' }])
+  assert.match(h.first.messages[0].content, /look things up before planning/)
+  const last = h.second.messages[h.second.messages.length - 1].content
+  assert.match(last, /Look-up results:[\s\S]*ski\.test[\s\S]*Now write the plan \(no more look-ups\)/)
+  assert.match(ev(h.events, 'plan')[0].text, /Start at: https:\/\/ski\.test/)
+  assert.strictEqual(ev(h.events, 'lookup').length, 1)
+})
+
+test('Quick planning gets one round of look-ups, Deep gets two', async () => {
+  const lookup = async (req) => ({ ok: true, text: 'r ' + req.query, count: 1 })
+  const more = () => JSON.stringify({ lookups: [{ kind: 'web', query: 'again' }] })
+  const quick = harness([more, more, 'Goal: q\nDone when: x', json('look', { type: 'done', answer: 'ok' })], {}, { lookup })
+  await quick.agent.run('t', { plan: 'quick', noQuestions: true })
+  assert.strictEqual(ev(quick.events, 'lookup').length, 1, 'quick: the second request for look-ups is not served')
+  const deep = harness([more, more, more, 'Goal: d\nDone when: x', json('look', { type: 'done', answer: 'ok' })], {}, { lookup })
+  await deep.agent.run('t', { plan: 'deep', noQuestions: true })
+  assert.strictEqual(ev(deep.events, 'lookup').length, 2)
+})
+
+test('without a lookup function the planner is never offered look-ups', async () => {
+  const h = harness([(ctx) => { h.ctx = ctx; return 'Goal: g\nDone when: d' }, json('look', { type: 'done', answer: 'ok' })])
+  await h.agent.run('t', { plan: true, noQuestions: true })
+  assert.ok(!/look things up/.test(h.ctx.messages[0].content))
+})
+
+test('the lookup action returns text on the next step and has a per-task budget', async () => {
+  let n = 0
+  const lookup = async () => { n++; return { ok: true, text: 'RESULT ' + n, count: 1 } }
+  const look = json('check fast', { type: 'lookup', kind: 'wiki', query: 'Eiffel Tower height' })
+  const h = harness([look, look, (ctx) => { h.ctx = ctx; return json('done', { type: 'done', answer: '330 m' }) }], {}, { lookup, config: { settleDelayMs: 0, markerDwellMs: 0, runLookups: 1 } })
+  const result = await h.agent.run('how tall is the Eiffel Tower')
+  assert.strictEqual(result.status, 'done')
+  assert.strictEqual(n, 1)
+  const text = JSON.stringify(h.ctx.messages)
+  assert.match(text, /RESULT 1/)
+  assert.match(text, /used all 1 look-ups/)
+})
+
+test('a planned run repeats its goal on every step', async () => {
+  const h = harness(['Goal: find 3 boots\nHow: shops\nDone when: 3 kept', (ctx) => { h.ctx = ctx; return json('d', { type: 'done', answer: 'x' }) }])
+  await h.agent.run('boots', { plan: true, noQuestions: true })
+  const last = h.ctx.messages[h.ctx.messages.length - 1].content.find(p => p.type === 'text').text
+  assert.match(last, /Remember the plan — Goal: find 3 boots \| Done when: 3 kept/)
+})
+
+test('the newest step lists the sites already tried, with the last thought on each', async () => {
+  const h = harness([
+    json('LiftmyCV needs a login', { type: 'navigate', url: 'https://b.test/' }),
+    (ctx) => { h.ctx = ctx; return json('d', { type: 'done', answer: 'x' }) }
+  ], { url: 'https://a.test/jobs' })
+  const urls = ['https://a.test/jobs', 'https://b.test/']
+  let i = 0
+  const orig = h.computer.screenshot.bind(h.computer)
+  h.computer.screenshot = () => Object.assign(orig(), { url: urls[Math.min(i++, 1)] })
+  await h.agent.run('jobs')
+  const last = h.ctx.messages[h.ctx.messages.length - 1].content.find(p => p.type === 'text').text
+  assert.match(last, /Sites in this task[\s\S]*a\.test: 1 step; "LiftmyCV needs a login"/)
+})
+
+test('three steps before the limit Iris is told to report what it has', async () => {
+  const replies = [0, 1, 2].map(() => json('scroll', { type: 'scroll', direction: 'down' }))
+  replies.push((ctx) => { h.ctx = ctx; return json('d', { type: 'done', answer: 'partial' }) })
+  const h = harness(replies, {}, { safety: { maxSteps: 4 } })
+  await h.agent.run('long task')
+  assert.match(JSON.stringify(h.ctx.messages), /Only 1 step left/)
+})
+
+test('an answer on the last steps is accepted even if nothing was judged', async () => {
+  const h = harness(['Goal: g\nDone when: 3 kept', json('s', { type: 'scroll', direction: 'down' }), json('final', { type: 'done', answer: 'partial: one job' })], {}, { safety: { maxSteps: 2 } })
+  const r = await h.agent.run('find jobs', { plan: true, noQuestions: true })
+  assert.strictEqual(r.status, 'done')
+  assert.strictEqual(r.answer, 'partial: one job')
+})

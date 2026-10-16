@@ -14,7 +14,7 @@
 const COORD_TYPES = new Set(['click', 'double_click', 'right_click', 'drag', 'scroll'])
 
 /* Actions after which the page (or the tab) is different, so a batch must stop there. */
-const PAGE_CHANGING = new Set(['navigate', 'back', 'switch_tab', 'new_tab', 'close_tab', 'zoom', 'find', 'dialog', 'upload', 'ask_user', 'recall', 'bookmarks'])
+const PAGE_CHANGING = new Set(['navigate', 'back', 'switch_tab', 'new_tab', 'close_tab', 'zoom', 'find', 'dialog', 'upload', 'ask_user', 'recall', 'bookmarks', 'lookup'])
 
 const MAX_BATCH = 6
 
@@ -45,11 +45,12 @@ const SPEC = {
   dialog: { required: ['accept'], optional: ['text'] },
   upload: { required: ['file'], optional: [] },
   ask_user: { required: ['question'], optional: [] },
-  save_account: { required: ['site', 'username'], optional: ['password'] },
+  save_account: { required: ['site', 'username'], optional: ['password', 'purpose'] },
+  lookup: { required: ['query'], optional: ['kind'] },
   recall: { required: ['query'], optional: [] },
   judge: { required: ['item', 'keep'], optional: ['why'] },
   update_plan: { required: ['plan'], optional: [] },
-  bookmark: { required: [], optional: ['title'] },
+  bookmark: { required: [], optional: ['title', 'url', 'remove'] },
   bookmarks: { required: [], optional: ['query'] },
   move: { required: ['x', 'y'], optional: [] },
   done: { required: [], optional: ['answer'] },
@@ -109,6 +110,9 @@ const TYPE_ALIASES = {
   choose_file: 'upload',
   ask: 'ask_user',
   ask_human: 'ask_user',
+  web_search: 'lookup',
+  quick_search: 'lookup',
+  look_up: 'lookup',
   search_page: 'find',
   ctrl_f: 'find',
   inspect: 'zoom',
@@ -505,6 +509,13 @@ function validateAction (obj, limits) {
         else action.tab = n
         break
       }
+      case 'kind': {
+        const k = toStringValue(value)
+        const kl = k === null ? '' : k.trim().toLowerCase()
+        action.kind = ['web', 'papers', 'arxiv', 'wiki', 'page'].includes(kl) ? kl : 'web'
+        break
+      }
+      case 'purpose':
       case 'title':
       case 'plan':
       case 'item':
@@ -521,6 +532,7 @@ function validateAction (obj, limits) {
         break
       }
       case 'keep':
+      case 'remove':
       case 'accept':
       case 'clear':
       case 'enter': {
@@ -672,7 +684,8 @@ function describeAction (action) {
     case 'recall': return `Recall "${action.query}"`
     case 'judge': return (action.keep ? 'Keep' : 'Skip') + ` "${action.item}"` + (action.why ? ` — ${action.why}` : '')
     case 'update_plan': return 'Update the plan'
-    case 'bookmark': return 'Bookmark this page'
+    case 'bookmark': return action.remove ? 'Remove the bookmark' + (action.url ? ' for ' + action.url : '') : 'Bookmark ' + (action.url || 'this page')
+    case 'lookup': return 'Look up (' + (action.kind || 'web') + ') "' + action.query + '"'
     case 'bookmarks': return action.query ? `Look up bookmarks for "${action.query}"` : 'List bookmarks'
     case 'done': return action.answer ? `Done \u2014 ${action.answer}` : 'Done'
     case 'fail': return action.reason ? `Stopped \u2014 ${action.reason}` : 'Stopped'
@@ -715,12 +728,19 @@ const ACTION_SPEC_TEXT = [
   '  judge        {"item":str,"keep":bool,"why":str}  your decision about a candidate (a paper, product, page)',
   '               after reading enough of it; it is saved, so you never judge the same thing twice',
   '  update_plan  {"plan":str}       rewrite your plan when you learn something that changes it (same parts)',
-  '  bookmark     {"title":str?}     bookmark the page you are on (it goes on the user\'s bookmarks bar)',
+  '  bookmark     {"title":str?,"url":str?,"remove":bool?}  bookmark the page you are on (or url) on the bookmarks bar;',
+  '               remove:true deletes that bookmark',
   '  bookmarks    {"query":str?}     look up the user\'s bookmarks (title and URL); then navigate to one',
   '  recall       {"query":str}      search everything saved in this chat (notes, downloads, pages visited),',
   '               e.g. a paper title or ID; the best matches come back on the next step',
-  '  save_account {"site":str,"username":str,"password":str}  after creating an account, record it for the user',
-  '               (password: the placeholder you typed, e.g. "{{Password}}")',
+  '  save_account {"site":str,"username":str,"password":str,"purpose":str}  after creating an account, record it',
+  '               for the user (password: the placeholder you typed, e.g. "{{Password}}"; purpose: why it was made)',
+  '  lookup       {"kind":"web|papers|arxiv|wiki|page","query":str}  a quick look-up OUTSIDE the browser, as text:',
+  '               web = search results with snippets, papers = papers with abstracts and citation counts,',
+  '               arxiv = newest arXiv preprints, wiki = encyclopedia summary, page = text of one public page (query = its URL).',
+  '               Use it to decide where to go, to check a fact, or to read a long public list (jobs, products,',
+  '               papers) in one step instead of scrolling. Do the task itself (forms, accounts, downloads,',
+  '               purchases) in the browser. A few per task.',
   '  navigate     {"url":str}        open a URL, or give plain words to search the web',
   '  back         {}                 browser Back button',
   '  new_tab      {"url":str?}       open a new tab (and switch to it)',
@@ -746,12 +766,14 @@ const ACTION_SPEC_TEXT = [
   '- To download a file, click its download link or button. Iris saves it to the Downloads folder by itself and tells you when it is done.',
   '- To upload a file, click the upload button or "Choose file"; Iris then lists files you can pick with upload.',
   '- Date and time fields: click the field and type the digits (for 23 Oct 2026 type "10232026"); do not use the calendar pop-up.',
-  '- Never try to solve a CAPTCHA or "verify you are human" check yourself: use ask_user so the user can do it.',
+  '- A "Verifying you are human" / "Just a moment" page often clears by itself: wait up to about 10 s.',
+  '  Never solve a CAPTCHA or puzzle yourself. If it stays, use another site that has the same thing;',
+  '  if only that site will do, use ask_user so the user can do it.',
   '- When asked to find or choose the best things, open each candidate and read enough (abstract, summary,',
   '  reviews) to judge it against what the user needs; record judge before you download or add it.',
   '- Close tabs you opened only to help (an email inbox, a pop-up) once you are done with them.',
-  '- Report only what you saw on a page during this task. Never fill in titles, names, numbers or facts',
-  '  from memory; if you could not find or confirm something, leave it out or say it is unconfirmed.',
+  '- Report only what you saw on a page or in look-up results during this task. Never fill in titles,',
+  '  names, numbers or facts from memory; if you could not find or confirm something, leave it out or say so.',
   '- As soon as the screenshot shows the answer, reply "done" with the answer. If you found a faster way',
   '  around this site than the obvious one, include "learn" in that same reply.'
 ].join('\n')
