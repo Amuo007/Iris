@@ -1823,6 +1823,8 @@ var irisAgentState = {
  * finishes, but only while Iris is not the app in front: if the user is watching, the panel says it.
  */
 function irisNotify (title, body) {
+  DBUG('notify: ' + title + ' — ' + String(body || '').slice(0, 160))
+  if (process.env.IRIS_NO_NOTIFY) return // tests
   try {
     if (!IrisNotification.isSupported()) return
     const win = windows.getCurrent()
@@ -2158,6 +2160,20 @@ function startAgent (task, options) {
       if (type === 'ask') computer.lastQuestion = payload.question
       if (type === 'questions') irisNotify('Iris has a few questions', 'Answer them in the Iris panel so it can plan "' + session.title + '".')
       if (type === 'blocked' && payload.kind === 'confirmation') irisNotify('Iris is waiting for your OK', payload.reason)
+      // a run that waits for the model server keeps trying (forever in a non-stop run): after 5 minutes
+      // of silence, tell the user once, and again when it is back
+      if (type === 'error' && payload.where === 'server') {
+        if (!session.serverDownAt) session.serverDownAt = Date.now()
+        if (!session.serverDownTold && Date.now() - session.serverDownAt >= (Number(process.env.IRIS_SERVER_NOTIFY_MS) || 5 * 60 * 1000)) {
+          session.serverDownTold = true
+          const mins = Math.max(1, Math.round((Date.now() - session.serverDownAt) / 60000))
+          irisNotify('Iris is waiting for the model server', 'It has not answered for ' + mins + (mins === 1 ? ' minute' : ' minutes') + '. Iris keeps trying and carries on by itself when it is back.')
+        }
+      } else if (session.serverDownAt && (type === 'thought' || type === 'run:end')) {
+        if (session.serverDownTold && type === 'thought') irisNotify('The model server is back', 'Iris carried on with "' + session.title + '".')
+        session.serverDownAt = 0
+        session.serverDownTold = false
+      }
       // a non-stop run picks itself up after a failure: only tell the user when it really ends
       if (type === 'run:end' && payload.status !== 'stopped' && !(unlimited && payload.status === 'failed')) irisNotify(payload.status === 'done' ? 'Iris finished' : 'Iris could not finish', (payload.status === 'done' ? payload.answer : payload.reason) || session.title)
       if (type === 'thought' && payload.usage) irisUsageRecord('request', Object.assign({ ms: payload.modelMs }, payload.usage))
