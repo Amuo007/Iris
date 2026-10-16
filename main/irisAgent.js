@@ -576,9 +576,14 @@ function irisSeenAdd (kind, text, extra) {
   }
 }
 
-/* "kept on Oct 14 (chat "harness papers"): fits the topic" — or null if never judged */
-function irisSeenNote (url, title) {
+/*
+ * "kept on Oct 14 (chat "harness papers"): fits the topic" — or null if never judged. Judgements made
+ * in the chat that is asking are left out: that chat already knows them, and a paper it just kept
+ * must not look like something to avoid when Iris opens its PDF.
+ */
+function irisSeenNote (url, title, sessionId) {
   const hit = irisSeen().find(url, title, ['verdict'])
+  if (hit && sessionId && hit.sessionId === sessionId) return null
   if (!hit) {
     const dl = irisDownloads().findDownload(url, title)
     return dl ? 'already downloaded as ' + (dl.name || dl.text) + ' on ' + new Date(dl.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null
@@ -615,7 +620,7 @@ settings.listen('irisLookupNever', function () { irisLookupInstance = null })
 async function irisDoLookup (req) {
   const result = await irisLookup().lookup(req, {
     annotate: function (it) {
-      const note = irisSeenNote(it.url || '', (it.id || '') + ' ' + (it.title || ''))
+      const note = irisSeenNote(it.url || '', (it.id || '') + ' ' + (it.title || ''), irisSession && irisSession.id)
       return note ? 'you ' + note : null
     }
   })
@@ -856,7 +861,7 @@ IrisComputer.prototype.screenshot = async function () {
   if (this.memory && obs.url && obs.url !== this.lastVisit) {
     this.lastVisit = obs.url
     this.memory.add('visit', obs.title || obs.url, { url: obs.url, title: obs.title })
-    const seen = irisSeenNote(obs.url, obs.title)
+    const seen = irisSeenNote(obs.url, obs.title, this.sessionId)
     if (seen) obs.note = (obs.note ? obs.note + '\n' : '') + 'You have seen this page before: you ' + seen + '. Do not spend steps on it again unless the task needs it.'
   }
   // Iris's own PDF viewer: say where its download button is (it fades out until the mouse is near)
@@ -1690,6 +1695,7 @@ function startAgent (task, options) {
   }, options.viewBounds)
   computer.memory = irisSessionMemory(session)
   computer.taskTitle = session.title
+  computer.sessionId = session.id
   computer.projectId = session.projectId || null
   computer.projectMemory = irisProjectMemory(session.projectId)
   irisComputer = computer
@@ -1750,7 +1756,7 @@ function startAgent (task, options) {
       if (type === 'verdict') {
         let here = ''
         try { here = computer.view().webContents.getURL() } catch (e) { /* tab gone */ }
-        irisSeenAdd('verdict', payload.item, { url: here, keep: !!payload.keep, why: payload.why || '', chat: session.title, name: payload.item })
+        irisSeenAdd('verdict', payload.item, { url: here, keep: !!payload.keep, why: payload.why || '', chat: session.title, name: payload.item, sessionId: session.id })
         payload = Object.assign({}, payload, { url: here })
       }
       if (type === 'run:end' && payload.status === 'done') {

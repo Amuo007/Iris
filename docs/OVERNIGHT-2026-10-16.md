@@ -82,6 +82,11 @@ Draft, updated through the night. The final version is at the end of the night.
 | Train booking (local site: autocomplete, date, seat map, upsell pop-up, cookie bar) | **done**, 12 steps, 2 min 21 s; right train, seats 2A+2B, declined insurance, stopped at payment. One misread: arrival 07:32 instead of 07:39 |
 | Dentist appointment (local site: calendar, slots, chat pop-up) | **done**, 15 steps, 3 min 41 s, right day/slot and reference. Asked you for a phone number (not in My info); got confused about weekdays once → added a calendar hint |
 | Cheapest one-way flight Chicago → Denver next Friday (Google Flights, Smart Quick) | **done**, 32 steps, 6 min 23 s: Frontier 6:30 AM ORD–DEN nonstop $183, checked against the screenshot. Lost time to stale autocomplete lists ("New Denver") → added a pause after typing + a rule |
+| Download the latest LTS Node.js macOS installer from nodejs.org | **done**, 6 steps, 54 s, 90 MB `node-v24.22.0.pkg` |
+| Amazon: USB-C hub under $30 with 4.5★, add to cart (Smart Quick) | found Anker 7-in-1 $19.99 4.5★ in 4 steps; Amazon then showed "I am human" → Iris **stopped and asked you** (correct: never solves those) |
+| Train booking again, with a stale suggestion list like Google's | first try: failed on 4 malformed replies → parser fix; then **done** but with invented train times → final-answer check; last try **done**, 9 steps, 1 min 51 s, no invented details |
+| Schedule: a task every 3 minutes (Tokyo time) | **fired twice on its own**, correct answers both times |
+| Long Non-stop research (2.5 h) | running — see below |
 
 ## Blocked / needs you
 
