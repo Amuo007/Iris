@@ -350,6 +350,11 @@ Updated 2026-10-16 (evening).
   browser — a plain request in the empty look-up session, never LinkedIn and the like, never a site
   you have an account on — the page's text (up to 8,000 characters) goes to the tailoring next to the
   summary. Pages that need JavaScript, or whose text does not name the job, give nothing and are skipped.
+- **Fit and years (new today):** the model rated a "3+ years on AWS" job 85 for a person with about 1.9
+  years of work — while listing the years as missing. Now code reads the most years a posting asks
+  for ("3+ years", "at least 5 years", "2-4 years", "3 years of experience"; "around for 10 years" is
+  not a requirement), adds up the person's years from the job dates (overlaps once, internships
+  included), and caps the fit: 65 when a year or more short, 50 when two or more. The prompt says so too.
 - **When Jobs mode is on (fixed today):** only for job hunting. Before, any task with "apply" or
   "resume" in it switched it on — "apply the coupon at checkout" or "resume the download" would
   have got the job instructions and the pause before submitting. Now it needs job words around them
