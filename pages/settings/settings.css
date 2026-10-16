@@ -1229,3 +1229,18 @@ body.dark-mode .iris-status-needs_you {
   width: 100%;
   max-width: 560px;
 }
+.iris-settings textarea.iris-skill-items {
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.45;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.iris-skill-group {
+  align-items: flex-start;
+}
+.iris-skill-group .iris-row-delete {
+  padding-top: 5px;
+}

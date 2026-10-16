@@ -90,12 +90,15 @@ function irisRenderSkills () {
     name.placeholder = 'Group (e.g. Cloud)'
     name.value = g.group || ''
     name.addEventListener('input', function () { g.group = name.value; irisCareerScheduleSave() })
-    var items = document.createElement('input')
-    items.type = 'text'
-    items.className = 'iris-row-value'
+    // a long list wraps instead of hiding past the edge
+    var items = document.createElement('textarea')
+    items.rows = 1
+    items.className = 'iris-row-value iris-skill-items'
     items.placeholder = 'AWS, Terraform, Kubernetes'
     items.value = (g.items || []).join(', ')
-    items.addEventListener('input', function () { g.items = irisCommaList(items.value); irisCareerScheduleSave() })
+    items.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault() })
+    items.addEventListener('input', function () { g.items = irisCommaList(items.value.replace(/\n/g, ' ')); irisGrow(items); irisCareerScheduleSave() })
+    setTimeout(function () { irisGrow(items) }, 0)
     row.appendChild(name)
     row.appendChild(items)
     row.appendChild(irisDeleteButton('Remove this group', function () { irisCareer.skills.splice(i, 1); irisRenderSkills(); irisCareerScheduleSave() }))
