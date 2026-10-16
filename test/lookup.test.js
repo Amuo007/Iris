@@ -203,3 +203,14 @@ test('an Ashby posting (a JavaScript page) is read from Ashby\'s public posting 
   assert.match(r.items[0].text, /3\+ years securing AWS/)
   assert.ok(!log.some(u => u.startsWith('https://jobs.ashbyhq.com')), 'the JavaScript page itself is not fetched')
 })
+
+test('a Workday posting (a JavaScript page) is read from the site\'s own JSON endpoint', async () => {
+  const info = { jobPostingInfo: { title: 'Software Engineer, SPE', location: 'Yokneam', timeType: 'Full time', jobDescription: '<p>We need <b>3+ years</b> of C++.</p><ul><li>Python</li></ul>', externalUrl: 'https://acme.wd5.myworkdayjobs.com/Site/job/X/Software-Engineer_JR1' } }
+  const log = []
+  const lk = createLookup(Object.assign({ fetch: fakeFetch([['acme.wd5.myworkdayjobs.com/wday/cxs/acme/Site/job/X/Software-Engineer_JR1', JSON.stringify(info), 200, 'application/json']], log) }, instant))
+  const r = await lk.lookup({ kind: 'page', query: 'https://acme.wd5.myworkdayjobs.com/en-US/Site/job/X/Software-Engineer_JR1/apply', chars: 8000 })
+  assert.ok(r.ok, r.text)
+  assert.strictEqual(r.items[0].title, 'Software Engineer, SPE')
+  assert.match(r.items[0].text, /3\+ years of C\+\+/)
+  assert.match(r.items[0].text, /Python/)
+})

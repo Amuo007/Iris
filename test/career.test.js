@@ -310,6 +310,7 @@ test('job title and company from a posting link and its page title', () => {
   assert.deepStrictEqual(career.jobFromPage('https://jobs.lever.co/palantir/10dfc8bc', 'Palantir Technologies - Backend Software Engineer - Application Development'), { title: 'Backend Software Engineer', company: 'Palantir Technologies' })
   assert.deepStrictEqual(career.jobFromPage('https://jobs.ashbyhq.com/ramp/34413f8d', 'Security Engineer, Cloud'), { title: 'Security Engineer, Cloud', company: 'Ramp' })
   assert.deepStrictEqual(career.jobFromPage('https://careers.example.test/jobs/42', 'Firmware Engineer | Northwind'), { title: 'Firmware Engineer', company: 'Northwind' })
+  assert.deepStrictEqual(career.jobFromPage('https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite/job/Israel-Yokneam/Software-Engineer--SPE_JR2015623', 'Software Engineer, SPE'), { title: 'Software Engineer, SPE', company: 'Nvidia' })
   assert.deepStrictEqual(career.jobFromPage('http://localhost:8765/gh/emb.html', 'Job Application for Embedded Software Engineer at Lumen Labs'), { title: 'Embedded Software Engineer', company: 'Lumen Labs' })
 })
 

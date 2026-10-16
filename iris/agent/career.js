@@ -1734,6 +1734,7 @@ function jobFromPage (url, pageTitle) {
     return { title: t, company: nice(path[0]) }
   }
   if (/(^|\.)ashbyhq\.com$/.test(host)) return { title: t.split(/ [-–@|] /)[0].trim(), company: nice(path[0]) }
+  if (/\.myworkdayjobs\.com$/.test(host)) return { title: t.split(/ [-–@|] /)[0].trim(), company: nice(host.split('.')[0]) }
   const at = / at ([^|–-]+)$/.exec(t)
   if (at) return { title: t.slice(0, at.index).trim(), company: at[1].trim() }
   const parts = t.split(/ [-–|@] /)

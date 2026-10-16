@@ -388,10 +388,24 @@ function createLookup (opts) {
     return { source: 'ashby posting api', items: [{ title: title, url: job.jobUrl || url, text: clip(head + '\n' + job.descriptionPlain, chars || cfg.pageChars) }] }
   }
 
+  /* A Workday posting page is built by JavaScript too; the site's own JSON endpoint (/wday/cxs/…) has the text. */
+  async function workdayPosting (url, chars) {
+    const m = /^https?:\/\/(([^./]+)\.wd\d+\.myworkdayjobs\.com)\/(?:[a-z]{2}-[A-Z]{2}\/)?([^/?#]+)\/job\/([^?#]+?)(?:\/apply[^?#]*)?(?:[?#]|$)/.exec(url)
+    if (!m) return null
+    const r = await get('https://' + m[1] + '/wday/cxs/' + m[2] + '/' + m[3] + '/job/' + m[4], 'application/json')
+    if (r.status !== 200) return null
+    const info = (JSON.parse(r.body) || {}).jobPostingInfo
+    if (!info || !info.jobDescription) return null
+    const title = String(info.title || '').trim()
+    const head = [title, info.location, info.timeType].filter(Boolean).join(' · ')
+    const body = readableText('<html><body>' + info.jobDescription + '</body></html>', chars || cfg.pageChars).text
+    return { source: 'workday posting api', items: [{ title: title, url: info.externalUrl || url, text: clip(head + '\n' + body, chars || cfg.pageChars) }] }
+  }
+
   async function page (url, chars) {
     if (!/^https?:\/\//i.test(url)) url = 'https://' + String(url).replace(/^\/+/, '')
-    const ashby = await ashbyPosting(url, chars)
-    if (ashby) return ashby
+    const posting = (await ashbyPosting(url, chars)) || (await workdayPosting(url, chars))
+    if (posting) return posting
     const r = await get(url)
     if (looksBlocked(r.status, r.body)) throw new Error(hostOf(url) + ' blocks quick reading; open it in the browser instead')
     if (r.status >= 400) throw new Error(hostOf(url) + ' answered ' + r.status)
