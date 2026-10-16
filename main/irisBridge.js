@@ -26,6 +26,7 @@ const IRIS_BRIDGE_PORT = 47821
 var irisBridgeServer = null
 var irisBridgeComputer = null
 var irisBridgeLastUse = 0
+var irisBridgeError = ''
 
 function irisBridgeFile () {
   return path.join(userDataPath, 'iris-bridge.json')
@@ -139,7 +140,7 @@ function irisBridgeScriptPath () {
 
 function irisBridgeInfo () {
   const creds = irisBridgeCredentials()
-  return { enabled: irisBridgeEnabled(), running: !!irisBridgeServer, port: creds.port, script: irisBridgeScriptPath(), lastUse: irisBridgeLastUse }
+  return { enabled: irisBridgeEnabled(), running: !!irisBridgeServer && !irisBridgeError, error: irisBridgeError, port: creds.port, script: irisBridgeScriptPath(), lastUse: irisBridgeLastUse }
 }
 
 function irisBridgeStart () {
@@ -163,8 +164,12 @@ function irisBridgeStart () {
       irisBridgeHandle(m[1], args).then(function (out) { send(200, out) }, function (err) { send(200, { error: err.message }) })
     })
   })
+  irisBridgeError = ''
   irisBridgeServer.on('error', function (err) {
     DBUG('bridge: ' + err.message)
+    irisBridgeError = err.code === 'EADDRINUSE'
+      ? 'Port ' + (creds.port || IRIS_BRIDGE_PORT) + ' is already in use, probably by another copy of Iris. Quit it and turn this off and on again.'
+      : err.message
     irisBridgeServer = null
   })
   irisBridgeServer.listen(creds.port || IRIS_BRIDGE_PORT, '127.0.0.1')

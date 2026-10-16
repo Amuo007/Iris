@@ -965,3 +965,8 @@ a.iris-list-main:hover .iris-list-title {
 .iris-settings .iris-playbook summary {
   font-size: 13px;
 }
+#iris-downloads-dir {
+  font-size: inherit;
+  color: inherit;
+  word-break: break-all;
+}

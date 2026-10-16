@@ -139,3 +139,23 @@ Draft, updated through the night. The final version is at the end of the night.
    worked), **Coding agents**.
 5. Coding agents: turn it on, press **Copy**, paste into your coding agent's MCP config (Claude Code:
    `.mcp.json` or `claude mcp add`), restart the agent, then ask it to "take a screenshot with Iris".
+
+## Where Iris still falls short (honest list)
+
+- **Small targets.** It sometimes misses small buttons by a few pixels (a chat pop-up's ×, a calendar day).
+  The hint after a missed click and `zoom` help; it recovers, but it costs steps.
+- **Weekday and date sums.** Better with the calendar hint, not perfect.
+- **Bot checks.** Amazon's "I am human" box, Indeed's Cloudflare wall: Iris stops and asks you (or
+  uses another site). That is deliberate.
+- **Sites that hide details behind sign-ups** (job boards). Iris works around them by reading
+  listing cards, or by using another board.
+- **Speed.** About 7–12 s per step with Balanced thinking on your server; Smart Quick planning adds
+  15–35 s, Deep about 1–1.5 min. Fast (no thinking) is ~5 s per step but makes more mistakes.
+- **Things Iris cannot see**: Min's own bars ("Save password?"), native right-click menus.
+
+## Next steps I'd suggest
+
+1. Decide on payments (ON-HOLD.md) and email notifications (needs a sending account).
+2. Let Iris create throwaway accounts on sites that hide details behind a sign-up, when a task allows it.
+3. Try Fast thinking for simple tasks automatically (navigation, typing) and Balanced for reading pages.
+4. Package and sign the app with a valid Apple certificate (yours has expired; builds are ad-hoc signed).

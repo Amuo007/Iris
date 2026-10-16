@@ -1437,7 +1437,10 @@ window.addEventListener('message', function (e) {
   if (!e.data || e.data.message !== 'irisSettingsActionResult' || !e.data.data || e.data.data.action !== 'bridgeInfo') return
   var r = e.data.data.result || {}
   irisBridgeConfig.textContent = JSON.stringify({ mcpServers: { iris: { command: 'node', args: [r.script || 'iris-mcp.js'] } } }, null, 2)
-  irisBridgeStatus.textContent = r.running ? 'Listening on this Mac only (port ' + r.port + ')' + (r.lastUse ? ' · last used ' + new Date(r.lastUse).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '') : (r.enabled ? 'Starting…' : '')
+  irisBridgeStatus.textContent = r.error ? 'Not running: ' + r.error
+    : r.running ? 'Listening on this Mac only (port ' + r.port + ')' + (r.lastUse ? ' · last used ' + new Date(r.lastUse).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '')
+      : (r.enabled ? 'Starting…' : '')
+  if (r.enabled && !r.running && !r.error) setTimeout(function () { irisAction('bridgeInfo') }, 1500)
 })
 document.getElementById('iris-bridge-copy').addEventListener('click', function () {
   navigator.clipboard.writeText(irisBridgeConfig.textContent).then(function () { irisBridgeStatus.textContent = 'Copied.' })
