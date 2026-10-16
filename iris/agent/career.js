@@ -965,7 +965,8 @@ function factTokens (text) {
     sentenceStart = /[.!?]$/.test(w)
     if (!t || /^\d/.test(t)) return
     const tech = /[A-Z].*[A-Z]/.test(t) || /[+#]/.test(t) || /\w\.\w/.test(t) || /\d/.test(t) || (!starts && /^[A-Z]/.test(t))
-    if (tech) out.push(t.toLowerCase())
+    // "C/C++" or "I2C/SPI": each part is its own fact
+    if (tech) t.toLowerCase().split('/').filter(Boolean).forEach(function (part) { out.push(part) })
   })
   return out
 }
@@ -1407,21 +1408,44 @@ function trimOnce (layout) {
   return false
 }
 
-/* What could still go on the page, best first: more bullets of chosen entries, then more projects. */
-function additions (bank, layout, pick) {
+/*
+ * What could still go on the page, most useful first. Everything is ranked by the words it shares with
+ * the job: bullets the model listed, then other bullets and skills that match the job, then projects
+ * that match; things that share nothing with the job come last (a full page should not be padded
+ * with an Android internship's details for a firmware job when a firmware skill could go there).
+ */
+function additions (bank, layout, pick, job) {
+  const want = new Set(words([job && job.title, job && job.requirements].join(' ')))
+  const score = function (text) { return words(text).filter(function (w) { return want.has(w) }).length }
   const out = []
   const ranked = {}
   pick.experience.concat(pick.projects).forEach(function (e) { ranked[e.id] = e.bullets })
-  layout.experience.concat(layout.projects).forEach(function (e) {
+  layout.experience.concat(layout.projects).forEach(function (e, n) {
     const src = e.id[0] === 'E' ? bank.experience[Number(e.id.slice(1)) - 1] : bank.projects[Number(e.id.slice(1)) - 1]
-    const order = (ranked[e.id] || []).concat(src.bullets.map(function (b, j) { return e.id + '.' + (j + 1) }))
-    order.forEach(function (b) { if (e.bullets.indexOf(b) === -1 && !out.some(function (o) { return o.bullet === b })) out.push({ entry: e.id, bullet: b }) })
+    const listed = ranked[e.id] || []
+    src.bullets.forEach(function (text, j) {
+      const id = e.id + '.' + (j + 1)
+      if (e.bullets.indexOf(id) !== -1) return
+      // the model's own picks first, then by words shared with the job
+      out.push({ entry: e.id, bullet: id, rank: (listed.indexOf(id) !== -1 ? 100 - listed.indexOf(id) : 0) + score(text) * 10 - n * 0.01 })
+    })
   })
-  pick.projects.forEach(function (p) { if (!layout.projects.some(function (x) { return x.id === p.id })) out.push({ project: p }) })
-  ;(pick.moreProjects || []).forEach(function (p) {
-    if (!layout.projects.some(function (x) { return x.id === p.id }) && !out.some(function (o) { return o.project && o.project.id === p.id })) out.push({ project: p })
+  // skills come a group at a time (single items barely change the page): the matching ones first
+  bank.skills.forEach(function (g) {
+    const shown = layout.skills.find(function (x) { return x.group === g.group })
+    const missing = g.items.filter(function (it) { return !(shown && shown.items.indexOf(it) !== -1) })
+    const hits = missing.filter(function (it) { return score(it + ' ' + g.group) > 0 })
+    const rest = missing.filter(function (it) { return hits.indexOf(it) === -1 })
+    if (hits.length) out.push({ skill: { group: g.group, items: hits }, rank: 10 * Math.min(3, hits.length) + 5 })
+    if (rest.length) out.push({ skill: { group: g.group, items: rest }, rank: shown ? 2 : -0.5 })
   })
-  return out
+  const projects = (pick.projects || []).concat(pick.moreProjects || [])
+  projects.forEach(function (p) {
+    if (layout.projects.some(function (x) { return x.id === p.id }) || out.some(function (o) { return o.project && o.project.id === p.id })) return
+    const src = bank.projects[Number(p.id.slice(1)) - 1]
+    out.push({ project: p, rank: (pick.projects.indexOf(p) !== -1 ? 50 : 0) + score([src.name, src.tech].concat(src.bullets).join(' ')) * 10 - 1 })
+  })
+  return out.sort(function (a, b) { return b.rank - a.rank })
 }
 
 function applyAddition (layout, add) {
@@ -1430,6 +1454,10 @@ function applyAddition (layout, add) {
     if (e) e.bullets.push(add.bullet)
   } else if (add.project) {
     layout.projects.push({ id: add.project.id, bullets: add.project.bullets.slice(0, 2) })
+  } else if (add.skill) {
+    let g = layout.skills.find(function (x) { return x.group === add.skill.group })
+    if (!g) { g = { group: add.skill.group, items: [] }; layout.skills.push(g) }
+    add.skill.items.forEach(function (it) { if (g.items.indexOf(it) === -1) g.items.push(it) })
   }
 }
 
@@ -1469,7 +1497,7 @@ async function fitToPage (opts) {
   // 2. room left: add the next best things while they still fit
   if (r.pages === 1) {
     let best = { layout: cloneLayout(layout), result: r }
-    const queue = additions(bank, layout, pick)
+    const queue = additions(bank, layout, pick, opts.job)
     let misses = 0
     while (best.result.fill < minFill && queue.length && compiles < maxCompiles && misses < 3) {
       const add = queue.shift()
@@ -1477,7 +1505,7 @@ async function fitToPage (opts) {
       applyAddition(trial, add)
       const t = await run(trial)
       if (!t.ok) break
-      if (t.pages === 1) { best = { layout: trial, result: t }; steps.push('added ' + (add.bullet ? 'a bullet' : 'a project')); misses = 0 } else misses++
+      if (t.pages === 1) { best = { layout: trial, result: t }; steps.push('added ' + (add.bullet ? 'a bullet' : add.skill ? 'a skill' : 'a project')); misses = 0 } else misses++
     }
     layout = best.layout
     r = best.result

@@ -197,3 +197,9 @@ test('a decimal is not the end of a sentence in a cover letter', () => {
   assert.match(r.paragraphs[0], /to 99\.6%\. I used Kotlin\./)
   assert.strictEqual(r.removed.length, 0)
 })
+
+test('"C/C++" is checked as C and C++', () => {
+  const bank = career.normalizeBank(SAMPLE)
+  const r = career.parseTailorReply(JSON.stringify({ summary: 'Engineer with embedded C/C++ work on STM32 and ESP32.', experience: [{ id: 'E1', bullets: ['E1.3'] }] }), bank, {}, parseObjectLoose)
+  assert.strictEqual(r.summary, 'Engineer with embedded C/C++ work on STM32 and ESP32.')
+})

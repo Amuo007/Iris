@@ -2108,6 +2108,7 @@ function startAgent (task, options) {
       }
       if (type === 'learn') irisLearn(payload.url, payload.tip)
       if (type === 'ask') irisNotify('Iris needs you', payload.question)
+      if (type === 'ask') computer.lastQuestion = payload.question
       if (type === 'questions') irisNotify('Iris has a few questions', 'Answer them in the Iris panel so it can plan "' + session.title + '".')
       if (type === 'blocked' && payload.kind === 'confirmation') irisNotify('Iris is waiting for your OK', payload.reason)
       // a non-stop run picks itself up after a failure: only tell the user when it really ends
@@ -2244,6 +2245,11 @@ ipc.on('iris-agent-stop', function (event) {
 })
 
 ipc.on('iris-agent-answer', function (event, text) {
+  // in a job run, an answer to a form question is kept for the next forms (Settings → Jobs → Answers)
+  if (irisComputer && irisComputer.jobsMode && irisComputer.lastQuestion && text && irisIsBusy()) {
+    try { irisJobsLearnAnswer(irisComputer.lastQuestion, String(text)) } catch (e) { DBUG('learn answer: ' + e.message) }
+    irisComputer.lastQuestion = null
+  }
   if (irisAgent && irisIsBusy()) irisAgent.answer(text)
   if (irisSession && text) {
     irisSession.items.push({ kind: 'user', text: text, run: irisSession.run, answer: true })

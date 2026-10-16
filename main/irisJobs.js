@@ -189,7 +189,7 @@ async function irisTailorResume (job, hooks) {
   const pick = irisCareerLib.parseTailorReply(text, bank, job, irisActionSchema.parseObjectLoose)
   const template = irisTemplateText()
   const engine = irisTemplateInfo().kind === 'custom' ? (irisTemplateInfo().engine || 'pdflatex') : 'pdflatex'
-  const fitted = await irisCareerLib.fitToPage({ bank: bank, pick: pick, template: template, compile: function (tex) { return irisCompileTex(tex, engine) } })
+  const fitted = await irisCareerLib.fitToPage({ bank: bank, pick: pick, job: job, template: template, compile: function (tex) { return irisCompileTex(tex, engine) } })
   if (!fitted.ok) return { ok: false, error: 'LaTeX could not build the resume: ' + fitted.error, log: fitted.log }
 
   const folder = irisJobFolder(job)
@@ -323,6 +323,20 @@ function irisApplicationNote (url) {
   return what + job + '. Unless the user asked for this job by name, move on to another.'
 }
 
+/* A question Iris asked during an application, and the user's answer: kept for the next forms. */
+function irisJobsLearnAnswer (question, answer) {
+  const q = String(question || '').replace(/\s+/g, ' ').trim()
+  const a = String(answer || '').trim()
+  if (!q || !a || a.length > 300 || /^(skip|no idea|don'?t know|stop|cancel)\b/i.test(a)) return false
+  const raw = irisCareerLoad()
+  const label = q.slice(0, 80)
+  if (raw.answers.some(function (x) { return x.label.toLowerCase() === label.toLowerCase() })) return false
+  raw.answers.push({ label: label, value: a })
+  irisCareerSave(raw)
+  broadcast('iris-agent-event', { type: 'remember', note: 'Saved your answer for next time (Settings → Jobs → Answers): ' + label, automatic: false })
+  return true
+}
+
 /* ---------- what the agent is told in Jobs mode ---------- */
 
 /* "apply to jobs", "find me an internship", "tailor my resume" — not "papers about job scheduling" */
@@ -347,8 +361,9 @@ function irisJobsPrompt (task, mode) {
     '   and open the results; never guess a company\'s board address. On a board with many openings, a jobs look-up',
     '   ({"kind":"jobs","query":"jobs.lever.co/<company> <role words> <place>"}) lists the matching ones at once.',
     '2. Open the posting and read all of it (scroll). Remember its must-haves.',
-    '3. tailor_resume {"company":str,"title":str,"requirements":str}: requirements = what the posting asks for, as exact',
-    '   as you can (skills, tools, years, duties). Iris builds a one-page PDF from the profile and says how well it fits.',
+    '3. tailor_resume {"company":str,"title":str,"requirements":str}: requirements = what the POSTING asks for, in its',
+    '   own words (skills, tools, years, duties) — nothing about the user. Iris builds a one-page PDF from the profile',
+    '   and says how well it fits.',
     '   No need to judge the job yourself: the fit Iris reports is the decision.',
     '4. If Iris says the fit is below the cutoff: log_application {"status":"skipped",…} and go to the next job.',
     '   A job you rule out from the list without opening it (wrong place, role or level): log it as skipped too, with the reason.',
