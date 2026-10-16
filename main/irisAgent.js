@@ -1153,6 +1153,9 @@ IrisComputer.prototype.settle = async function (action) {
   if (action && action.type === 'scroll') await sleep(200) // smooth scrolling
   // typing into a search box or address field: give its suggestion list time to catch up
   if (action && action.type === 'type' && !action.enter) await sleep(450)
+  // a click that started a download: let it finish (briefly) so the next look says "Downloaded …"
+  const dlStarted = Date.now()
+  while ((this.downloadsPending || 0) > 0 && Date.now() - dlStarted < 5000) await sleep(150)
   await sleep(120)
 }
 
@@ -2204,8 +2207,10 @@ function irisOnDownload (event, item) {
     DBUG('download path failed: ' + e.message)
   }
   broadcastEvent({ type: 'download', state: 'started', name: item.getFilename() })
+  computer.downloadsPending = (computer.downloadsPending || 0) + 1
   const sourceUrl = item.getURL()
   item.once('done', function (e, state) {
+    computer.downloadsPending = Math.max(0, (computer.downloadsPending || 0) - 1)
     const rec = { name: path.basename(item.getSavePath() || item.getFilename()), state: state, bytes: item.getReceivedBytes(), path: item.getSavePath() }
     if (state === 'completed') {
       const entry = { name: rec.name, url: sourceUrl, path: rec.path, bytes: rec.bytes, session: irisSession && irisSession.id }
