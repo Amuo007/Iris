@@ -218,8 +218,9 @@ function isOpenEnded (task) {
 function modeText (mode) {
   if (mode === 'continuous') {
     return 'This is a long, autonomous run with no step limit. Keep working until the task is fully done. ' +
-      'Save every useful finding with "remember" so nothing is lost, and check your notes so you never repeat work (for example, never download the same file twice). ' +
-      'Reply "done" only when there is truly nothing left to do, with a full report.'
+      'Iris itself keeps count of your downloads and of everything you judged, and shows them on every step: do not write ' +
+      'progress notes about those. Use "remember" only for findings you will need later that are not tracked (a fact, a ' +
+      'useful site, a lead to follow). Reply "done" only when there is truly nothing left to do, with a full report.'
   }
   return ''
 }
