@@ -1,6 +1,7 @@
 # Iris: overnight report (Oct 15–16, 2026)
 
-Draft, updated through the night. The final version is at the end of the night.
+Everything below was built and tested between 22:40 and 02:30 on your Mac against your Qwen server.
+All code is pushed to GitHub (`Amuo007/Iris`, branch `main`); the packaged app is in `dist/app/mac-arm64/Iris.app`.
 
 ## What I built
 
@@ -77,6 +78,7 @@ Draft, updated through the night. The final version is at the end of the night.
 - The agent can bookmark any URL and remove bookmarks.
 
 ### 9. Settings and UI
+- New: Downloads (newest files, Show in Finder).
 - New: History (search, remove, clear), Cookies & site data (per site, remove all), Look-ups,
   Smart mode default, Coding agents, Your skills, Plans that worked, Look-ups column in Usage.
 - Fixed: the Quick button that ran off the panel (Smart and its level are now one control),
@@ -99,7 +101,7 @@ Draft, updated through the night. The final version is at the end of the night.
 
 ## Tests
 
-- Unit tests: 151 → 188, all passing.
+- Unit tests: 151 → **191**, all passing.
 - Live (your Qwen, Balanced thinking unless noted):
 
 | Test | Result |
@@ -120,6 +122,7 @@ Draft, updated through the night. The final version is at the end of the night.
 | Long Non-stop research, part 2 (new chat, 21 min) | 62 steps, 9 more kept, the cross-chat "you kept this before" warning fired; it still re-downloaded once (thought the file was missing) → the warning now says whether the file exists; it wrote long progress notes every step → told not to (Iris tracks that itself) |
 | Long Non-stop research, part 3 (new chat, 30 min) | 95 steps (~13 s each, down from ~20 s once the progress notes stopped), 14 kept, 5 skipped, 0 re-judged within the chat; it re-judged 2 papers from earlier chats → earlier chats' IDs now go into the instructions up front |
 | Long Non-stop research, part 4 (new chat, final build, 26 min) | 85 steps, 18 kept, 1 skipped, **0 re-judged — in the chat or from earlier chats** |
+| **Final regression, 14 tasks on the final build** | **14/14 done**: date field (3 steps), hover menu, slider, confirm dialog, file upload, sign-up with email code (11 steps), GitHub trending, YouTube channel, OpenStreetMap directions (143 km, 1 h 53), Google Translate, a real form on httpbin, banana bread on allrecipes (18 steps, ads), Tokyo population/area on Wikipedia. Found one problem: on the sign-up Iris picked a country the site suggested instead of asking → rule fixed (not re-checked live) |
 | **All parts together** | **59 PDFs, 59 different papers — zero duplicate files** over ~2 hours and 4 chats, one server reset survived |
 
 ## Your server (amd-halo) overnight
@@ -140,6 +143,8 @@ Draft, updated through the night. The final version is at the end of the night.
   profile) and replaced its plan. Restoring the plan was refused as an irreversible change. A backup of
   that profile's project files is in my scratchpad. The plan to restore is in the chat
   `mv6rrjbl-a0fdya` (the "find 3 more good ones" chat). All later tests run in a separate test profile.
+- All tests after 23:30 used a separate test profile and a scratch download folder (59 PDFs + the
+  Node.js installer). Your real Iris profile was not used.
 - Files the early tests downloaded into your real `~/Downloads`: `2608.24848v1.pdf`, `2601.05787v2.pdf`,
   `2606.29705v1.pdf`, `2610.05185v1 (1).pdf` (a duplicate). Later tests download into a scratch folder.
 
@@ -167,6 +172,9 @@ Draft, updated through the night. The final version is at the end of the night.
 - **Speed.** About 7–12 s per step with Balanced thinking on your server; Smart Quick planning adds
   15–35 s, Deep about 1–1.5 min. Fast (no thinking) is ~5 s per step but makes more mistakes.
 - **Things Iris cannot see**: Min's own bars ("Save password?"), native right-click menus.
+- **One bridge per Mac.** If the dev build and the packaged app both run, only the first one can
+  serve coding agents (the second says so in Settings).
+- **Not re-checked live:** the very last fix (never guess personal details on a sign-up).
 
 ## Next steps I'd suggest
 
