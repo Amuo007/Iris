@@ -114,6 +114,25 @@ It never runs scripts inside the sites you visit.
 - **Bookmarks:** a Chrome-style bookmarks bar, import from Chrome; Iris can bookmark pages, look
   bookmarks up and remove them
 - **Payments:** Iris has no card. It goes as far as the payment page and tells you what is ready
+- **Jobs:** finds postings that match your career profile, makes a one-page resume for each job
+  from your own LaTeX template, applies, and keeps a list of every job applied to, skipped, or left
+  for you (see below)
+
+### Jobs: a resume tailored to every job
+
+Put everything you have done in **Settings → Jobs → Career profile** — every skill, job, bullet,
+project — far more than fits on a page (or start from your LaTeX resume: Iris reads it in). Then
+ask Iris to "apply to jobs for me" (Non-stop keeps it going) or press **Start** under **Applying**.
+
+For each posting Iris reads the requirements and calls `tailor_resume`: the model picks the
+bullets, projects and skills that prove what the job asks for, best first, and may reword a
+bullet toward the job's words. Code then checks every pick: only items from your profile, and a
+rewording that adds a number, a tool or a new claim is undone. The result is built with your own
+LaTeX template (or the built-in one) and made **exactly one full page** — Iris builds it, measures
+how full the page is, and cuts or adds bullets until it fits. Jobs below your fit cutoff are
+skipped; anything only you can do (a CAPTCHA that stays, a missing file) is marked **Needs you**
+and Iris moves on. Tailored PDFs are kept in `~/Documents/Iris Resumes/<date> <company> - <job>/`.
+LaTeX must be installed (MacTeX). How each part works: [docs/TECHNIQUES.md](docs/TECHNIQUES.md).
 
 ### Use Iris from a coding agent (MCP)
 
@@ -128,10 +147,15 @@ key stored in a file only you can read.
 ```
 
 Settings shows the exact snippet with your path; **Copy** puts it on the clipboard. With Claude Code
-you can also run `claude mcp add iris -- node "/Users/<you>/Library/Application Support/Iris/iris-mcp.js"`. Tools: `iris_screenshot`,
-`iris_click`, `iris_type`, `iris_key`, `iris_scroll`, `iris_hover`, `iris_drag`, `iris_navigate`, `iris_back`,
-`iris_tabs`, `iris_new_tab`, `iris_switch_tab`, `iris_close_tab`, `iris_find`, `iris_wait`. Every action returns a
-fresh screenshot unless you pass `"look": false`.
+you can also run `claude mcp add iris -- node "/Users/<you>/Library/Application Support/Iris/iris-mcp.js"`.
+
+29 tools. **Page:** `iris_screenshot`, `iris_click`, `iris_type`, `iris_key`, `iris_scroll`, `iris_hover`,
+`iris_drag`, `iris_navigate`, `iris_back`, `iris_find`, `iris_wait`, `iris_zoom`, `iris_dialog`, `iris_upload`.
+**Tabs:** `iris_tabs`, `iris_new_tab`, `iris_switch_tab`, `iris_close_tab`. **Iris's own tools:** `iris_lookup`,
+`iris_bookmarks`, `iris_bookmark`, `iris_my_info` (secrets only as placeholders such as `{{Password}}`,
+typed by Iris), `iris_accounts` (`{{account:site.com}}`), `iris_save_account`, `iris_downloads`,
+`iris_career`, `iris_resume` (a one-page PDF from your agent's own picks), `iris_applications`,
+`iris_log_application`. Every page action returns a fresh screenshot unless you pass `"look": false`.
 
 ### Settings
 
@@ -144,6 +168,9 @@ fresh screenshot unless you pass `"look": false`.
   keychain and never shown to the model: it types `{{Password}}` and Iris fills in the real value
 - **Accounts, Rules, Schedule, Skills, Coding agents, Usage** (tasks, requests, tokens, look-ups,
   time per step — today, 7 and 30 days, all time)
+- **Jobs:** Career profile, Applying (roles, places, fit needed, submit on its own or ask first,
+  per-day limit, answers for application forms), Resume template (built-in or your LaTeX, try it),
+  Applications
 
 ![Iris settings](docs/screenshots/settings.png)
 
@@ -183,8 +210,18 @@ with an eased pointer glide. Coordinates are mapped from image pixels to view pi
 **Stop conditions.** `safety.js`: step and time budgets (none in Non-stop), model timeout, retries,
 consecutive failures, repeated actions on a frozen page, and the payment guard.
 
+**Aim.** Before a click Iris reads the pointer's shape at that spot (hand over links and buttons,
+I-beam over fields); a click that lands on the plain arrow moves onto the nearest hand or I-beam within
+10 px — never for checkboxes, radios or dropdowns. A click that changed nothing is marked with a red ✕
+on the next screenshot.
+
+**One model call at a time.** A lock file per model server makes a second Iris window wait its turn,
+so a local server never gets two requests at once.
+
 **Takeover.** Input injected by Iris is timestamped; any real input in the page outside that
 window pauses the run instead of fighting you.
+
+Every technique, with before/after numbers: [docs/TECHNIQUES.md](docs/TECHNIQUES.md).
 
 ---
 
@@ -197,16 +234,19 @@ window pauses the run instead of fighting you.
 | `iris/agent/history.js` | What the model sees each step: chunked compaction, digest, notes, sites, plan |
 | `iris/agent/prompts.js` | Every text said to the model |
 | `iris/agent/lookup.js` | Look-ups outside the browser: search, papers, arXiv, Wikipedia, public pages |
+| `iris/agent/career.js` | Jobs: career profile, LaTeX templates and import, tailoring checks, one-page fitting |
+| `iris/agent/modelLock.js` | One model request at a time across Iris windows |
 | `iris/agent/memory.js` | Memory beyond the context window: identifiers, duplicate checks, recall |
 | `iris/agent/safety.js` | Stop conditions and the payment guard |
 | `iris/agent/inputPlan.js` | Actions → native mouse/keyboard event sequences |
 | `iris/agent/coordinateMapper.js` | Image px ⇄ view CSS px |
 | `iris/agent/modelClient.js` | Streaming OpenAI-compatible client, thinking levels, abort |
 | `main/irisAgent.js` | The Electron side: the "computer", tabs, downloads, sessions, projects, accounts, skills |
+| `main/irisJobs.js` | Jobs on the Electron side: storage, LaTeX builds, tailoring, applications log |
 | `main/irisBridge.js`, `bin/iris-mcp.js` | Coding-agent bridge and its MCP server |
 | `js/iris/agentPanel.js` | The side panel |
 | `js/iris/bookmarksBar.js` | Bookmarks bar, star, Chrome import |
-| `pages/settings/` | Settings |
+| `pages/settings/` | Settings (`jobs.js`: the Jobs sections) |
 | `test/*.test.js` | Unit tests for the Electron-free core |
 
 ---
@@ -218,7 +258,9 @@ node --test test/*.test.js      # no Electron, no network, a few seconds
 ```
 
 Covered: the action grammar, coordinate mapping, every safety stop, input planning, the model
-client, memory and duplicate detection, look-up parsers, Chrome bookmark import, the MCP server, and
+client, memory and duplicate detection, look-up parsers, Chrome bookmark import, the MCP server,
+the Jobs core (LaTeX import of a Jake-style resume, template rendering, tailoring checks, one-page
+fitting), the cross-window model lock, and
 the loop itself (Smart planning with look-ups, quizzes, judging, compaction, budgets, pause, stop,
 takeover). No test talks to a real model server.
 
