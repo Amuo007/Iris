@@ -372,7 +372,9 @@ Updated 2026-10-16 (evening).
   "resume" in it switched it on — "apply the coupon at checkout" or "resume the download" would
   have got the job instructions and the pause before submitting. Now it needs job words around them
   ("apply … roles", "find … jobs", "a job in Toronto", "tailor my resume", "cover letter"); "papers
-  about job scheduling" and "the role of …" stay out. 18 sentences in a unit test.
+  about job scheduling", "the role of …" and "apply the admin role" stay out; "go through the openings …
+  and apply" counts (a job word before "apply" — missed for an hour after the first fix, caught by a
+  live run). 24 sentences in a unit test, and every task given to Iris today sorted correctly.
 - Read the posting → `tailor_resume` → skip if below your cutoff (default 60) → fill from My info
   and your saved answers → upload "resume" (Iris picks the PDF it just made; long paths were
   mistyped once) → submit (or wait for your OK if you chose "Ask me first") → `log_application`.
