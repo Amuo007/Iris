@@ -1148,6 +1148,12 @@ IrisComputer.prototype.act = async function (action) {
           new Date(before.updated || before.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + '. Skip it and find another job.')
         return { ok: true }
       }
+      // the per-day limit is kept by code too, not only by the prompt
+      const limit = irisCareerLoad().prefs.dailyLimit
+      if (limit > 0 && irisAppliedToday() >= limit) {
+        this.notes = (this.notes || []).concat('The daily limit of ' + limit + ' applications is reached. Do not apply to more jobs today: finish with done and say how many were sent.')
+        return { ok: true }
+      }
       broadcastEvent({ type: 'resume:start', title: job.title, company: job.company, sessionId: this.sessionId })
       let r
       try { r = await irisTailorResume(job) } catch (e) { r = { ok: false, error: e.message } }
