@@ -48,7 +48,7 @@ const DEFAULTS = {
 }
 
 /* The model server is restarting, loading or briefly unreachable: wait, don't give up. */
-const SERVER_DOWN = /cannot reach the model server|ECONNRESET|ECONNREFUSED|socket hang up|fetch failed|responded 50[234]|not loaded|loading model|server is busy/i
+const SERVER_DOWN = /cannot reach the model server|ECONNRESET|ECONNREFUSED|socket hang up|fetch failed|responded 50[234]|not loaded|loading model|server is busy|terminated|other side closed|unresponsive|reset by the backend|reloaded automatically/i
 const CONTEXT_FULL = /exceeds the available context size|context_length_exceeded|maximum context length|context window/i
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms))

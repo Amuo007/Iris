@@ -778,3 +778,12 @@ test('open-ended tasks are recognised; tasks with an end are not', () => {
   assert.ok(!isOpenEnded('find me 10 papers on harnesses'))
   assert.ok(!isOpenEnded('book a train to Milwaukee'))
 })
+
+test('a reply stream cut off by a server reset counts as the server being down, not as a model mistake', async () => {
+  let n = 0
+  const model = { next: () => { n++; if (n <= 2) throw new Error(n === 1 ? 'terminated' : 'model server error: llama-server was unresponsive and has been reset by the backend watchdog'); return json('d', { type: 'done', answer: 'ok' }) } }
+  const h = harness([], {}, { model })
+  const r = await h.agent.run('anything')
+  assert.strictEqual(r.status, 'done')
+  assert.strictEqual(ev(h.events, 'error').filter(e => e.where === 'server').length, 2)
+})

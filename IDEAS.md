@@ -24,3 +24,9 @@ notification) so I know to come back and take over, instead of the task silently
   then record it under Accounts (already supported, just not tried on real sites).
 - **Research report file.** At the end of a research run, save the kept items (title, link, why) as a
   Markdown file next to the downloaded PDFs.
+- **Adaptive thinking.** Mechanical steps (click the download button, scroll, type into a known field)
+  don't need thinking; reading and judging pages do. Switching to "off" for the mechanical ones could
+  make research loops ~30% faster. Needs a reliable way to tell the two apart.
+- **One agent at a time on the server.** Two agents sending screenshots at once made llama-server
+  unresponsive and the watchdog reset it (Oct 16, 00:31). If two Iris windows ever run together, they
+  should take turns on the model server (a simple lock).
