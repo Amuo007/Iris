@@ -97,6 +97,7 @@ async function irisBridgeAct (raw) {
     devicePixelRatio: shot.devicePixelRatio
   })
   const mapped = irisMapper.mapActionToView(action, mapping, { coordinateSpace: 'auto' })
+  if (raw.what) mapped.intent = String(raw.what).slice(0, 200)
   // the same pointer the user sees when Iris acts, so it is obvious something is driving the page
   const anchor = irisMapper.actionAnchorCss(action, mapping)
   if (anchor && irisSettings().markerEnabled) {

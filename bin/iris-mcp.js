@@ -59,7 +59,7 @@ const LOOK = { look: { type: 'boolean', description: 'return a fresh screenshot 
 
 const TOOLS = [
   { name: 'iris_screenshot', description: 'See the current tab in Iris: a screenshot plus its URL, title and the open tabs. Coordinates for the other tools are pixels in this image.', inputSchema: { type: 'object', properties: {} } },
-  { name: 'iris_click', description: 'Click at a point in the latest screenshot.', inputSchema: { type: 'object', properties: Object.assign({}, XY, { button: { type: 'string', enum: ['left', 'right', 'middle'] }, double: { type: 'boolean' } }, LOOK), required: ['x', 'y'] } },
+  { name: 'iris_click', description: 'Click at a point in the latest screenshot. A click just beside a link, button or field moves onto it (not for checkboxes, radios or dropdowns: say what you click in "what").', inputSchema: { type: 'object', properties: Object.assign({}, XY, { button: { type: 'string', enum: ['left', 'right', 'middle'] }, double: { type: 'boolean' }, what: { type: 'string', description: 'what you are clicking, e.g. "the Save button" or "the terms checkbox"' } }, LOOK), required: ['x', 'y'] } },
   { name: 'iris_type', description: 'Type text. With x/y it clicks that field first and replaces its text (clear:false adds to it). enter:true presses Enter after.', inputSchema: { type: 'object', properties: Object.assign({ text: { type: 'string' }, enter: { type: 'boolean' }, clear: { type: 'boolean' } }, XY, LOOK), required: ['text'] } },
   { name: 'iris_key', description: 'Press a key, optionally with modifiers (command, control, option, shift). Keys: enter, tab, escape, backspace, delete, up, down, left, right, pageup, pagedown, home, end, a-z, 0-9, f1-f12.', inputSchema: { type: 'object', properties: Object.assign({ key: { type: 'string' }, modifiers: { type: 'array', items: { type: 'string' } } }, LOOK), required: ['key'] } },
   { name: 'iris_scroll', description: 'Scroll the page (amount = wheel notches; about 6 is one screen). x/y says where.', inputSchema: { type: 'object', properties: Object.assign({ direction: { type: 'string', enum: ['up', 'down', 'left', 'right'] }, amount: { type: 'integer' } }, XY, LOOK), required: ['direction'] } },
@@ -107,7 +107,7 @@ const DATA_TOOLS = {
 /* MCP tool → an Iris action */
 function toAction (name, a) {
   switch (name) {
-    case 'iris_click': return { type: a.double ? 'double_click' : (a.button === 'right' ? 'right_click' : 'click'), x: a.x, y: a.y, button: a.button }
+    case 'iris_click': return { type: a.double ? 'double_click' : (a.button === 'right' ? 'right_click' : 'click'), x: a.x, y: a.y, button: a.button, what: a.what }
     case 'iris_type': return { type: 'type', text: a.text, x: a.x, y: a.y, enter: a.enter, clear: a.clear }
     case 'iris_key': return { type: 'key', key: a.key, modifiers: a.modifiers }
     case 'iris_scroll': return { type: 'scroll', direction: a.direction, amount: a.amount, x: a.x, y: a.y }

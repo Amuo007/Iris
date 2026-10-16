@@ -618,6 +618,8 @@ function createAgent (opts) {
     try {
       mapped = mapActionToView(action, mapping, { coordinateSpace: cfg.coordinateSpace })
       mapped.anchorCss = actionAnchorCss(action, mapping)
+      // what this step means to do, in the model's words (the computer aims differently at a checkbox)
+      if (pageState.thought) mapped.intent = String(pageState.thought).slice(0, 300)
       if (obs.crop) offsetForCrop(mapped, obs.crop)
     } catch (err) {
       const gate = safety.noteRetry('coordinate mapping failed: ' + err.message)

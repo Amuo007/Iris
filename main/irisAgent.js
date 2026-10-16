@@ -1169,6 +1169,12 @@ IrisComputer.prototype.act = async function (action) {
     }
   }
 
+  // a click that lands just beside a link, button or field moves onto it, like a hand finding the target
+  if ((action.type === 'click' || action.type === 'double_click' || (action.type === 'type' && action.x !== undefined)) && this.config.snapClicks !== false) {
+    const snapped = await this.snapToTarget(wc, action)
+    if (snapped) action = Object.assign({}, action, { x: snapped.x, y: snapped.y })
+  }
+
   // secrets are filled in here, at the last moment: the model and the panel only see {{Label}}
   const real = action.type === 'type' ? Object.assign({}, action, { text: irisFillSecrets(action.text) }) : action
   const plan = irisInputPlan.planInputEvents(real, { from: this.pointer })
@@ -1193,6 +1199,65 @@ IrisComputer.prototype.act = async function (action) {
       (action.clear === false ? ' (added to the existing text).' : ' (replacing what was in the field).'))
   }
   return { ok: true, events: plan.length }
+}
+
+/*
+ * Aim like a person: move the pointer to the spot and look at its shape. Over a link or button it
+ * becomes a hand, over a text field an I-beam. If the spot shows the plain arrow, look a few pixels
+ * around it (up to 10 px) for the nearest hand or I-beam and use that instead. Only the pointer
+ * moves; nothing in the page is read. Returns {x, y} when it moved the aim, otherwise null.
+ */
+const IRIS_SNAP_RINGS = [3, 6, 10]
+/* controls that show the plain arrow on purpose: aiming at one must never slide onto a link beside it */
+const IRIS_ARROW_CONTROLS = /check ?box|tick|radio|toggle|switch|dropdown|drop-down|select (box|menu)|slider|option|captcha|canvas|map|image|picture|photo|calendar|date picker/i
+IrisComputer.prototype.snapToTarget = async function (wc, action) {
+  if (IRIS_ARROW_CONTROLS.test(action.intent || '')) return null
+  const want = action.type === 'type' ? ['text', 'hand'] : ['hand', 'text']
+  const look = async function (self, x, y) {
+    wc.sendInputEvent({ type: 'mouseMove', x: Math.round(x), y: Math.round(y), movementX: 0, movementY: 0 })
+    await sleep(30)
+    return self.cursorType
+  }
+  if (this.cursorType === null && !this.cursorSeen) {
+    // no shape reported yet on this page: one move teaches us whether this page reports any
+    await look(this, action.x, action.y)
+    this.cursorSeen = true
+  }
+  const here = await look(this, action.x, action.y)
+  if (!here || want.indexOf(here) !== -1 || (here !== 'pointer' && here !== 'default')) return null
+  for (const r of IRIS_SNAP_RINGS) {
+    // look all the way round before choosing: targets on two sides means the aim was between them
+    const found = []
+    for (let k = 0; k < 8; k++) {
+      const a = k * Math.PI / 4
+      const shape = await look(this, action.x + Math.cos(a) * r, action.y + Math.sin(a) * r)
+      if (shape === want[0] || (shape === want[1] && r <= 6)) found.push({ k: k, shape: shape })
+    }
+    if (!found.length) continue
+    const ks = found.map(function (f) { return f.k })
+    // one target: all hits within a quarter turn of each other (going round the circle)
+    let center = null
+    for (const start of ks) {
+      const spread = ks.map(function (k) { return (k - start + 8) % 8 })
+      if (Math.max.apply(null, spread) <= 2) { center = (start + Math.round((Math.max.apply(null, spread)) / 2)) % 8; break }
+    }
+    if (center === null) {
+      DBUG('snap skipped at (' + action.x + ',' + action.y + '): targets on more than one side')
+      return null
+    }
+    const a = center * Math.PI / 4
+    const shape = (found.find(function (f) { return f.k === center }) || found[0]).shape
+    // a step further in, so the click is not on the very edge
+    const x = Math.round(action.x + Math.cos(a) * r)
+    const y = Math.round(action.y + Math.sin(a) * r)
+    const x2 = Math.round(action.x + Math.cos(a) * (r + 2))
+    const y2 = Math.round(action.y + Math.sin(a) * (r + 2))
+    const pick = (await look(this, x2, y2)) === shape ? { x: x2, y: y2 } : { x: x, y: y }
+    DBUG('snap ' + action.type + ' (' + action.x + ',' + action.y + ') → (' + pick.x + ',' + pick.y + ') ' + shape)
+    this.snaps = (this.snaps || 0) + 1
+    return pick
+  }
+  return null
 }
 
 /*
@@ -1293,6 +1358,10 @@ IrisComputer.prototype.watch = function (wc) {
   const styleSelects = function () {
     wc.insertCSS(IRIS_SELECT_CSS, { cssOrigin: 'user' }).then(function (key) { self.cssKey = key }).catch(function () {})
   }
+  // the pointer's shape, as the page sets it: "hand" over links and buttons, "text" over fields
+  const onCursor = function (event, type) { self.cursorType = type }
+  self.cursorType = null
+  wc.on('cursor-changed', onCursor)
   const onMessage = function (event, method, params) {
     if (method === 'Page.javascriptDialogOpening') {
       self.pendingDialog = params
@@ -1319,6 +1388,7 @@ IrisComputer.prototype.watch = function (wc) {
   styleSelects()
   this.unwatchFn = function () {
     try { wc.removeListener('dom-ready', styleSelects) } catch (e) { /* gone */ }
+    try { wc.removeListener('cursor-changed', onCursor) } catch (e) { /* gone */ }
     try { wc.debugger.removeListener('message', onMessage) } catch (e) { /* gone */ }
     try { if (self.attachedDebugger && wc.debugger.isAttached()) wc.debugger.detach() } catch (e) { /* gone */ }
     try { if (self.cssKey) wc.removeInsertedCSS(self.cssKey) } catch (e) { /* gone */ }
@@ -2119,6 +2189,10 @@ ipc.on('iris-agent-probe', async function (event, data) {
   const cfg = irisSettings()
   const result = await irisModelClient.probeServer({ baseUrl: (data && data.baseUrl) || cfg.baseUrl, apiKey: cfg.apiKey })
   event.reply('iris-agent-probe-reply', result)
+})
+
+ipc.on('iris-agent-view-state', function (e, data) {
+  DBUG('page view still hidden by: ' + ((data && data.placeholders) || []).join(', '))
 })
 
 ipc.on('iris-overlay-sync', function () {

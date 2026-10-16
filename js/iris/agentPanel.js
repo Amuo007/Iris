@@ -1308,6 +1308,15 @@ function initialize () {
   ipc.on('iris-agent-need-view', function (e, data) {
     if (data && String(tabs.getSelected()) === String(data.tabId)) {
       try { require('navbar/tabEditor.js').hide() } catch (err) { /* not open */ }
+      // the address bar or Iris's bookmarks menu can be left "open" with nothing on screen (the window
+      // lost focus, or the page changed underneath): they no longer need the page hidden
+      const w = require('webviews.js')
+      ;['editMode', 'bookmarksMenu'].forEach(function (reason) {
+        if (w.placeholderRequests.includes(reason)) w.hidePlaceholder(reason)
+      })
+      // nothing asks for it to be hidden, yet it is not on screen: put it back
+      if (!w.placeholderRequests.length && w.hasViewForTab(w.selectedId)) ipc.send('setView', { id: w.selectedId, bounds: w.getViewBounds(), focus: false })
+      if (w.placeholderRequests.length) ipc.send('iris-agent-view-state', { placeholders: w.placeholderRequests.slice() })
     }
   })
 
