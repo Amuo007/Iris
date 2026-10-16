@@ -96,3 +96,30 @@ test('parseLookups reads the planner\'s request', () => {
   assert.deepStrictEqual(parseLookups('{"lookups":[{"kind":"papers","query":"harness"},"plain words"]}'), [{ kind: 'papers', query: 'harness' }, { kind: 'web', query: 'plain words' }])
   assert.strictEqual(parseLookups('Goal: x'), null)
 })
+
+test('a page that needs JavaScript is reported, not returned empty', async () => {
+  const lk = createLookup(Object.assign({ fetch: fakeFetch([['spa.test', '<html><title>App</title><body><div id="root"></div><script>boot()</script></body></html>']]) }, instant))
+  const r = await lk.lookup({ kind: 'page', query: 'https://spa.test/' })
+  assert.strictEqual(r.ok, false)
+  assert.match(r.text, /needs JavaScript/)
+})
+
+test('a PDF is left to the browser', async () => {
+  const lk = createLookup(Object.assign({ fetch: fakeFetch([['paper.test', '%PDF-1.4 ' + 'x'.repeat(500), 200, 'application/pdf']]) }, instant))
+  const r = await lk.lookup({ kind: 'page', query: 'paper.test/a.pdf' })
+  assert.strictEqual(r.ok, false)
+  assert.match(r.text, /PDF/)
+})
+
+test('requests to the same site are spaced out', async () => {
+  let clock = 0
+  const waits = []
+  const lk = createLookup({
+    fetch: fakeFetch([['duckduckgo', DDG]]),
+    now: () => clock,
+    delay: async (ms) => { waits.push(ms); clock += ms }
+  })
+  await lk.lookup({ kind: 'web', query: 'one' })
+  await lk.lookup({ kind: 'web', query: 'two' })
+  assert.deepStrictEqual(waits, [1500])
+})

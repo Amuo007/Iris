@@ -209,7 +209,7 @@ function createLookup (opts) {
   function get (url, accept) {
     const run = async function () {
       const host = hostOf(url)
-      const wait = (lastHit[host] || 0) + cfg.perHostGapMs - now()
+      const wait = lastHit[host] === undefined ? 0 : lastHit[host] + cfg.perHostGapMs - now()
       if (wait > 0) await delay(wait)
       lastHit[host] = now()
       const ctrl = typeof AbortController === 'function' ? new AbortController() : null

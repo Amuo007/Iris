@@ -79,6 +79,8 @@ Draft, updated through the night. The final version is at the end of the night.
 | 4 vision-only GUI-agent papers, judged + PDFs (Smart Deep) — before fix | stuck: missed the PDF viewer's download button |
 | same — after fix | **done**, 14 steps, 4 min 17 s, 4 papers kept and downloaded |
 | Coding-agent bridge via MCP (type, type, click on a login page) | **works**, each action < 1 s |
+| Train booking (local site: autocomplete, date, seat map, upsell pop-up, cookie bar) | **done**, 12 steps, 2 min 21 s; right train, seats 2A+2B, declined insurance, stopped at payment. One misread: arrival 07:32 instead of 07:39 |
+| Dentist appointment (local site: calendar, slots, chat pop-up) | **done**, 15 steps, 3 min 41 s, right day/slot and reference. Asked you for a phone number (not in My info); got confused about weekdays once → added a calendar hint |
 
 ## Blocked / needs you
 

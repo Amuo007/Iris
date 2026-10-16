@@ -1,5 +1,11 @@
 # Build report — Iris
 
+## October 16: overnight work
+
+See [docs/OVERNIGHT-2026-10-16.md](docs/OVERNIGHT-2026-10-16.md) for everything built and tested that
+night: look-ups outside the browser, Smart Quick/Deep, the research log, the coding-agent bridge (MCP),
+History and Cookies settings, playbooks and your own skills, notifications, and the live results.
+
 ## Status after the October 13 overhaul (live-tested)
 
 Everything below was run against the real local model (Qwen3.8-Flash-Next IQ4_NL on Lemonade),

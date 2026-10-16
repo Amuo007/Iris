@@ -766,6 +766,8 @@ const ACTION_SPEC_TEXT = [
   '- To download a file, click its download link or button. Iris saves it to the Downloads folder by itself and tells you when it is done.',
   '- To upload a file, click the upload button or "Choose file"; Iris then lists files you can pick with upload.',
   '- Date and time fields: click the field and type the digits (for 23 Oct 2026 type "10232026"); do not use the calendar pop-up.',
+  '- Fields with suggestions (cities, airports, addresses): type, then make sure the list shows matches for what',
+  '  you typed before clicking one (an old list can still be showing); if not, wait once. Check the field afterwards.',
   '- A "Verifying you are human" / "Just a moment" page often clears by itself: wait up to about 10 s.',
   '  Never solve a CAPTCHA or puzzle yourself. If it stays, use another site that has the same thing;',
   '  if only that site will do, use ask_user so the user can do it.',

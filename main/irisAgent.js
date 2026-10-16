@@ -1145,6 +1145,8 @@ IrisComputer.prototype.settle = async function (action) {
     await sleep(150)
   }
   if (action && action.type === 'scroll') await sleep(200) // smooth scrolling
+  // typing into a search box or address field: give its suggestion list time to catch up
+  if (action && action.type === 'type' && !action.enter) await sleep(450)
   await sleep(120)
 }
 
@@ -1453,7 +1455,7 @@ function irisRecord (session, type, p) {
   } else if (type === 'plan') {
     items.push({ kind: 'plan', text: p.text })
   } else if (type === 'verdict') {
-    items.push({ kind: 'verdict', item: p.item, keep: p.keep, why: p.why })
+    items.push({ kind: 'verdict', item: p.item, keep: p.keep, why: p.why, url: p.url || '' })
     irisSessionMemory(session).add('verdict', (p.keep ? 'Kept: ' : 'Skipped: ') + p.item + (p.why ? ' — ' + p.why : ''))
   } else if (type === 'run:end') {
     items.push({ kind: 'result', status: p.status, answer: p.answer, reason: p.reason, steps: p.steps, ms: p.stats && p.stats.elapsedMs })
@@ -1462,6 +1464,38 @@ function irisRecord (session, type, p) {
     return
   }
   irisSessionSave(session, type === 'run:end')
+}
+
+/*
+ * A research run that kept two or more things leaves a short Markdown report next to its
+ * downloads: what was kept, why, and where. Built from the recorded decisions, no model call.
+ */
+function irisWriteReport (session, answer) {
+  try {
+    const items = session.items
+    let start = 0
+    for (let i = items.length - 1; i >= 0; i--) if (items[i].kind === 'user') { start = i; break }
+    const run = items.slice(start)
+    const kept = run.filter(function (it) { return it.kind === 'verdict' && it.keep })
+    if (kept.length < 2) return null
+    const skipped = run.filter(function (it) { return it.kind === 'verdict' && !it.keep }).length
+    const files = run.filter(function (it) { return it.kind === 'note' && /^Downloaded /.test(it.text) }).map(function (it) { return it.text.replace(/^Downloaded /, '') })
+    const lines = ['# ' + (items[start] && items[start].text ? items[start].text : session.title), '',
+      new Date().toLocaleString('en-US') + ' · kept ' + kept.length + ', skipped ' + skipped + ' · made by Iris', '', '## Kept', '']
+    kept.forEach(function (it, i) {
+      lines.push((i + 1) + '. **' + it.item + '**' + (it.url && /^https?:/.test(it.url) ? ' — ' + it.url : ''))
+      if (it.why) lines.push('   ' + it.why)
+    })
+    if (files.length) lines.push('', '## Downloaded', '', files.map(function (f) { return '- ' + f }).join('\n'))
+    if (answer) lines.push('', '## Iris\'s answer', '', String(answer))
+    const name = 'Iris report - ' + String(session.title || 'research').replace(/[/\\:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) + '.md'
+    const file = path.join(irisDownloadDir(), name)
+    fs.writeFileSync(file, lines.join('\n') + '\n')
+    return name
+  } catch (e) {
+    DBUG('report: ' + e.message)
+    return null
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -1717,6 +1751,14 @@ function startAgent (task, options) {
         let here = ''
         try { here = computer.view().webContents.getURL() } catch (e) { /* tab gone */ }
         irisSeenAdd('verdict', payload.item, { url: here, keep: !!payload.keep, why: payload.why || '', chat: session.title, name: payload.item })
+        payload = Object.assign({}, payload, { url: here })
+      }
+      if (type === 'run:end' && payload.status === 'done') {
+        const file = irisWriteReport(session, payload.answer)
+        if (file) {
+          session.items.push({ kind: 'note', text: 'Saved a report: ' + file })
+          broadcastEvent({ type: 'remember', note: 'Saved a report of what was kept: ' + file, sessionId: session.id })
+        }
       }
       // look-up results become searchable with recall, so a long run can find them again
       if (type === 'lookup:result' && payload.items) {
