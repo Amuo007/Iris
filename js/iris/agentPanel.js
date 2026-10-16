@@ -499,6 +499,8 @@ function submitTask (taskText, options) {
     autosize()
   }
   const modeValue = (options && options.mode) || modeSelect.select.value
+  // a run started for you (schedule, Start applying) shows its mode in the picker too
+  if (options && options.mode && [...modeSelect.select.options].some(function (o) { return o.value === options.mode })) modeSelect.select.value = options.mode
   const mode = modeValue.split(':')[0]
   const everyMinutes = Number(modeValue.split(':')[1]) || 0
   runStartedAt = Date.now()
