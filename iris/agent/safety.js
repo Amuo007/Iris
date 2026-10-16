@@ -170,10 +170,18 @@ function createSafetyGate (options) {
         return decision('confirmation', 'Iris is about to pay: "' + String(pageState.thought).slice(0, 160) + '". Press ▶ to allow it, or Stop.', { action, key: 'payment', payment: true })
       }
 
-      if (cfg.applicationGuard === 'ask' && !(pageState && pageState.approved === 'application') &&
-          (action.type === 'click' || action.type === 'double_click' || (action.type === 'key' && action.key === 'enter') || (action.type === 'type' && action.enter)) &&
-          APPLY_WORDS.test((pageState && pageState.thought) || '')) {
-        return decision('confirmation', 'Iris is about to submit an application: "' + String(pageState.thought).slice(0, 160) + '". Check it, then press ▶ to submit, or Stop.', { action, key: 'application' })
+      if (cfg.applicationGuard === 'ask' && !(pageState && pageState.approved === 'application')) {
+        const thought = (pageState && pageState.thought) || ''
+        if ((action.type === 'click' || action.type === 'double_click' || (action.type === 'key' && action.key === 'enter') || (action.type === 'type' && action.enter)) &&
+            APPLY_WORDS.test(thought)) {
+          return decision('confirmation', 'Iris is about to submit an application: "' + String(thought).slice(0, 160) + '". Check it, then press ▶ to submit, or Stop.', { action, key: 'application' })
+        }
+        // Enter in a form field sends the form too: only a search or a dropdown choice goes through
+        // (typing into a dropdown is done with clear:false — the rule for picking an option)
+        if (((action.type === 'type' && action.enter && action.clear !== false) || (action.type === 'key' && action.key === 'enter' && !(action.modifiers || []).length)) &&
+            !/\b(search|look ?up|find|filter|keyword|query|drop-?down|select|option|menu|pick|choose|list)\b/i.test(thought)) {
+          return decision('confirmation', 'Iris is about to press Enter in a form, which can send the application. Check it, then press ▶ to go on, or Stop.', { action, key: 'application' })
+        }
       }
 
       if (!cfg.allowSensitiveActions && !(pageState && pageState.approved === key)) {

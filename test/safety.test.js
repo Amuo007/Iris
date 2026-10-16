@@ -208,3 +208,13 @@ test('ask-before-submit: the click that sends an application waits for the user'
   assert.strictEqual(gate.beforeAction({ type: 'click', x: 1, y: 2 }, { thought: 'Submit the search for Android jobs' }).allow, true)
   assert.strictEqual(createSafetyGate({}).beforeAction(click, { thought: 'Click Submit Application.' }).allow, true, 'off unless asked for')
 })
+
+test('ask-before-submit: Enter in a form field pauses too, a search or dropdown choice does not', () => {
+  const gate = createSafetyGate({ applicationGuard: 'ask' })
+  const d = gate.beforeAction({ type: 'type', text: '1', enter: true }, { thought: 'Set years of experience to 1.' })
+  assert.strictEqual(d.allow, false)
+  assert.strictEqual(d.key, 'application')
+  assert.strictEqual(gate.beforeAction({ type: 'type', text: 'Yes', enter: true }, { thought: 'Pick Yes in the work authorization dropdown' }).allow, true)
+  assert.strictEqual(gate.beforeAction({ type: 'type', text: 'android', enter: true }, { thought: 'Search the job board for android roles' }).allow, true)
+  assert.strictEqual(gate.beforeAction({ type: 'type', text: 'Yes', enter: true, clear: false }, { thought: 'Set work authorization to Yes' }).allow, true, 'a dropdown pick (clear:false) goes through')
+})

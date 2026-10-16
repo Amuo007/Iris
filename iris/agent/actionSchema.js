@@ -817,6 +817,8 @@ const ACTION_SPEC_TEXT = [
   '  words into it, e.g. {"type":"type","x":..,"y":..,"text":"Yes","clear":false,"enter":true}, not your own wording',
   '  ("Canadian citizen" is not an option; "Yes" is). Unsure what the options are: click it to open the list first.',
   '  A whole form, dropdowns included, can go in one "actions" list; then check each field in the next screenshot.',
+  '- Enter (enter:true) only picks a dropdown option or runs a search. Never press Enter in a form\'s text box: it',
+  '  sends the whole form, often before it is complete. Send a form only with its own submit button.',
   '- Fields with suggestions (cities, airports, addresses): type, then make sure the list shows matches for what',
   '  you typed before clicking one (an old list can still be showing); if not, wait once. Check the field afterwards.',
   '- A "Verifying you are human" / "Just a moment" page often clears by itself: wait up to about 10 s.',
