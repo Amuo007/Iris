@@ -577,13 +577,14 @@ function irisSeenAdd (kind, text, extra) {
 }
 
 /*
- * "kept on Oct 14 (chat "harness papers"): fits the topic" — or null if never judged. Judgements made
- * in the chat that is asking are left out: that chat already knows them, and a paper it just kept
- * must not look like something to avoid when Iris opens its PDF.
+ * "kept on Oct 14 (chat "harness papers"): fits the topic" — or null if never judged. A judgement this
+ * chat made in the last few minutes is left out: a paper it just kept must not look like something to
+ * avoid when Iris opens its PDF. Older ones in the same chat are flagged too — after hours of work
+ * they have long left the context (a long run re-judged a paper it kept 55 steps earlier).
  */
 function irisSeenNote (url, title, sessionId) {
   const hit = irisSeen().find(url, title, ['verdict'])
-  if (hit && sessionId && hit.sessionId === sessionId) return null
+  if (hit && sessionId && hit.sessionId === sessionId && Date.now() - hit.at < 5 * 60 * 1000) return null
   if (!hit) {
     const dl = irisDownloads().findDownload(url, title)
     return dl ? 'already downloaded as ' + (dl.name || dl.text) + ' on ' + new Date(dl.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null
