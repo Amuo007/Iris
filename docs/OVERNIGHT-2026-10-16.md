@@ -116,7 +116,22 @@ Draft, updated through the night. The final version is at the end of the night.
 | Amazon: USB-C hub under $30 with 4.5★, add to cart (Smart Quick) | found Anker 7-in-1 $19.99 4.5★ in 4 steps; Amazon then showed "I am human" → Iris **stopped and asked you** (correct: never solves those) |
 | Train booking again, with a stale suggestion list like Google's | first try: failed on 4 malformed replies → parser fix; then **done** but with invented train times → final-answer check; last try **done**, 9 steps, 1 min 51 s, no invented details |
 | Schedule: a task every 3 minutes (Tokyo time) | **fired twice on its own**, correct answers both times |
-| Long Non-stop research (2.5 h) | running — see below |
+| Long Non-stop research, part 1 (34 min) | 84 steps, 20 papers kept and downloaded, **0 duplicate files**. Survived a server watchdog reset (llama-server unresponsive → model reloaded, Iris waited and carried on). Found: it re-judged one paper 55 steps later → every step now lists all judged paper IDs |
+| Long Non-stop research, part 2 (new chat, 21 min) | 62 steps, 9 more kept, the cross-chat "you kept this before" warning fired; it still re-downloaded once (thought the file was missing) → the warning now says whether the file exists; it wrote long progress notes every step → told not to (Iris tracks that itself) |
+| Long Non-stop research, part 3 (new chat, 30 min) | 95 steps (~13 s each, down from ~20 s once the progress notes stopped), 14 kept, 5 skipped, 0 re-judged within the chat; it re-judged 2 papers from earlier chats → earlier chats' IDs now go into the instructions up front |
+| Long Non-stop research, part 4 (new chat, final build, 26 min) | 85 steps, 18 kept, 1 skipped, **0 re-judged — in the chat or from earlier chats** |
+| **All parts together** | **59 PDFs, 59 different papers — zero duplicate files** over ~2 hours and 4 chats, one server reset survived |
+
+## Your server (amd-halo) overnight
+
+- At 00:14 and 00:31 Iris lost the server for about a minute; at 00:31 Lemonade's watchdog reset an
+  unresponsive llama-server and the model was unloaded. This happened while **two** Iris windows were
+  sending screenshots at once (I was running two test suites in parallel). Iris waited, the next request
+  reloaded the model, and the runs carried on by themselves. I went back to one agent at a time.
+- My guess: memory. The server was already near its limit (model ~94 GB + KV cache for 262K + up to
+  8 GB of prompt cache). The `--cache-ram 2048` change we discussed would leave more headroom. I did
+  not change anything on the server.
+- Ping from the Mac to the server was 20–110 ms all night (Wi-Fi); a cable would make each step a bit faster.
 
 ## Blocked / needs you
 
