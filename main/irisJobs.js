@@ -329,7 +329,10 @@ function irisJobsLearnAnswer (question, answer) {
   const a = String(answer || '').trim()
   if (!q || !a || a.length > 300 || /^(skip|no idea|don'?t know|stop|cancel)\b/i.test(a)) return false
   const raw = irisCareerLoad()
-  const label = q.slice(0, 80)
+  // the form's own question when Iris quoted it ("… asks: \"Do you have a driver's licence?\"")
+  const quoted = /["“]([^"”]{8,200})["”]/.exec(q)
+  let label = (quoted ? quoted[1] : q.replace(/^.*?(?:asks?|question)[^:]*:\s*/i, '')).trim()
+  if (label.length > 100) label = label.slice(0, 100).replace(/\s+\S*$/, '') + '…'
   if (raw.answers.some(function (x) { return x.label.toLowerCase() === label.toLowerCase() })) return false
   raw.answers.push({ label: label, value: a })
   irisCareerSave(raw)
@@ -369,8 +372,10 @@ function irisJobsPrompt (task, mode) {
     '   A job you rule out from the list without opening it (wrong place, role or level): log it as skipped too, with the reason.',
     '5. Otherwise apply: fill the form from My info and the answers below. When it asks for a resume, upload the PDF',
     '   tailor_resume made. Answer every question truthfully from the profile and the answers; never claim a skill or',
-    '   experience the profile does not show. "Do you have X?" (a clearance, a licence, a certification, a degree) when the',
-    '   profile does not show X: the true answer is No — the profile lists everything the user has.',
+    '   experience the profile does not show. "Do you have X?" for a professional credential (a security clearance, a',
+    '   certification, a degree) the profile does not show: the true answer is No. Personal facts the profile cannot',
+    '   know (a driver\'s licence, a car, willingness to travel or relocate, notice period) come from the answers below;',
+    '   if they are not there, the user has to say.',
     nonStop
       ? '   Only the user can finish it (a CAPTCHA that stays, a login you have no account for, a required question or file the profile does not have): log_application {"status":"needs_you","note":"<what is missing>"} — Iris tells the user — and go on to the next job. Do not wait.'
       : '   A required question you cannot answer from them, a CAPTCHA that stays, or a login you cannot do: ask_user.',

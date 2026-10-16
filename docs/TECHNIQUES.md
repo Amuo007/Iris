@@ -250,6 +250,31 @@ Updated 2026-10-16.
 - **Test:** a job requiring a cover letter file: resume + letter made and uploaded, the site received
   both PDFs.
 
+### 20d. Finding jobs: search in the browser, then read whole boards at once (new today)
+- **Before (real boards):** look-ups were refused by search engines, so Iris guessed company board
+  addresses from memory (Shopify, Spotify, Coinbase… mostly dead ends) and scrolled through boards with
+  100+ openings: 20 minutes, 1 posting.
+- **Now:** companies are found with a web search **in the browser tab** (a real browser, like a person);
+  board addresses are never guessed. Then a **jobs look-up** reads that company's whole board in one
+  request — Greenhouse, Lever and Ashby publish every opening as a public list for embedding on other
+  sites — and returns the openings matching the role and place words (Ramp: 163 → 2 in 0.18 s).
+- **Result (same task, real boards, sharing the server with the 5-hour run):** 3 real Toronto postings
+  (Tenstorrent) read and tailored in 15 minutes, no forms opened.
+
+### 20e. Filling spare room by relevance (fixed today)
+- **Before:** when the model's picks left room on the page, Iris added the remaining bullets in profile
+  order — a low-level C++ job got three Android-internship bullets while the skills section had two groups.
+- **Now:** everything that could still go on the page is ranked by the words it shares with the posting:
+  the model's own extra picks first, then matching bullets and skill groups, then matching projects;
+  unrelated things only at the end.
+
+### 20f. Answers learned from you (new today)
+- When a form asks something only you know (a driver's licence, willingness to travel) Iris asks you;
+  your answer is saved under Settings → Jobs → Answers with the form's own question, and the next form
+  with that question is filled without asking. **Test:** asked once on job 1; job 2 filled it alone.
+- "Do you have X?" for a professional credential the profile does not show (clearance, certification,
+  degree) is answered "No"; personal facts are never assumed.
+
 ### 21. Applying
 - Read the posting → `tailor_resume` → skip if below your cutoff (default 60) → fill from My info
   and your saved answers → upload "resume" (Iris picks the PDF it just made; long paths were
