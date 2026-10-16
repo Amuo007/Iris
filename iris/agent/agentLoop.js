@@ -142,11 +142,13 @@ function createAgent (opts) {
     if (!pauseRequested) return Promise.resolve(true)
     setStatus('paused')
     emit('pause:waiting', { step: state.step, timeoutMs: timeoutMs || 0 })
+    const pausedAt = now()
     return new Promise(function (resolve) {
-      resumeDeferred = { resolve }
+      resumeDeferred = { resolve: function (v) { safety.creditPause(now() - pausedAt); resolve(v) } }
+      const timedOutFor = resumeDeferred
       if (timeoutMs > 0) {
         delay(timeoutMs).then(function () {
-          if (resumeDeferred && resumeDeferred.resolve === resolve && !stopRequested) {
+          if (resumeDeferred && !stopRequested && timedOutFor === resumeDeferred) {
             if (onTimeout) onTimeout()
             pauseRequested = false
             emit('resume', { timedOut: true })

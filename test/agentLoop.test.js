@@ -827,3 +827,22 @@ test('keeping almost everything gets a nudge to raise the bar', async () => {
   await agent.run('find the best papers')
   assert.ok(seen.some(m => /You have kept 10 of the 10/.test(m)), 'told after 10 kept out of 10')
 })
+
+test('time spent waiting for the user is not charged to the time budget', async () => {
+  const { createAgent } = require('../iris/agent/agentLoop')
+  let clock = 0
+  const replies = [
+    JSON.stringify({ thought: 'ask', action: { type: 'ask_user', question: 'Which size?' } }),
+    JSON.stringify({ thought: 'ok', action: { type: 'done', answer: 'size M' } })
+  ]
+  let i = 0
+  const model = { next: async () => { clock += 1000; return replies[i++] } }
+  const computer = { screenshot: async () => ({ dataUrl: 'data:image/jpeg;base64,AA', width: 100, height: 100, url: 'https://p.test/' }), act: async () => ({ ok: true }), state: () => ({}) }
+  const agent = createAgent({ model, computer, now: () => clock, delay: async () => {}, config: { answerCheck: false }, safety: { maxSteps: 10, maxWallClockMs: 60000, now: () => clock } })
+  const run = agent.run('buy a shirt')
+  await new Promise(resolve => setTimeout(resolve, 20))
+  clock += 10 * 60000 // the user answers ten minutes later
+  agent.answer('M')
+  const result = await run
+  assert.strictEqual(result.status, 'done', 'not stopped by the 60 s budget')
+})

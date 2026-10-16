@@ -112,6 +112,11 @@ function createSafetyGate (options) {
       startedAt = cfg.now ? cfg.now() : Date.now()
     },
 
+    /** Time spent waiting for the user (a question, an approval) is not Iris's time. */
+    creditPause (ms) {
+      if (ms > 0) startedAt += ms
+    },
+
     /** A step that never reached the model (e.g. the screenshot failed) is not charged. */
     refundStep () {
       if (steps > 0) steps--

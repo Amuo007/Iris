@@ -375,7 +375,8 @@ function irisJobsPrompt (task, mode) {
     '   experience the profile does not show. "Do you have X?" for a professional credential (a security clearance, a',
     '   certification, a degree) the profile does not show: the true answer is No. Personal facts the profile cannot',
     '   know (a driver\'s licence, a car, willingness to travel or relocate, notice period) come from the answers below;',
-    '   if they are not there, the user has to say.',
+    '   if they are not there, the user has to say. What follows from the profile is not a question for the user: living',
+    '   in the job\'s city already ("I already live there"), years of experience counted from the jobs\' dates.',
     nonStop
       ? '   Only the user can finish it (a CAPTCHA that stays, a login you have no account for, a required question or file the profile does not have): log_application {"status":"needs_you","note":"<what is missing>"} — Iris tells the user — and go on to the next job. Do not wait.'
       : '   A required question you cannot answer from them, a CAPTCHA that stays, or a login you cannot do: ask_user.',
