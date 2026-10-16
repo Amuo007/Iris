@@ -590,7 +590,9 @@ function irisSeenNote (url, title, sessionId) {
     return dl ? 'already downloaded as ' + (dl.name || dl.text) + ' on ' + new Date(dl.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null
   }
   const when = new Date(hit.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  return (hit.keep ? 'kept' : 'skipped') + ' on ' + when + (hit.chat ? ' (chat "' + String(hit.chat).slice(0, 40) + '")' : '') + (hit.why ? ': ' + String(hit.why).slice(0, 120) : '')
+  const dl = irisDownloads().findDownload(url, title + ' ' + hit.text)
+  return (hit.keep ? 'kept' : 'skipped') + ' on ' + when + (hit.chat ? ' (chat "' + String(hit.chat).slice(0, 40) + '")' : '') + (hit.why ? ': ' + String(hit.why).slice(0, 120) : '') +
+    (dl ? '; its file is already in Downloads as ' + (dl.name || dl.text) : (hit.keep ? '; not downloaded yet' : ''))
 }
 
 /* ------------------------------------------------------------------ *
