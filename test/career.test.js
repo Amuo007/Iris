@@ -251,7 +251,11 @@ test('job tasks are told apart from tasks that merely say "apply" or "resume"', 
     'Tailor my resume for the Tenstorrent opening',
     'send my CV to the hiring manager for the role',
     'Write a cover letter for the Ramp posting',
-    'Go through my job applications and finish the ones that need me'
+    'Go through my job applications and finish the ones that need me',
+    'Go through the openings at Lumen Labs (http://localhost:8765/gh/) and apply to the ones that fit my profile.',
+    'Apply for this role: https://jobs.example.test/123',
+    'Apply to 3 positions at Shopify',
+    'Check the Ramp careers page and apply where I fit'
   ]
   const no = [
     'apply the coupon SAVE10 at checkout',
@@ -259,6 +263,7 @@ test('job tasks are told apart from tasks that merely say "apply" or "resume"', 
     'resume the download in the other tab',
     'Find papers about job scheduling on GPUs',
     'apply dark mode in the settings',
+    'apply the admin role to Sam in the dashboard',
     'Book a table for two on Friday'
   ]
   for (const t of yes) assert.ok(career.isJobTask(t), 'should be a job task: ' + t)

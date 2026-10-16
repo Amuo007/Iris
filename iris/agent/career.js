@@ -1599,9 +1599,14 @@ async function fitToPage (opts) {
  * "apply the coupon at checkout", "resume the download" or "papers about job scheduling".
  */
 const JOB_WORDS = '(jobs?|positions?|roles?|internships?|co-?ops?|openings?|postings?|vacanc(y|ies)|careers? pages?|greenhouse|lever|ashby|workday)'
+// words that mean job hunting wherever they stand next to "apply" ("roles" and "positions" are not
+// enough on their own: "apply the admin role", "apply the saved positions")
+const JOB_STRONG = /\b(jobs?|internships?|co-?ops?|openings|postings?|vacanc(y|ies)|careers? pages?|hiring|greenhouse|lever|ashby|workday)\b/i
 const JOB_TASK = [
-  new RegExp('\\b(apply|applying)\\b[^\\n]{0,80}\\b' + JOB_WORDS + '\\b', 'i'),
   /\bjob (applications?|hunt(ing)?|search(es|ing)?|boards?)\b/i,
+  // "apply for software engineer roles", "apply for this senior role" — but not "apply the admin role to Sam"
+  /\bapply(ing)? (for|to)\b[^.\n]{0,50}\b(roles|positions)\b/i,
+  /\bapply(ing)? (for|to) (this|the|a|an|that)( [\w-]+){0,3} (role|position)\b/i,
   // after "find": plurals, or one job/role followed by where or what it is ("a job in Toronto", "a role as …"),
   // so "papers about job scheduling" and "the role of …" stay out
   new RegExp('\\b(find|search|look for|looking for|hunt|get)\\b[^.\\n]{0,40}\\b((jobs|positions|roles|internships|co-?ops|openings|postings|vacancies)\\b|(job|position|role|internship|co-?op|opening|posting|vacancy)(\\s+(at|in|for|with|near|as|on|that|which)\\b|\\s*([.,!?;]|$)))', 'i'),
@@ -1612,6 +1617,8 @@ const JOB_TASK = [
 
 function isJobTask (text) {
   const t = String(text || '')
+  // "apply" anywhere with a job word anywhere ("go through the openings … and apply to the ones that fit")
+  if (/\b(apply|applying)\b/i.test(t) && JOB_STRONG.test(t)) return true
   return JOB_TASK.some(function (re) { return re.test(t) })
 }
 
