@@ -1218,6 +1218,18 @@ function initialize () {
 
   ipc.on('iris-bridge-activity', bridgeActivity)
 
+  // Min's "Save password?" bar sits outside the page, where Iris cannot see it, and takes room from the
+  // page. Iris typed the password from My info anyway, so while Iris works the bar is dismissed.
+  const pwBar = document.getElementById('password-capture-bar')
+  if (pwBar && window.MutationObserver) {
+    new MutationObserver(function () {
+      if (!pwBar.hidden && isBusy()) {
+        const ignore = document.getElementById('password-capture-ignore')
+        if (ignore) setTimeout(function () { if (!pwBar.hidden && isBusy()) ignore.click() }, 300)
+      }
+    }).observe(pwBar, { attributes: true, attributeFilter: ['hidden'] })
+  }
+
   ipc.on('iris-agent-control-reply', function (e, reply) {
     if (reply && reply.status && reply.status !== lastStatus && (reply.status === 'paused' || reply.status === 'running')) setStatus(reply.status)
   })
