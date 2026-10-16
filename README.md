@@ -132,6 +132,11 @@ LaTeX template (or the built-in one) and made **exactly one full page** — Iris
 how full the page is, and cuts or adds bullets until it fits. Jobs below your fit cutoff are
 skipped; anything only you can do (a CAPTCHA that stays, a missing file) is marked **Needs you**
 and Iris moves on. Tailored PDFs are kept in `~/Documents/Iris Resumes/<date> <company> - <job>/`.
+For Greenhouse, Lever and Ashby postings the tailoring also gets the posting's own text from its link
+(read outside the browser; never LinkedIn or a site you have an account on). The fit drops when a
+posting asks for more years than your job dates show; "how many years with X" is answered from the
+jobs that mention X; answers you give on a form are saved for the next one; every job ends up in
+**Settings → Jobs → Applications** (applied, skipped, needs you).
 LaTeX must be installed (MacTeX). How each part works: [docs/TECHNIQUES.md](docs/TECHNIQUES.md).
 
 ### Use Iris from a coding agent (MCP)
