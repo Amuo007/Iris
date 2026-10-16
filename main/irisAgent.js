@@ -1261,6 +1261,14 @@ IrisComputer.prototype.act = async function (action) {
         job = tailored.slice().reverse().find(function (j) {
           return norm(j.title) === norm(action.title) && (!action.company || !j.company || norm(j.company) === norm(action.company))
         }) || null
+        // the job in progress under a shortened title ("Embedded SW Engineer"): most of its words match
+        const last = this.lastJob
+        if (!job && last && (!action.company || !last.company || norm(action.company) === norm(last.company))) {
+          const a = norm(action.title).split(' ')
+          const b = norm(last.title).split(' ')
+          const shared = a.filter(function (w) { return b.indexOf(w) !== -1 }).length
+          if (shared >= 2 && shared / Math.max(a.length, b.length) >= 0.6) job = last
+        }
       } else job = this.lastJob || null
       const rec = {
         status: action.status,
