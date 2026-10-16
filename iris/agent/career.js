@@ -837,6 +837,37 @@ function plainWords (tex) {
   return latexToPlain(tex).replace(/\*\*/g, '').toLowerCase().replace(/[^a-z0-9+#%]+/g, ' ').trim()
 }
 
+/* Name, email, phone and links from a resume's header (everything before the first section). */
+function readHeader (src, body, firstSection) {
+  const head = body.slice(0, firstSection === undefined ? body.length : firstSection)
+  const basics = { name: '', email: '', phone: '', location: '', links: [] }
+  const nm = /\\name\s*\{([^}]*)\}\s*\{([^}]*)\}/.exec(src) // moderncv, Awesome-CV
+  if (nm) basics.name = (nm[1] + ' ' + nm[2]).trim()
+  if (!basics.name) {
+    const big = /\\(Huge|huge|LARGE|Large)\b/.exec(head)
+    if (big) {
+      // the smallest {…} around the big text, or the rest of that line
+      let open = head.lastIndexOf('{', big.index)
+      let g = open !== -1 ? readGroup(head, open) : null
+      const text = g && g.end > big.index ? g.content : head.slice(big.index, head.indexOf('\n', big.index) === -1 ? head.length : head.indexOf('\n', big.index))
+      basics.name = latexToPlain(text).replace(/\*\*/g, '').trim().slice(0, 80)
+    }
+  }
+  const em = /mailto:([^}\s]+)/.exec(head) || /\\email\s*\{([^}]+)\}/.exec(src)
+  if (em) basics.email = em[1].trim()
+  const plain = latexToPlain(head)
+  const ph = /(\+?\d[\d\s().-]{7,}\d)/.exec(plain)
+  if (ph) basics.phone = ph[1].trim()
+  const re = /\\href\s*\{([^}]+)\}\s*\{/g
+  let m
+  while ((m = re.exec(head)) !== null) {
+    const url = m[1].trim()
+    if (/^mailto:|^tel:/.test(url)) continue
+    basics.links.push({ label: url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''), url: url })
+  }
+  return basics
+}
+
 /**
  * Turn a finished LaTeX resume into an Iris template plus the content it held.
  * Every section it rewrites is checked: refilled with its own content it must read the same.
@@ -893,6 +924,7 @@ function templatize (tex) {
   })
   const newBody = replaceRanges(body, ranges)
   const template = src.slice(0, begin) + newBody + src.slice(finish)
+  bank.basics = readHeader(src, body, heads.length ? heads[0].start : undefined)
   return { ok: report.some(function (r) { return r.status === 'mapped' }), template: template, bank: bank, report: report, sections: templateSections(template) }
 }
 

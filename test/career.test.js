@@ -215,3 +215,12 @@ test('Awesome-CV and moderncv resumes are read too', () => {
   assert.strictEqual(mcv.bank.experience[0].location, 'Ottawa', 'a lone city is still the place, not frozen into the template')
   assert.match(mcv.template, /\\cventry\{<<dates>>\}\{<<title>>\}\{<<company>>\}\{<<location>>\}/)
 })
+
+test('the header gives the name, email, phone and links', () => {
+  const r = career.templatize(JAKE)
+  assert.strictEqual(r.bank.basics.name, 'Sam Rivera')
+  assert.strictEqual(r.bank.basics.email, 'sam@example.com')
+  assert.strictEqual(r.bank.basics.phone, '555-123-4567')
+  assert.deepStrictEqual(r.bank.basics.links.map(l => l.url), ['https://github.com/samrivera'])
+  assert.strictEqual(career.templatize(fs.readFileSync(path.join(__dirname, 'fixtures', 'resume-moderncv.tex'), 'utf8')).bank.basics.name, 'Riley Chen')
+})

@@ -458,7 +458,9 @@ function irisJobsSettingsAction (action, args) {
       return Promise.resolve(Object.assign(irisCareerForPage(), { saved: true, learnedKept: learned.length }))
     }
     case 'templateImport':
-      return dialog.showOpenDialog(windows.getCurrent(), { title: 'Choose your LaTeX resume', properties: ['openFile'], filters: [{ name: 'LaTeX', extensions: ['tex'] }] }).then(function (pick) {
+      // IRIS_TEMPLATE_PICK (tests only): the file the dialog would return
+      return (process.env.IRIS_TEMPLATE_PICK ? Promise.resolve({ canceled: false, filePaths: [process.env.IRIS_TEMPLATE_PICK] })
+        : dialog.showOpenDialog(windows.getCurrent(), { title: 'Choose your LaTeX resume', properties: ['openFile'], filters: [{ name: 'LaTeX', extensions: ['tex'] }] })).then(function (pick) {
         if (pick.canceled || !pick.filePaths[0]) return irisCareerForPage()
         const r = irisTemplateImport(pick.filePaths[0])
         return Object.assign(irisCareerForPage(), { imported: r })
