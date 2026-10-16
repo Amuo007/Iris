@@ -402,6 +402,12 @@ Updated 2026-10-16 (evening).
   now read "skipped". Now each job Iris makes a resume for is remembered with its own link, fit and PDF;
   a log by title gets that job's details; a job with no resume gets none; and any job with a resume but
   no log is pointed out on the next resume and after each log.
+- **The new resume replaces the old one (fixed today):** a Workday-style site that remembers you showed
+  the morning's resume already attached, under the same file name, and Iris kept it — the application
+  went out without the resume tailored for it (checked by file size: 95,569 bytes sent, 95,495 made).
+  Now Iris always uploads the tailored PDF, also over one that is already there; and an application
+  logged as sent without that upload is flagged in its record and in the run's summary. Retest: the
+  old file replaced (95,259 bytes = the new PDF), 11 steps, 2:32.
 - **The answer ends with the records (new today):** a jobs run's final answer gets "From the
   Applications list (this run): Applied (2): …; Needs you (1): … — <reason>; Skipped (1): …" built by
   code from the log, because the model's own summary once gave the wrong reason for a *needs you* job.
