@@ -190,7 +190,7 @@ function irisProfileForPrompt () {
 
 /* 20 characters from letters, digits and symbols sites accept: made for one site, never shown to the model */
 function irisNewPassword () {
-  const sets = ['abcdefghijkmnopqrstuvwxyz', 'ABCDEFGHJKLMNPQRSTUVWXYZ', '23456789', '!#%+=?@']
+  const sets = ['abcdefghijkmnopqrstuvwxyz', 'ABCDEFGHJKLMNPQRSTUVWXYZ', '23456789', '!@#%?'] // symbols almost every site accepts
   const bytes = require('crypto').randomBytes(40)
   const chars = sets.map(function (set, i) { return set[bytes[i] % set.length] }) // one of each kind
   const all = sets.join('')
