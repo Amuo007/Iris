@@ -330,7 +330,7 @@ Updated 2026-10-16.
 ## Coding agents (MCP)
 
 ### 24. Iris's hands for your coding agent, no second model
-- `bin/iris-mcp.js` gives a coding agent 29 tools: screenshot, click (with the aiming of 4), type,
+- `bin/iris-mcp.js` gives a coding agent 30 tools: screenshot, click (with the aiming of 4), type,
   keys, scroll, zoom, tabs, upload, dialogs, look-ups, bookmarks, My info (placeholders only),
   accounts, downloads, the career profile, building a resume from its own picks (3.4 s, no model
   in Iris), and the applications log. Iris's own model does not run, so your server only ever

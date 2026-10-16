@@ -233,14 +233,13 @@ function irisJobFolder (job) {
   return folder
 }
 
-/** A short cover letter PDF for one job: { ok, file, removed, words, ms, error } */
-async function irisWriteCoverLetter (job) {
+/** A short cover letter PDF for one job: { ok, file, removed, words, ms, error }. With `text`, no model runs. */
+async function irisWriteCoverLetter (job, text) {
   const started = Date.now()
   const bank = irisCareerLoad()
   if (irisCareerLib.bankIsEmpty(bank)) return { ok: false, error: 'The career profile is empty.' }
   const cfg = irisSettings()
-  let text = ''
-  try {
+  if (!text) try {
     const model = irisLockedModel(irisModelClient.createModelClient({ baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0.3, thinking: 'off', timeoutMs: cfg.modelTimeoutMs }), cfg.baseUrl)
     const reply = await model.next({ messages: irisCareerLib.coverLetterMessages(bank, job), thinking: 'off' })
     text = typeof reply === 'string' ? reply : (reply && reply.content) || ''

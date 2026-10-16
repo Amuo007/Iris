@@ -177,6 +177,12 @@ async function irisBridgeHandle (tool, args) {
       if (r.ok) irisBridgeTarget().lastResume = r.file
       return r.ok ? { ok: true, file: r.file, pages: r.pages, fill: r.fill, undone: r.undone } : { ok: false, error: r.error }
     }
+    case 'cover_letter': {
+      if (!args.text) throw new Error('text is required: three short paragraphs, from the career profile only')
+      const r = await irisWriteCoverLetter({ title: String(args.title || 'Job'), company: String(args.company || '') }, String(args.text))
+      if (r.ok) irisBridgeTarget().lastCover = r.file
+      return r.ok ? { ok: true, file: r.file, words: r.words, removed: r.removed } : { ok: false, error: r.error }
+    }
     case 'applications':
       return { items: irisApplicationsLoad().slice(-100), today: irisAppliedToday() }
     case 'log_application': {

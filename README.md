@@ -149,12 +149,12 @@ key stored in a file only you can read.
 Settings shows the exact snippet with your path; **Copy** puts it on the clipboard. With Claude Code
 you can also run `claude mcp add iris -- node "/Users/<you>/Library/Application Support/Iris/iris-mcp.js"`.
 
-29 tools. **Page:** `iris_screenshot`, `iris_click`, `iris_type`, `iris_key`, `iris_scroll`, `iris_hover`,
+30 tools. **Page:** `iris_screenshot`, `iris_click`, `iris_type`, `iris_key`, `iris_scroll`, `iris_hover`,
 `iris_drag`, `iris_navigate`, `iris_back`, `iris_find`, `iris_wait`, `iris_zoom`, `iris_dialog`, `iris_upload`.
 **Tabs:** `iris_tabs`, `iris_new_tab`, `iris_switch_tab`, `iris_close_tab`. **Iris's own tools:** `iris_lookup`,
 `iris_bookmarks`, `iris_bookmark`, `iris_my_info` (secrets only as placeholders such as `{{Password}}`,
 typed by Iris), `iris_accounts` (`{{account:site.com}}`), `iris_save_account`, `iris_downloads`,
-`iris_career`, `iris_resume` (a one-page PDF from your agent's own picks), `iris_applications`,
+`iris_career`, `iris_resume` (a one-page PDF from your agent's own picks), `iris_cover_letter`, `iris_applications`,
 `iris_log_application`. Every page action returns a fresh screenshot unless you pass `"look": false`.
 
 ### Settings
