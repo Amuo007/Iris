@@ -224,6 +224,14 @@ Updated 2026-10-16 (evening).
 
 ---
 
+### 15b. A long run stays flat in memory (fixed today)
+- **Found in the 5-hour run:** the browser window's memory grew about 0.2 MB per step. The panel shows
+  the newest 80 steps and hides older ones, but it still held each hidden step's record — with its
+  screenshot (a few hundred KB of image data).
+- **Now:** when steps are hidden, their records and look-up rows are let go too.
+- **Result:** 300 steps with screenshot-sized images: 119 MB → 36 MB in the window after a garbage
+  collection (that is the 80 visible steps). History still has every step on disk.
+
 ## Look-ups (quick text searches outside the browser)
 
 ### 16. A separate, empty browser session
