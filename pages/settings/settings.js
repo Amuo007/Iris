@@ -1047,7 +1047,7 @@ function irisRenderUsage (usage) {
   var days = (usage && usage.days) || {}
   var keyOf = function (d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') }
   var sum = function (n) {
-    var t = { tasks: 0, requests: 0, input: 0, output: 0, ms: 0 }
+    var t = { tasks: 0, requests: 0, input: 0, output: 0, ms: 0, lookups: 0 }
     Object.keys(days).forEach(function (k) {
       if (n !== null) {
         var cutoff = new Date()
@@ -1059,11 +1059,11 @@ function irisRenderUsage (usage) {
     return t
   }
   var rows = [['Today', sum(1)], ['Last 7 days', sum(7)], ['Last 30 days', sum(30)], ['All time', sum(null)]]
-  var html = '<tr><th></th><th>Tasks</th><th>Requests</th><th>Input tokens</th><th>Output tokens</th><th>Avg. per step</th></tr>'
+  var html = '<tr><th></th><th>Tasks</th><th>Requests</th><th>Input tokens</th><th>Output tokens</th><th>Look-ups</th><th>Avg. per step</th></tr>'
   rows.forEach(function (r) {
     var t = r[1]
     html += '<tr><th>' + r[0] + '</th><td>' + irisFormatCount(t.tasks) + '</td><td>' + irisFormatCount(t.requests) + '</td><td>' + irisFormatCount(t.input) +
-      '</td><td>' + irisFormatCount(t.output) + '</td><td>' + (t.requests ? (t.ms / t.requests / 1000).toFixed(1) + ' s' : '–') + '</td></tr>'
+      '</td><td>' + irisFormatCount(t.output) + '</td><td>' + irisFormatCount(t.lookups) + '</td><td>' + (t.requests ? (t.ms / t.requests / 1000).toFixed(1) + ' s' : '–') + '</td></tr>'
   })
   document.getElementById('iris-usage-table').innerHTML = html
 }
@@ -1079,7 +1079,7 @@ function irisRenderSkills (all) {
   irisSkillsList.innerHTML = ''
   var sites = Object.keys(all).filter(function (k) { return all[k] && all[k].length })
   if (!sites.length) {
-    irisSkillsList.textContent = 'Nothing learned yet.'
+    irisSkillsList.appendChild(irisEmptyLine('Nothing learned yet.'))
     return
   }
   sites.sort().forEach(function (site) {
@@ -1117,7 +1117,7 @@ function irisRenderPlaybooks (list) {
   list = Array.isArray(list) ? list : []
   irisPlaybooksList.innerHTML = ''
   if (!list.length) {
-    irisPlaybooksList.textContent = 'None yet. Finish a task with Smart on to keep its plan.'
+    irisPlaybooksList.appendChild(irisEmptyLine('None yet. Finish a task with Smart on to keep its plan.'))
     return
   }
   list.slice().reverse().forEach(function (p) {
@@ -1252,7 +1252,7 @@ function irisRenderAccounts (data) {
   var accounts = (data && data.accounts) || []
   irisAccountsList.innerHTML = ''
   if (!accounts.length) {
-    irisAccountsList.textContent = 'None yet.'
+    irisAccountsList.appendChild(irisEmptyLine('None yet. Accounts Iris creates for you appear here, with the link and why they were made.'))
     return
   }
   accounts.forEach(function (a) {

@@ -720,3 +720,24 @@ test('a repeating chat keeps only the newest follow-ups pinned', () => {
   assert.ok(follow.length <= 8, 'old follow-ups are summarised, not pinned forever (' + follow.length + ')')
   assert.ok(follow.some(c => /repeat 30\b/.test(c)), 'the newest one is kept')
 })
+
+test('in a non-stop run an unanswered question times out and Iris carries on', async () => {
+  const h = harness([
+    json('captcha', { type: 'ask_user', question: 'Please solve the CAPTCHA' }),
+    (ctx) => { h.ctx = ctx; return json('moving on', { type: 'done', answer: 'skipped that site' }) }
+  ], {}, { config: { settleDelayMs: 0, markerDwellMs: 0, askTimeoutMs: 600000 } })
+  const r = await h.agent.run('collect prices')
+  assert.strictEqual(r.status, 'done')
+  assert.match(JSON.stringify(h.ctx.messages), /did not answer within 10 minutes/)
+  assert.strictEqual(ev(h.events, 'ask:timeout').length, 1)
+})
+
+test('without a timeout a question waits for the user', async () => {
+  const h = harness([json('ask', { type: 'ask_user', question: 'Which size?' }), json('d', { type: 'done', answer: 'M' })])
+  const running = h.agent.run('buy a shirt')
+  await until(() => h.agent.status().status === 'paused', 'paused on the question')
+  await new Promise(resolve => setTimeout(resolve, 20))
+  assert.strictEqual(h.agent.status().status, 'paused')
+  h.agent.answer('M')
+  assert.strictEqual((await running).status, 'done')
+})

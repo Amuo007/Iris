@@ -901,10 +901,10 @@ function addQuestions (questions) {
   scrollToEnd()
 }
 
-function addPlanCard (text, updated) {
+function addPlanCard (text, updated, level) {
   removeEmpty()
   const card = el('div', 'iris-plan')
-  card.appendChild(el('div', 'iris-plan-title', updated ? 'Plan updated' : 'Plan'))
+  card.appendChild(el('div', 'iris-plan-title', updated ? 'Plan updated' : (level === 'deep' ? 'Plan · Deep' : 'Plan')))
   card.appendChild(el('pre', 'iris-plan-text', text))
   streamEl.appendChild(card)
   scrollToEnd()
@@ -970,7 +970,8 @@ function handleEvent (payload) {
       setStatus(keep, 'Thinking…')
       break
     case 'model:progress':
-      if (payload.phase === 'waiting') setStatus(keep, 'Reading the page…')
+      if (payload.planning) setStatus(keep, 'Planning · ' + Math.round((payload.elapsedMs || 0) / 1000) + 's')
+      else if (payload.phase === 'waiting') setStatus(keep, 'Reading the page…')
       else if (payload.phase === 'thinking') setStatus(keep, 'Thinking · ' + Math.round(payload.elapsedMs / 1000) + 's')
       else setStatus(keep, 'Deciding…')
       break
@@ -996,7 +997,7 @@ function handleEvent (payload) {
       if (payload.step === 0) setStatus(keep, 'Planning…')
       break
     case 'plan':
-      addPlanCard(payload.text, payload.updated)
+      addPlanCard(payload.text, payload.updated, payload.level)
       break
     case 'questions':
       addQuestions(payload.questions)
@@ -1031,12 +1032,17 @@ function handleEvent (payload) {
       break
     case 'ask':
       addNote(payload.question, 'ask')
-      setStatus('paused', 'Iris is asking you — type an answer, or press ▶')
+      setStatus('paused', payload.timeoutMs
+        ? 'Iris is asking you — answer, or it carries on without it in ' + Math.round(payload.timeoutMs / 60000) + ' min'
+        : 'Iris is asking you — type an answer, or press ▶')
       taskInput.placeholder = 'Answer Iris…'
       taskInput.focus()
       break
     case 'pause':
       setStatus('paused', 'Paused')
+      break
+    case 'ask:timeout':
+      addNote('No answer, so Iris carried on without it.', 'memo')
       break
     case 'resume':
       setStatus('running', 'Continuing…')

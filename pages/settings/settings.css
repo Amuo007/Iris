@@ -899,3 +899,69 @@ a.iris-list-main:hover .iris-list-title {
   resize: vertical;
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
 }
+.iris-settings a.iris-list-main,
+.iris-settings a.iris-list-main .iris-list-title,
+.iris-settings a.iris-list-main .iris-list-sub {
+  text-decoration: none;
+  color: inherit;
+}
+.iris-settings a.iris-list-main .iris-list-sub {
+  color: var(--s-text-3);
+}
+.iris-settings a.iris-list-main:hover .iris-list-title {
+  text-decoration: underline;
+}
+
+/* --- layout fixes for every Iris section (they used to live in one container) --- */
+
+.iris-settings .settings-container > .setting-secondary-label {
+  padding-left: 0;
+  margin: -2px 0 12px;
+  max-width: 760px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--s-text-2);
+}
+.iris-settings .settings-container[id^="iris-"] .iris-setting input[type="text"],
+.iris-settings .settings-container[id^="iris-"] .iris-setting input[type="password"],
+.iris-settings .settings-container[id^="iris-"] .iris-setting select {
+  width: 100%;
+  max-width: 560px;
+}
+.iris-settings .iris-row input.iris-row-label {
+  flex: 0 0 170px;
+}
+.iris-settings .iris-row input.iris-row-value,
+.iris-settings .iris-row input.iris-row-task {
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+}
+.iris-settings .iris-skill-row {
+  align-items: flex-start;
+}
+.iris-settings .iris-skill-row b {
+  padding-top: 2px;
+}
+.iris-settings .iris-skill-tip {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--s-text-2);
+}
+.iris-settings .iris-skill-row .iris-row-delete {
+  flex: none;
+}
+.iris-settings .iris-row-title.iris-subtitle {
+  margin-bottom: 4px;
+}
+.iris-settings #tracking-level-container .setting-option.selected:not(:first-child) {
+  border: 1px solid var(--s-line-strong);
+  border-radius: 10px;
+  background: var(--s-muted);
+}
+.iris-settings .iris-rows > .iris-list-empty {
+  padding: 4px 0;
+}
+.iris-settings .iris-playbook summary {
+  font-size: 13px;
+}

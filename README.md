@@ -60,15 +60,32 @@ timeline without typing. The real model server is never contacted by any test.
 | Run a task | Type what you want and press Enter |
 | Continue the chat | Reply after a run ends; Iris keeps the context. **+** starts a new chat |
 | Past chats | The clock button: reopen any saved chat and continue it |
+| Projects | Chats in a project share one plan, notes, decisions and downloads |
 | Pause / resume / stop | Buttons in the status bar while Iris works |
 | Take over | Click or type in the page; Iris pauses. Type a message to tell it something, or press ▶ |
-| Iris asks you | For a CAPTCHA, a phone code or a missing detail, Iris pauses and asks; type the answer |
+| Iris asks you | For a CAPTCHA, a phone code or a missing detail, Iris pauses, asks, and shows a macOS notification if you are away |
 | Thinking | **Fast** (no thinking) · **Balanced** · **Careful** · **Deep** |
 | Run | **Once** · **Non-stop** (no step or time limit, resumes itself after errors) · **Every 15 min … every day** |
+| Smart | Off, **Quick** or **Deep** — see below |
 
 Each step shows what Iris did, why, and the screenshot it decided from (click the thumbnail).
 
 ![Iris panel after a task](docs/screenshots/agent-panel.png)
+
+### Smart mode
+
+For loose requests ("find me 10 good papers on …", "3 remote junior frontend jobs"), switch on
+**Smart**. Before the first click Iris:
+
+1. asks up to four multiple-choice questions if the request could mean different things;
+2. **looks things up** outside the browser — web search results, papers with abstracts and citation
+   counts (OpenAlex, arXiv), encyclopedia summaries — to learn where to go and what good looks like;
+3. writes a short plan: goal, what a good result is, where to start, how, and when it is done.
+
+During the run it opens each candidate, records a **keep / skip** judgement with a reason, repeats
+the goal on every step, checks its progress against the plan every 15–20 steps, and never reports
+something it did not see. **Quick** plans in seconds; **Deep** researches first (more look-ups, how
+other people did it) and gets twice the steps and time.
 
 ### What Iris can do
 
@@ -78,26 +95,49 @@ It never runs scripts inside the sites you visit.
 - **Pages:** click, double-click, hover, drag, scroll, type (replaces the field's text), keys,
   ⌘A/C/V/X/Z, find on page (⌘F), zoom into a small area before clicking
 - **Several actions per step:** fill a whole form in one go
-- **Tabs:** follows links that open new tabs, closes ad pop-ups, switches and opens tabs
-- **Browser UI pages cannot draw:** dropdowns are drawn inside the page so Iris can see them;
-  alert / confirm / prompt dialogs and the file picker are answered like a person would
-- **Downloads** go straight to `~/Downloads`; **uploads** pick from your recent files
+- **Tabs:** follows links that open new tabs, closes ad pop-ups, switches, opens and closes tabs
+- **Things a browser draws outside the page:** dropdowns are drawn inside the page so Iris can see
+  them; alert / confirm / prompt dialogs and the file picker are answered like a person would
+- **Downloads** go straight to `~/Downloads` (duplicates are skipped); **uploads** pick from your
+  recent files; in the PDF viewer Iris knows where the download button is
 - **Accounts:** logs in with **My info**, or signs up when you allow it; with permission it opens
-  your inbox to read a verification code; every account it creates is listed in Settings
-- **Memory:** notes and a downloaded-files list survive long runs; old steps are compacted in
-  chunks so the server's prompt cache keeps working
-- **Skills:** shortcuts it learns about a site (for example a direct search URL) are reused next time
+  your inbox to read a verification code; every account it creates is listed in Settings with its
+  link and why it was made
+- **Look-ups:** quick text look-ups outside the browser (a few per task) to find where to go or to
+  read a long public list in one step. They never use your cookies or logins and never contact
+  LinkedIn, Facebook, Instagram, X, TikTok, or sites where Iris has an account for you
+- **Memory:** notes, downloads and every keep/skip judgement survive long runs and new chats. A page
+  or search result Iris judged before is flagged, so research never re-reads the same paper. Each
+  step also lists the sites already tried, so Iris does not walk back into a dead end
+- **Skills:** shortcuts it learns per site, plans that worked for a kind of task, and skills you
+  write yourself ("when the task mentions flights, prefer direct trips")
+- **Bookmarks:** a Chrome-style bookmarks bar, import from Chrome; Iris can bookmark pages, look
+  bookmarks up and remove them
+- **Payments:** Iris has no card. It goes as far as the payment page and tells you what is ready
 
-### Settings → Iris AI
+### Use Iris from a coding agent (MCP)
 
-- model server (any OpenAI-compatible `/v1` URL), model, API key, thinking level
-- steps and minutes per task (Once mode), seconds to wait for each answer, screenshot size
-- **When a site needs an account:** log in only, or log in / sign up with My info
-- **Usage:** tasks, requests, input and output tokens, time per step — today, 7 and 30 days, all time
-- **Rules:** things Iris must always or never do
+Turn on **Settings → Iris AI → Coding agents** and add the snippet it shows to your coding agent's
+MCP servers. Your agent (Claude Code, OpenCode, Codex, …) can then take screenshots of the current
+tab and click, type, scroll, navigate and manage tabs in Iris — handy for checking the web app it is
+building. Iris's own model does not run. The bridge listens on `127.0.0.1` only and needs a secret
+key stored in a file only you can read.
+
+```json
+{ "mcpServers": { "iris": { "command": "node", "args": ["~/Library/Application Support/Iris/iris-mcp.js"] } } }
+```
+
+### Settings
+
+- **General, Bookmarks, History, Cookies & site data, Appearance, Privacy, Search engine,
+  Passwords, Browsing** — the usual browser settings
+- **Iris AI:** model server (any OpenAI-compatible `/v1` URL), model, API key, thinking level,
+  Smart default, steps and minutes per task, screenshot size, when a site needs an account
+- **Look-ups:** on/off, how many per task, sites never to contact
 - **My info:** your details for forms and logins. Secret fields are encrypted with the macOS
   keychain and never shown to the model: it types `{{Password}}` and Iris fills in the real value
-- **Accounts Iris created**, **Skills**, and a **Schedule** for tasks that start on their own
+- **Accounts, Rules, Schedule, Skills, Coding agents, Usage** (tasks, requests, tokens, look-ups,
+  time per step — today, 7 and 30 days, all time)
 
 ![Iris settings](docs/screenshots/settings.png)
 
@@ -106,49 +146,39 @@ It never runs scripts inside the sites you visit.
 ## How the agent works
 
 Iris is deliberately **vision-only**. The model gets screenshots and nothing else; actions are
-real operating-system input events, not DOM calls.
+real input events (`webContents.sendInputEvent`), not DOM calls.
 
 ```
                  ┌──────────────────────────────────────────────┐
                  │                  agent loop                  │
-  goal ────────▶ │  1. OBSERVE   screenshot + page state         │
+  task ────────▶ │  0. SMART     questions → look-ups → plan     │
+                 │  1. OBSERVE   screenshot + page state         │
                  │  2. THINK     model call (vision in, JSON out)│
                  │  3. ACT       strict parse → input events     │
-                 │  4. VERIFY    did the page change as claimed? │
+                 │  4. VERIFY    did the page change?            │
                  └──────────────────────────────────────────────┘
                           │            │            │
-                     safety gate   marker overlay  timeline → panel
+                     safety gate   pointer overlay  timeline → panel
 ```
 
-**See.** `webContents.capturePage()` for the tab; on macOS that is unreliable for a
-`WebContentsView` (it can hang or reject with a viz error before first paint), so Iris falls back
-to grabbing the window's composited image through `desktopCapturer` and cropping it to the tab's
-bounds. Screenshots are downscaled to the configured longest edge and encoded as JPEG.
+**See.** `webContents.capturePage()` of the tab (retried, blank pages detected), downscaled to the
+configured longest edge, JPEG. Only the newest screenshot stays in the conversation.
 
-**Think.** One OpenAI-compatible `chat/completions` request per step with the current screenshot,
-the page URL/title, a compact history of prior steps, and the instruction. `keepImages` bounds how
-many screenshots remain in context; older steps keep their text.
+**Think.** One streamed OpenAI-compatible `chat/completions` request per step: the screenshot, URL,
+title, tabs, the plan's goal, a digest of older steps, sites already tried, notes and decisions.
+Everything but the newest step stays byte-identical so the server's prompt cache keeps working;
+old steps are summarised in chunks.
 
-**Act.** Model output is parsed against a strict action grammar (`actionSchema.js`) — unknown keys,
-malformed coordinates, or an out-of-range value are rejected with a specific reason, and the parser
-can also recover the intent from sloppier prose-ish output. Actions: `navigate`, `click`,
-`double_click`, `right_click`, `hover`, `type`, key press, hotkey, `scroll`, `drag`, `wait`,
-`answer`, `done`. Each becomes a sequence of native `mouseMouseUp/mouseDown/mouseMove/keyDown/
-keyUp` events (`inputPlan.js`), including modifier spellings and key codes.
+**Act.** Model output is parsed against a strict action grammar (`actionSchema.js`) with a
+recovery parser for sloppy JSON. Each action becomes real mouse/keyboard events (`inputPlan.js`)
+with an eased pointer glide. Coordinates are mapped from image pixels to view pixels per axis
+(`coordinateMapper.js`), so Retina and downscaled screenshots line up.
 
-**Coordinates are never guessed.** Image pixels and view CSS pixels are carried as independent
-sizes (`coordinateMapper.js`), so 2×/3× Retina captures, downscaled images, and a panel that
-shifts the page all map correctly. Values are clamped to the viewport, and the panel reports both
-the image point and the CSS point it turned it into.
+**Stop conditions.** `safety.js`: step and time budgets (none in Non-stop), model timeout, retries,
+consecutive failures, repeated actions on a frozen page, and the payment guard.
 
-**Stop conditions.** `safety.js` answers "why did the agent stop?" with one of: step budget, wall
-clock budget, per-step model timeout, retries for a step, consecutive failures, a repeated-action
-loop, a blocked URL scheme/host, or a sensitive action that needs your approval. Money, credential
-and destruction phrasings (`purchase`, `pay`, `checkout`, `delete`, `sign out`, `submit … otp`) are
-refused by default.
-
-**Takeover.** Input events injected by the agent are timestamped; any real user input in the page
-outside that window increments a takeover counter, which pauses the run instead of fighting you.
+**Takeover.** Input injected by Iris is timestamped; any real input in the page outside that
+window pauses the run instead of fighting you.
 
 ---
 
@@ -156,52 +186,44 @@ outside that window increments a takeover counter, which pauses the run instead 
 
 | Path | What it is |
 | --- | --- |
-| `iris/agent/actionSchema.js` | Strict action grammar + recovery parser, human-readable summaries |
-| `iris/agent/coordinateMapper.js` | Image px ⇄ view CSS px, per-axis, clamping, fit dimensions |
-| `iris/agent/agentLoop.js` | observe → think → act → verify, pause/stop/resume, auto-wait on loading |
-| `iris/agent/safety.js` | All stop conditions and the sensitive-action gate |
+| `iris/agent/agentLoop.js` | Smart planning, observe → think → act → verify, pause/stop/resume, budgets |
+| `iris/agent/actionSchema.js` | Action grammar + recovery parser, the rules the model gets |
+| `iris/agent/history.js` | What the model sees each step: chunked compaction, digest, notes, sites, plan |
+| `iris/agent/prompts.js` | Every text said to the model |
+| `iris/agent/lookup.js` | Look-ups outside the browser: search, papers, arXiv, Wikipedia, public pages |
+| `iris/agent/memory.js` | Memory beyond the context window: identifiers, duplicate checks, recall |
+| `iris/agent/safety.js` | Stop conditions and the payment guard |
 | `iris/agent/inputPlan.js` | Actions → native mouse/keyboard event sequences |
-| `iris/agent/history.js` | Step history with an image budget |
-| `iris/agent/prompts.js` | System/user prompt construction |
-| `iris/agent/modelClient.js` | OpenAI-compatible client (fetch), timeouts, error normalisation |
-| `iris/agent/fakeModel.js` | Scripted model for tests and the offline demo |
-| `main/irisAgent.js` | The only Electron-facing part: `IrisComputer`, capture, injection, IPC, overlay |
-| `js/iris/layout.js` | Brand, two-row command bar, shortcut, heights shared with the webview layer |
-| `js/iris/omnibox.js` | Title + URL pill that focuses Min's real address input |
-| `js/iris/agentPanel.js` | Side panel: goal box, controls, step timeline, settings link |
-| `css/iris.css`, `css/irisAgent.css` | Design tokens and all Iris chrome styling |
-| `pages/irisOverlay.html` | Transparent click-through marker window |
-| `pages/welcome/index.html` | First-run welcome page |
-| `test/*.test.js` | 90 unit tests for the Electron-free core |
-
-The agent core is Electron-free on purpose: it is pure logic, so it is unit-testable in seconds and
-reusable outside this browser. Only `main/irisAgent.js` touches Electron.
+| `iris/agent/coordinateMapper.js` | Image px ⇄ view CSS px |
+| `iris/agent/modelClient.js` | Streaming OpenAI-compatible client, thinking levels, abort |
+| `main/irisAgent.js` | The Electron side: the "computer", tabs, downloads, sessions, projects, accounts, skills |
+| `main/irisBridge.js`, `bin/iris-mcp.js` | Coding-agent bridge and its MCP server |
+| `js/iris/agentPanel.js` | The side panel |
+| `js/iris/bookmarksBar.js` | Bookmarks bar, star, Chrome import |
+| `pages/settings/` | Settings |
+| `test/*.test.js` | Unit tests for the Electron-free core |
 
 ---
 
 ## Tests
 
 ```bash
-node --test test/*.test.js      # 90 tests, no Electron, no network
-npm run test:agent              # same thing, as an npm script
+node --test test/*.test.js      # no Electron, no network, a few seconds
 ```
 
-Covered: the action grammar (valid, malformed, recovered), coordinate mapping on 1×/2×/3× and
-after downscaling, every safety stop, input planning for clicks/typing/keys/scrolls/drags, the
-fake model, and the loop itself (happy path, pause, stop, retry, verification, blocked actions).
-No test ever talks to a real model server; `test/fakes.js` supplies scripted computer and model
-doubles.
+Covered: the action grammar, coordinate mapping, every safety stop, input planning, the model
+client, memory and duplicate detection, look-up parsers, Chrome bookmark import, the MCP server, and
+the loop itself (Smart planning with look-ups, quizzes, judging, compaction, budgets, pause, stop,
+takeover). No test talks to a real model server.
 
 ---
 
 ## Branding and attribution
 
-Iris' look is independent: its own icon (`icons/source/iris.svg`, rasterised by Chromium via
-`scripts/renderIcon.js`, assembled by `scripts/buildIcons.js`), its own typography (Space Grotesk +
-Inter, bundled in `ext/fonts/`), a violet-to-cyan token palette (`--iris-*`), a two-row glass
-command bar, card tabs, and an Iris-specific welcome and settings surface. Min's `LICENSE`,
-copyright notices and attribution remain in place, and the welcome page credits Min as the
-foundation.
+Iris has its own look: a plain white interface with a black dark mode, its own icon
+(`icons/source/iris.svg`, rasterised by `scripts/renderIcon.js`), a compact two-row toolbar with a
+bookmarks bar, and its own panel and settings. Min's `LICENSE`, copyright notices and attribution
+remain in place.
 
 ## Known limitations
 

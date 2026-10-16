@@ -1679,6 +1679,7 @@ function startAgent (task, options) {
     config: {
       systemExtra: function () { return irisSystemExtra(mode, session.title + '\n' + task, session.projectId) },
       maxServerWaitMs: unlimited ? 0 : 10 * 60 * 1000,
+      askTimeoutMs: unlimited ? 10 * 60 * 1000 : 0, // an overnight run does not wait all night for an answer
       planThinking: cfg.thinking === 'full' ? 'full' : 'medium',
       runLookups: cfg.lookups === false ? 0 : (Number(cfg.runLookups) >= 0 ? Number(cfg.runLookups) : 6)
     },
@@ -2031,8 +2032,26 @@ settings.listen('irisAI', function () {
  * ------------------------------------------------------------------ */
 
 /* Normal browsing: like Chrome, save straight to the downloads folder unless the user asks to choose. */
+function irisDownloadDir () {
+  return settings.get('irisDownloadDir') || app.getPath('downloads')
+}
+
+/* The same file is already in the download folder (same name, same size): no need for a copy. */
+function irisAlreadyInFolder (item) {
+  try {
+    const name = (item.getFilename() || '').replace(/[/\\:]/g, '_')
+    if (!name) return null
+    const existing = path.join(irisDownloadDir(), name)
+    if (!fs.existsSync(existing)) return null
+    const total = item.getTotalBytes()
+    return total > 0 && fs.statSync(existing).size === total ? existing : null
+  } catch (e) {
+    return null
+  }
+}
+
 function irisSaveDownload (item) {
-  const dir = settings.get('irisDownloadDir') || app.getPath('downloads')
+  const dir = irisDownloadDir()
   const name = (item.getFilename() || 'download').replace(/[/\\:]/g, '_')
   const ext = path.extname(name)
   const base = path.basename(name, ext)
@@ -2058,8 +2077,17 @@ function irisOnDownload (event, item) {
     broadcastEvent({ type: 'download', state: 'skipped', name: item.getFilename(), existing: path.basename(earlier.path) })
     return
   }
+  const same = irisAlreadyInFolder(item)
+  if (same) {
+    event.preventDefault()
+    computer.notes = (computer.notes || []).concat('Skipped a download: "' + path.basename(same) + '" is already in the Downloads folder (same file). Move on to the next one.')
+    broadcastEvent({ type: 'download', state: 'skipped', name: item.getFilename(), existing: path.basename(same) })
+    irisDownloads().add('download', 'Already had ' + path.basename(same), { name: path.basename(same), url: item.getURL(), path: same, bytes: item.getTotalBytes() })
+    irisDownloadsSave()
+    return
+  }
   try {
-    const dir = app.getPath('downloads')
+    const dir = irisDownloadDir()
     const name = (item.getFilename() || 'download').replace(/[/\\:]/g, '_')
     const ext = path.extname(name)
     const base = path.basename(name, ext)

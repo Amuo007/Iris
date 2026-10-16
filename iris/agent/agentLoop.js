@@ -42,6 +42,7 @@ const DEFAULTS = {
   planLookupsDeep: 8,
   runLookups: 6, // look-ups during a run (the lookup action); 0 turns the action off
   maxServerWaitMs: 10 * 60 * 1000, // 0 = wait for the model server forever (non-stop runs)
+  askTimeoutMs: 0, // non-stop runs: if a question is not answered in time, carry on without it (0 = wait)
   coordinateSpace: 'auto'
 }
 
@@ -99,6 +100,7 @@ function createAgent (opts) {
   let finishChecked = false
   let runLookups = 0
   let smartLevel = null
+  let asking = false // paused on an ask_user question (may time out in a non-stop run)
 
   /* a look-up never fails the run: an error comes back as text the model can read */
   async function runLookup (req) {
@@ -129,13 +131,29 @@ function createAgent (opts) {
     return r && typeof r.then === 'function' ? r : Promise.resolve(r)
   }
 
-  /** Block while paused; resolve false if the run was stopped while waiting. */
-  function waitForResume () {
+  /**
+   * Block while paused; resolve false if the run was stopped while waiting. With a timeout (a
+   * question in a non-stop run), an unanswered pause ends by itself and onTimeout says so.
+   */
+  function waitForResume (timeoutMs, onTimeout) {
     if (stopRequested) return Promise.resolve(false)
     if (!pauseRequested) return Promise.resolve(true)
     setStatus('paused')
-    emit('pause:waiting', { step: state.step })
-    return new Promise(function (resolve) { resumeDeferred = { resolve } })
+    emit('pause:waiting', { step: state.step, timeoutMs: timeoutMs || 0 })
+    return new Promise(function (resolve) {
+      resumeDeferred = { resolve }
+      if (timeoutMs > 0) {
+        delay(timeoutMs).then(function () {
+          if (resumeDeferred && resumeDeferred.resolve === resolve && !stopRequested) {
+            if (onTimeout) onTimeout()
+            pauseRequested = false
+            emit('resume', { timedOut: true })
+            setStatus('running')
+            resolveResume()
+          }
+        })
+      }
+    })
   }
 
   async function modelNext (messages, step, obs) {
@@ -265,7 +283,20 @@ function createAgent (opts) {
           }).concat(convo)
           // Quick plans with light thinking; Deep (and "full" thinking users) think it through
           const thinking = smartLevel === 'quick' && cfg.planThinking === 'medium' ? 'low' : cfg.planThinking
-          reply = await model.next({ messages, step: 0, thinking, history: [], signal: undefined })
+          modelAbort = typeof AbortController === 'function' ? new AbortController() : null
+          const planStarted = now()
+          try {
+            reply = await model.next({
+              messages,
+              step: 0,
+              thinking,
+              history: [],
+              signal: modelAbort ? modelAbort.signal : undefined,
+              onProgress: function (p) { emit('model:progress', Object.assign({ step: 0, planning: true, elapsedMs: now() - planStarted }, p, { reasoning: undefined })) }
+            })
+          } finally {
+            modelAbort = null
+          }
           if (stopRequested) return finish('stopped', stopRequested)
           text = String(typeof reply === 'string' ? reply : (reply && reply.content) || '').trim()
 
@@ -276,7 +307,7 @@ function createAgent (opts) {
             lastAnswer = ''
             emit('questions', { questions })
             pauseRequested = true
-            if (!(await waitForResume())) return finish('stopped', stopRequested)
+            if (!(await waitForResume(cfg.askTimeoutMs))) return finish('stopped', stopRequested)
             answers = lastAnswer || '(the user skipped the questions: use your best judgement)'
             continue
           }
@@ -323,12 +354,18 @@ function createAgent (opts) {
     let compactions = 0
     let lastFingerprint = null
     let lastActed = null
+    asking = false
 
     /* eslint-disable no_constant_condition */
     while (true) {
       // ---- 1. human controls + stop conditions -------------------------------
       if (stopRequested) return finish('stopped', stopRequested)
-      if (pauseRequested && !(await waitForResume())) return finish('stopped', stopRequested)
+      if (pauseRequested && !(await waitForResume(asking ? cfg.askTimeoutMs : 0, function () {
+        history.addSystemNote('The user did not answer within ' + Math.round(cfg.askTimeoutMs / 60000) + ' minutes and may be away. ' +
+          'Carry on without it: skip whatever needs them (another site, another item) and continue the task.')
+        emit('ask:timeout', { step: state.step })
+      }))) return finish('stopped', stopRequested)
+      asking = false
       if (pendingApproval) {
         // resumed after a sensitive-action pause: the human approved that action (or the payment)
         approvedKey = pendingApproval
@@ -620,8 +657,9 @@ function createAgent (opts) {
     // ---- ask the human: pause until they answer (or just press Resume) ------------
     if (action.type === 'ask_user') {
       emit('action', { step: state.step, index, total, action, actionView: mapped, anchor: null, description: describeAction(action), automatic: false })
-      emit('ask', { step: state.step, question: action.question })
+      emit('ask', { step: state.step, question: action.question, timeoutMs: cfg.askTimeoutMs || 0 })
       pauseRequested = true
+      asking = true
       return { stopBatch: true }
     }
 
