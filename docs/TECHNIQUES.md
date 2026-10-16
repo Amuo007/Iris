@@ -5,7 +5,7 @@ One entry per technique: **what it does**, **before**, **now**, **how** (the act
 screenshot and says what to do. Everything below is Iris's own code — the hands, eyes and memory
 around that brain. Most speed and accuracy gains come from here, not from the model.
 
-Updated 2026-10-16.
+Updated 2026-10-16 (evening).
 
 ---
 
@@ -242,6 +242,11 @@ Updated 2026-10-16.
   the end). Too long → cut the least important thing (the longest bullet list first, projects
   before jobs) and build again; room left → add the next best bullet or project while it fits.
 - **Result:** 0.37 s per build; tailored resumes came out at 91–98 % of one page.
+- **Fixed today — the right PDF:** every build writes the same `resume.pdf`. When the last "add one
+  more bullet" try ran onto page 2, Iris kept the 1-page layout but copied the 2-page PDF on disk.
+  Now each build's PDF bytes travel with that build's result, and the PDF saved is the one of the
+  layout kept. (All 32 PDFs made today were checked with pdf.js: one page each, so it had not hit
+  yet; a unit test now forces the case.)
 
 ### 20. Using your own LaTeX resume
 - **How:** Iris finds each `\section`, the command that starts every entry (e.g.
@@ -258,6 +263,11 @@ Updated 2026-10-16.
   (3 jobs, 2 projects, 26 skills, 18 bullets) → a tailored resume in the imported layout.
 - **Anything else:** sections Iris cannot follow stay as written; you can add markers by hand
   ([RESUME-TEMPLATES.md](RESUME-TEMPLATES.md)).
+- **Your resume's own files (fixed today):** the `.cls`, `.sty`, fonts and pictures next to your
+  resume are copied into a `files/` folder. Before, they sat next to Iris's marked-up copy, so a file
+  of yours called `template.tex` (common in Overleaf downloads) replaced it. Copying is capped at
+  80 files / 60 MB, the files the build needs go first (class, styles, a `fonts/` folder), and PDFs
+  last — picking a resume straight out of a busy Documents folder no longer copies every PDF in it.
 
 ### 20b. Paste anything into the profile (new today)
 - **What:** Settings → Career profile → "Add from text": paste an old resume, notes or an export;
@@ -302,6 +312,11 @@ Updated 2026-10-16.
   degree) is answered "No"; personal facts are never assumed.
 
 ### 21. Applying
+- **When Jobs mode is on (fixed today):** only for job hunting. Before, any task with "apply" or
+  "resume" in it switched it on — "apply the coupon at checkout" or "resume the download" would
+  have got the job instructions and the pause before submitting. Now it needs job words around them
+  ("apply … roles", "find … jobs", "a job in Toronto", "tailor my resume", "cover letter"); "papers
+  about job scheduling" and "the role of …" stay out. 18 sentences in a unit test.
 - Read the posting → `tailor_resume` → skip if below your cutoff (default 60) → fill from My info
   and your saved answers → upload "resume" (Iris picks the PDF it just made; long paths were
   mistyped once) → submit (or wait for your OK if you chose "Ask me first") → `log_application`.
