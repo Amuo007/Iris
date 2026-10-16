@@ -1280,7 +1280,9 @@ IrisComputer.prototype.act = async function (action) {
         status: action.status,
         company: action.company || (job && job.company) || '',
         title: action.title || (job && job.title) || '',
-        url: (job && job.url) || action.url || (job || !tailored.length ? wc.getURL() : ''),
+        // a job named here without a resume (ruled out from a list) has no link of its own: the page open
+        // now is the list, and two skips from one list must not share it (the second would replace the first)
+        url: (job && job.url) || action.url || (action.title ? '' : wc.getURL()),
         note: action.note || '',
         resume: (job && job.resume) || '',
         fit: job && job.fit !== undefined ? job.fit : null,
