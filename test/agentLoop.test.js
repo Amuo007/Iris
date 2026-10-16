@@ -741,3 +741,31 @@ test('without a timeout a question waits for the user', async () => {
   h.agent.answer('M')
   assert.strictEqual((await running).status, 'done')
 })
+
+test('the final answer is checked: details Iris never saw are taken out', async () => {
+  const answer = 'Booked Hiawatha 331, Chicago to Denver on Nov 12, 08:00 to 16:30, seat 2A, $29 total.'
+  const scroll = () => json('s', { type: 'scroll', direction: 'down' })
+  const h = harness([scroll(), scroll(), scroll(), scroll(),
+    json('ready', { type: 'done', answer }),
+    (ctx) => { h.checkCtx = ctx; return JSON.stringify({ unsupported: ['08:00 to 16:30'], answer: 'Booked Hiawatha 331, Chicago to Denver on Nov 12, seat 2A, $29 total.' }) }
+  ])
+  const r = await h.agent.run('book a train')
+  assert.strictEqual(r.answer, 'Booked Hiawatha 331, Chicago to Denver on Nov 12, seat 2A, $29 total.')
+  assert.strictEqual(h.checkCtx.thinking, 'off')
+  assert.ok(JSON.stringify(h.checkCtx.messages).includes('image_url'), 'the checker sees the last screenshot')
+  assert.deepStrictEqual(ev(h.events, 'answer:checked')[0].removed, ['08:00 to 16:30'])
+})
+
+test('a checker reply that throws most of the answer away is ignored', async () => {
+  const answer = 'The cheapest flight is Frontier at 6:30 AM for $183; next are American, United and Southwest at $317.'
+  const scroll = () => json('s', { type: 'scroll', direction: 'down' })
+  const h = harness([scroll(), scroll(), scroll(), scroll(), json('done', { type: 'done', answer }), JSON.stringify({ unsupported: ['$317'], answer: 'Frontier.' })])
+  const r = await h.agent.run('cheapest flight')
+  assert.strictEqual(r.answer, answer)
+})
+
+test('short answers without numbers are not checked', async () => {
+  const h = harness([json('done', { type: 'done', answer: 'Done, the page is open.' })])
+  await h.agent.run('open the page')
+  assert.strictEqual(h.model.callCount, 1)
+})

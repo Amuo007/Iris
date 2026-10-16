@@ -251,3 +251,13 @@ test('bookmark can name a URL and remove it', () => {
   const r = validateAction({ type: 'bookmark', url: 'https://a.test', remove: 'true' }, LIMITS)
   assert.deepStrictEqual(r.action, { type: 'bookmark', url: 'https://a.test', remove: true })
 })
+
+test('a list of actions nested inside "action" is still a batch, and remember inside it counts', () => {
+  const a = parseAction('{"thought":"fill","action":{"actions":[{"type":"type","text":"Iris","x":10,"y":10},{"type":"click","x":20,"y":20}],"remember":"Train 331 06:10-07:39"}}', LIMITS)
+  assert.strictEqual(a.ok, true)
+  assert.deepStrictEqual(a.actions.map(x => x.type), ['type', 'click'])
+  assert.strictEqual(a.remember, 'Train 331 06:10-07:39')
+  const b = parseAction('{"thought":"fill","action":{"type":"actions","actions":[{"type":"click","x":1,"y":1}]}}', LIMITS)
+  assert.strictEqual(b.ok, true)
+  assert.strictEqual(b.actions.length, 1)
+})

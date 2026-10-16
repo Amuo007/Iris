@@ -977,7 +977,10 @@ function handleEvent (payload) {
       setStatus(keep, 'Looking at the page…')
       break
     case 'model:start':
-      setStatus(keep, 'Thinking…')
+      setStatus(keep, payload.checking ? 'Checking the answer…' : 'Thinking…')
+      break
+    case 'answer:checked':
+      addNote('Left out what Iris could not confirm on the page: ' + (payload.removed || []).join('; '), 'memo')
       break
     case 'model:progress':
       if (payload.planning) setStatus(keep, 'Planning · ' + Math.round((payload.elapsedMs || 0) / 1000) + 's')

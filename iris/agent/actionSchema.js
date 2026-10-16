@@ -617,6 +617,10 @@ function parseAction (rawText, limits) {
     } else if (Array.isArray(obj.action) && obj.action.length) {
       batch = obj.action
       thought = toStringValue(obj.thought ?? obj.reasoning ?? obj.explanation)
+    } else if (isPlainObject(obj.action) && Array.isArray(obj.action.actions) && obj.action.actions.length) {
+      // {"action":{"actions":[...]}} or {"action":{"type":"actions","actions":[...]}}: a list put one level too deep
+      batch = obj.action.actions
+      thought = toStringValue(obj.thought ?? obj.reasoning ?? obj.explanation)
     } else if (isPlainObject(obj.action)) {
       actionObj = obj.action
       thought = toStringValue(obj.thought ?? obj.reasoning ?? obj.reason ?? obj.explanation)
@@ -628,8 +632,9 @@ function parseAction (rawText, limits) {
       thought = toStringValue(obj.thought ?? obj.reasoning ?? obj.reason ?? obj.explanation)
     }
 
-    const remember = toStringValue(obj.remember ?? obj.note ?? obj.memory)
-    const learn = toStringValue(obj.learn ?? obj.skill ?? obj.lesson)
+    const inner = isPlainObject(obj.action) ? obj.action : {}
+    const remember = toStringValue(obj.remember ?? obj.note ?? obj.memory ?? inner.remember)
+    const learn = toStringValue(obj.learn ?? obj.skill ?? obj.lesson ?? inner.learn)
 
     if (batch) {
       const actions = []
@@ -776,6 +781,9 @@ const ACTION_SPEC_TEXT = [
   '- Close tabs you opened only to help (an email inbox, a pop-up) once you are done with them.',
   '- Report only what you saw on a page or in look-up results during this task. Never fill in titles,',
   '  names, numbers or facts from memory; if you could not find or confirm something, leave it out or say so.',
+  '- Details you will need for the final answer (times, prices, names, codes) and that will leave the',
+  '  screen: save them with "remember" when you see them. Before "done", check each detail of your answer',
+  '  against the screenshot or your notes; leave out anything that is in neither.',
   '- As soon as the screenshot shows the answer, reply "done" with the answer. If you found a faster way',
   '  around this site than the obvious one, include "learn" in that same reply.'
 ].join('\n')

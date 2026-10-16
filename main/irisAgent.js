@@ -1824,6 +1824,7 @@ function startAgent (task, options) {
         DBUG('usage step ' + payload.step + ' prompt=' + payload.usage.prompt_tokens + ' completion=' + payload.usage.completion_tokens + ' ms=' + payload.modelMs)
       }
       if (type !== 'model:progress') DBUG('event ' + type + ' ' + JSON.stringify(payload && (payload.status || payload.description || payload.error || payload.thought || '') || ''))
+      if (type === 'rejected') DBUG('rejected raw: ' + String(payload.raw || '').slice(0, 2500))
       irisRecord(session, type, payload)
       if (type === 'run:end') {
         irisAgentState.status = payload.status

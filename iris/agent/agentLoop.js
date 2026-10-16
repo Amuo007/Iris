@@ -41,6 +41,7 @@ const DEFAULTS = {
   planLookupsQuick: 3, // look-ups the Smart planner may make (Quick / Deep)
   planLookupsDeep: 8,
   runLookups: 6, // look-ups during a run (the lookup action); 0 turns the action off
+  answerCheck: true, // one quick call removes details from the final answer that Iris never saw
   maxServerWaitMs: 10 * 60 * 1000, // 0 = wait for the model server forever (non-stop runs)
   askTimeoutMs: 0, // non-stop runs: if a question is not answered in time, carry on without it (0 = wait)
   coordinateSpace: 'auto'
@@ -565,6 +566,36 @@ function createAgent (opts) {
     }
   }
 
+  /*
+   * Before the answer is shown: a quick, thinking-free call checks it against what Iris noted and
+   * saw, and takes out details that appear nowhere (an invented time, a guessed price).
+   */
+  async function checkAnswer (answer, obs) {
+    // short tasks answer from the screen in front of them; long ones are where details get invented
+    if (!cfg.answerCheck || !answer || answer.length < 60 || !/\d/.test(answer) || state.step < 5) return answer
+    try {
+      const evidence = history.transcript().filter(function (e) { return e.thought || e.kind === 'note' || e.kind === 'followup' })
+        .map(function (e) { return '- ' + (e.thought || e.text) }).join('\n')
+      const notes = history.notes().map(function (n) { return '- note: ' + n }).join('\n')
+      const digest = history.digest().join('\n')
+      const text = [digest, notes, evidence].filter(Boolean).join('\n').slice(-9000)
+      emit('model:start', { step: state.step, checking: true })
+      const reply = await model.next({
+        messages: prompts.answerCheckMessages(state.task, answer, text, obs && obs.dataUrl),
+        step: state.step,
+        thinking: 'off',
+        history: []
+      })
+      const fixed = prompts.parseAnswerCheck(typeof reply === 'string' ? reply : (reply && reply.content), answer)
+      if (!fixed) return answer
+      emit('answer:checked', { step: state.step, removed: fixed.removed })
+      return fixed.answer
+    } catch (err) {
+      log('answer check failed: ' + (err && err.message))
+      return answer
+    }
+  }
+
   /** Carry out one parsed action. Returns { finished } to end the run, { stopBatch } to re-look. */
   async function perform (action, index, total, mapping, obs, pageState, unchanged) {
     // ---- terminal states -----------------------------------------------------
@@ -577,7 +608,7 @@ function createAgent (opts) {
         emit('finish:check', { step: state.step })
         return { stopBatch: true }
       }
-      if (action.type === 'done') return { finished: finish('done', null, action.answer || null) }
+      if (action.type === 'done') return { finished: finish('done', null, await checkAnswer(action.answer || null, obs)) }
       return { finished: finish('failed', action.reason || 'the model reported the task as impossible') }
     }
 

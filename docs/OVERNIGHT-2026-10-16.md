@@ -81,6 +81,7 @@ Draft, updated through the night. The final version is at the end of the night.
 | Coding-agent bridge via MCP (type, type, click on a login page) | **works**, each action < 1 s |
 | Train booking (local site: autocomplete, date, seat map, upsell pop-up, cookie bar) | **done**, 12 steps, 2 min 21 s; right train, seats 2A+2B, declined insurance, stopped at payment. One misread: arrival 07:32 instead of 07:39 |
 | Dentist appointment (local site: calendar, slots, chat pop-up) | **done**, 15 steps, 3 min 41 s, right day/slot and reference. Asked you for a phone number (not in My info); got confused about weekdays once → added a calendar hint |
+| Cheapest one-way flight Chicago → Denver next Friday (Google Flights, Smart Quick) | **done**, 32 steps, 6 min 23 s: Frontier 6:30 AM ORD–DEN nonstop $183, checked against the screenshot. Lost time to stale autocomplete lists ("New Denver") → added a pause after typing + a rule |
 
 ## Blocked / needs you
 
@@ -91,3 +92,15 @@ Draft, updated through the night. The final version is at the end of the night.
   `mv6rrjbl-a0fdya` (the "find 3 more good ones" chat). All later tests run in a separate test profile.
 - Files the early tests downloaded into your real `~/Downloads`: `2608.24848v1.pdf`, `2601.05787v2.pdf`,
   `2606.29705v1.pdf`, `2610.05185v1 (1).pdf` (a duplicate). Later tests download into a scratch folder.
+
+## How to try it
+
+1. Open Iris, press **Ask Iris**.
+2. Switch on **Smart** (bottom right of the panel); click **Quick** to change it to **Deep**.
+3. Try: *"Find 4 good 2026 papers about web agents that act only from screenshots. Judge each by
+   its abstract, download the PDFs of the ones you keep."* You'll see the look-ups, the plan, ✓ Kept
+   notes, the downloads, and at the end a report file `Iris report - … .md` in Downloads.
+4. Settings → **History**, **Cookies & site data**, **Look-ups**, **Skills** (Your skills, Plans that
+   worked), **Coding agents**.
+5. Coding agents: turn it on, press **Copy**, paste into your coding agent's MCP config (Claude Code:
+   `.mcp.json` or `claude mcp add`), restart the agent, then ask it to "take a screenshot with Iris".

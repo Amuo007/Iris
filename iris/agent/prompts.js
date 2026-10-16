@@ -87,6 +87,41 @@ function parseQuestions (text) {
   }
 }
 
+/**
+ * One quick call before a final answer is shown: remove details Iris never saw. The checker gets
+ * the task, the answer, what Iris noted and thought along the way, and the last screenshot.
+ */
+function answerCheckMessages (task, answer, evidence, dataUrl) {
+  const system = [
+    'You check the final answer of Iris, an AI agent that just did a task in a web browser.',
+    'Iris may only report what it actually saw. Its notes and step-by-step thoughts are below, with the last screenshot.',
+    'List every specific detail in the answer (time, date, price, number, name, code, link) that appears neither in the',
+    'notes and thoughts nor in the screenshot. Then rewrite the answer without those details, keeping everything else',
+    'word for word. Reply with JSON only: {"unsupported":["<detail>",...],"answer":"<rewritten answer>"}.',
+    'If every detail is supported, reply {"unsupported":[]}.'
+  ].join('\n')
+  const text = 'Task: ' + task + '\n\nAnswer to check:\n' + answer + '\n\nWhat Iris noted and thought during the task:\n' + evidence
+  const content = [{ type: 'text', text }]
+  if (dataUrl && dataUrl !== 'omitted') content.push({ type: 'image_url', image_url: { url: dataUrl } })
+  return [{ role: 'system', content: system }, { role: 'user', content }]
+}
+
+/** {"unsupported":[...],"answer":"..."} from the checker, or null when it found nothing to fix. */
+function parseAnswerCheck (text, original) {
+  const m = /\{[\s\S]*"unsupported"[\s\S]*\}/.exec(String(text || ''))
+  if (!m) return null
+  try {
+    const obj = JSON.parse(m[0])
+    const removed = (obj.unsupported || []).map(function (x) { return String(x).slice(0, 120) }).filter(Boolean)
+    const answer = typeof obj.answer === 'string' ? obj.answer.trim() : ''
+    // never accept a rewrite that throws most of the answer away
+    if (!removed.length || !answer || answer.length < String(original || '').length * 0.4) return null
+    return { removed, answer }
+  } catch (e) {
+    return null
+  }
+}
+
 /** The look-up results, handed back to the planner. */
 function lookupResultsMessage (results, more) {
   return 'Look-up results:\n\n' + results.join('\n\n') + '\n\n' +
@@ -237,6 +272,8 @@ module.exports = {
   parseQuestions,
   planText,
   planReminder,
+  answerCheckMessages,
+  parseAnswerCheck,
   lookupResultsMessage,
   reviewNote,
   finishCheckNote,

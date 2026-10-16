@@ -127,7 +127,8 @@ key stored in a file only you can read.
 { "mcpServers": { "iris": { "command": "node", "args": ["/Users/<you>/Library/Application Support/Iris/iris-mcp.js"] } } }
 ```
 
-Settings shows the exact snippet with your path; **Copy** puts it on the clipboard. Tools: `iris_screenshot`,
+Settings shows the exact snippet with your path; **Copy** puts it on the clipboard. With Claude Code
+you can also run `claude mcp add iris -- node "/Users/<you>/Library/Application Support/Iris/iris-mcp.js"`. Tools: `iris_screenshot`,
 `iris_click`, `iris_type`, `iris_key`, `iris_scroll`, `iris_hover`, `iris_drag`, `iris_navigate`, `iris_back`,
 `iris_tabs`, `iris_new_tab`, `iris_switch_tab`, `iris_close_tab`, `iris_find`, `iris_wait`. Every action returns a
 fresh screenshot unless you pass `"look": false`.
