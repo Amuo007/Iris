@@ -383,6 +383,13 @@ function irisMergeImported (bank) {
     if (!irisCareer.extras.some(function (y) { return same(y.text, x.text) })) { irisCareer.extras.push(x); added++ }
   })
   if (bank.about && !irisCareer.about) { irisCareer.about = bank.about; added++ }
+  // contact details fill only empty fields; links are added if new
+  if (bank.basics) {
+    ;['name', 'email', 'phone', 'location'].forEach(function (k) { if (bank.basics[k] && !irisCareer.basics[k]) { irisCareer.basics[k] = bank.basics[k]; added++ } })
+    ;(bank.basics.links || []).forEach(function (l) {
+      if (!irisCareer.basics.links.some(function (x) { return same(x.url, l.url) })) { irisCareer.basics.links.push(l); added++ }
+    })
+  }
   return added
 }
 
@@ -416,6 +423,15 @@ function irisRenderTemplate (data) {
   document.getElementById('iris-resume-dir').textContent = (data.resumeDir || '').replace(/^\/Users\/[^/]+/, '~')
   document.getElementById('iris-tailor-thinking').value = data.tailorThinking || 'off'
 }
+
+document.getElementById('iris-career-paste-run').addEventListener('click', function () {
+  var text = document.getElementById('iris-career-paste-text').value.trim()
+  var status = document.getElementById('iris-career-paste-status')
+  if (text.length < 20) { status.textContent = 'Paste a bit more text first.'; return }
+  this.disabled = true
+  status.textContent = 'Sorting… (about a minute for a page of text)'
+  irisAction('careerFromText', { text: text })
+})
 
 document.getElementById('iris-template-import').addEventListener('click', function () { irisAction('templateImport') })
 document.getElementById('iris-career-from-tex').addEventListener('click', function () { irisAction('templateImport') })
@@ -483,6 +499,19 @@ window.addEventListener('message', function (e) {
   if (!e.data || e.data.message !== 'irisSettingsActionResult') return
   var d = e.data.data || {}
   var r = d.result || {}
+  if (d.action === 'careerFromText') {
+    document.getElementById('iris-career-paste-run').disabled = false
+    var so = r.sorted || {}
+    var st = document.getElementById('iris-career-paste-status')
+    if (!so.ok) { st.textContent = so.error || 'Could not sort it.'; return }
+    var added = irisMergeImported(so.bank)
+    irisRenderCareer()
+    irisCareerScheduleSave()
+    document.getElementById('iris-career-paste-text').value = ''
+    st.textContent = 'Added ' + added + (added === 1 ? ' thing' : ' things') + '. Check the cards below.' +
+      (so.dropped && so.dropped.length ? ' Left out ' + so.dropped.length + ' line(s) that were not in your text: ' + so.dropped.slice(0, 3).join(' · ') : '')
+    return
+  }
   if (['careerGet', 'careerSave', 'templateImport', 'templateBuiltin', 'templateShow', 'resumePreview', 'resumeDirChoose'].indexOf(d.action) !== -1) {
     if (r.error && !r.bank) { irisCareerStatus.textContent = r.error; return }
     if (d.action === 'careerSave') {

@@ -1168,6 +1168,73 @@ function parseTailorReply (text, bank, job, parseObject) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Sorting pasted text (an old resume, notes, an export) into the bank
+ * ------------------------------------------------------------------ */
+
+function profileFromTextMessages (text) {
+  const system = [
+    'You sort what a person pasted about their career into a structured profile. Copy their words: keep every',
+    'bullet as written (fix only obvious typos), never add, merge or embellish anything, never guess dates or places.',
+    'Reply with one JSON object and nothing else:',
+    '{"basics":{"name":"…","email":"…","phone":"…","location":"…","links":[{"label":"…","url":"…"}]},',
+    ' "skills":[{"group":"<e.g. Languages, Cloud>","items":["…"]}],',
+    ' "experience":[{"title":"…","company":"…","location":"…","dates":"…","bullets":["…"]}],',
+    ' "projects":[{"name":"…","tech":"…","link":"…","dates":"…","bullets":["…"]}],',
+    ' "education":[{"school":"…","degree":"…","location":"…","dates":"…","details":["…"]}],',
+    ' "extras":[{"kind":"Certification|Award|Publication|Language|Other","text":"…"}],',
+    ' "about":"<other true facts they gave (not name or contact details), in their words, or empty>"}',
+    'Leave out what is not there. Newest jobs first, as they appear.'
+  ].join('\n')
+  return [{ role: 'system', content: system }, { role: 'user', content: String(text || '').slice(0, 30000) }]
+}
+
+/* share of a line's content words that appear in the source (stemmed) */
+function overlap (line, sourceStems) {
+  const w = words(line).filter(function (x) { return x.length >= 3 })
+  if (!w.length) return 1
+  return w.filter(function (x) { return sourceStems.has(stem(x)) }).length / w.length
+}
+
+/**
+ * The model's sorting → a bank to merge. Anything that is not really in the pasted text (a bullet
+ * whose words are mostly new, a number that is not there) is dropped and listed in `dropped`.
+ */
+function parseProfileFromText (reply, source, parseObject) {
+  let obj = null
+  if (parseObject) {
+    const raw = String(reply || '')
+    const a = raw.indexOf('{')
+    const b = raw.lastIndexOf('}')
+    if (a !== -1 && b > a) obj = parseObject(raw.slice(a, b + 1))
+  }
+  if (!obj) return { ok: false, error: 'the model did not return a profile', bank: null, dropped: [] }
+  const stems = new Set(words(source).map(stem))
+  const nums = numberSet(source)
+  const dropped = []
+  const keep = function (line, where) {
+    const t = str(line, 600)
+    if (!t) return false
+    const badNum = factTokens(t).filter(function (x) { return /^\d/.test(x) && !nums.has(x) && !nums.has(x.replace(/[^0-9.]/g, '')) })
+    if (overlap(t, stems) < 0.7 || badNum.length) { dropped.push(where + ': ' + t); return false }
+    return true
+  }
+  const bank = normalizeBank(obj)
+  bank.experience.forEach(function (e) { e.bullets = e.bullets.filter(function (b) { return keep(b, e.title || e.company) }) })
+  bank.projects.forEach(function (p) { p.bullets = p.bullets.filter(function (b) { return keep(b, p.name) }) })
+  bank.education.forEach(function (e) { e.details = e.details.filter(function (b) { return keep(b, e.school) }) })
+  bank.extras = bank.extras.filter(function (x) { return keep(x.text, 'extra') })
+  bank.skills.forEach(function (g) { g.items = g.items.filter(function (it) { return overlap(it, stems) >= 0.5 || (dropped.push('skill: ' + it) && false) }) })
+  bank.skills = bank.skills.filter(function (g) { return g.items.length })
+  if (bank.about && overlap(bank.about, stems) < 0.7) { dropped.push('about: ' + bank.about.slice(0, 80)); bank.about = '' }
+  // contact details must appear in the text as they are
+  ;['name', 'email', 'phone', 'location'].forEach(function (k) {
+    const v = bank.basics[k]
+    if (v && String(source).toLowerCase().indexOf(v.toLowerCase()) === -1 && overlap(v, stems) < 1) bank.basics[k] = ''
+  })
+  return { ok: true, bank: bank, dropped: dropped }
+}
+
+/* ------------------------------------------------------------------ *
  * Cover letters: short, honest, only from the bank
  * ------------------------------------------------------------------ */
 
@@ -1444,6 +1511,8 @@ module.exports = {
   parseTailorReply,
   coverLetterMessages,
   parseCoverLetter,
+  profileFromTextMessages,
+  parseProfileFromText,
   coverLetterTex,
   keywordPick,
   checkRewrite,

@@ -1244,3 +1244,18 @@ body.dark-mode .iris-status-needs_you {
 .iris-skill-group .iris-row-delete {
   padding-top: 5px;
 }
+.iris-career-paste {
+  max-width: 760px;
+  margin: 0 0 6px;
+  padding: 10px 12px;
+  border: 1px dashed var(--s-line-strong);
+  border-radius: 10px;
+  font-size: 13px;
+}
+.iris-career-paste summary {
+  cursor: pointer;
+  color: var(--s-text-2);
+}
+.iris-career-paste[open] summary {
+  margin-bottom: 8px;
+}

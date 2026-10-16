@@ -434,6 +434,18 @@ function irisJobsSettingsAction (action, args) {
         const r = irisTemplateImport(pick.filePaths[0])
         return Object.assign(irisCareerForPage(), { imported: r })
       })
+    case 'careerFromText': {
+      const text = String((args && args.text) || '').trim()
+      if (text.length < 20) return Promise.resolve(Object.assign(irisCareerForPage(), { sorted: { ok: false, error: 'Paste a bit more text first.' } }))
+      const cfg = irisSettings()
+      const model = irisLockedModel(irisModelClient.createModelClient({ baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0.1, thinking: 'off', timeoutMs: Math.max(cfg.modelTimeoutMs, 240000) }), cfg.baseUrl)
+      return model.next({ messages: irisCareerLib.profileFromTextMessages(text), thinking: 'off' }).then(function (reply) {
+        const out = typeof reply === 'string' ? reply : (reply && reply.content) || ''
+        return Object.assign(irisCareerForPage(), { sorted: irisCareerLib.parseProfileFromText(out, text, irisActionSchema.parseObjectLoose) })
+      }, function (err) {
+        return Object.assign(irisCareerForPage(), { sorted: { ok: false, error: 'The model did not answer: ' + err.message } })
+      })
+    }
     case 'templateBuiltin':
       settings.set('irisResumeTemplate', { kind: 'builtin' })
       return Promise.resolve(irisCareerForPage())

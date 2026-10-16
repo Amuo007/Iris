@@ -177,3 +177,16 @@ test('a cover letter keeps only sentences the profile supports', () => {
   assert.match(tex, /Dear Hiring Team/)
   assert.match(tex, /brown-out resets by 90\\%/)
 })
+
+test('pasted text is sorted in without anything added', () => {
+  const source = 'Jordan Lee\nSoftware Engineer, Northwind Robotics, Jul 2025 - Present\n- Built a fleet telemetry pipeline on AWS ingesting 2M events per day\nSkills: Python, Go, Terraform'
+  const reply = JSON.stringify({
+    skills: [{ group: 'Languages', items: ['Python', 'Go', 'Haskell'] }],
+    experience: [{ title: 'Software Engineer', company: 'Northwind Robotics', dates: 'Jul 2025 - Present', bullets: ['Built a fleet telemetry pipeline on AWS ingesting 2M events per day', 'Led a migration to Kubernetes saving 40% of costs'] }]
+  })
+  const r = career.parseProfileFromText(reply, source, parseObjectLoose)
+  assert.ok(r.ok)
+  assert.deepStrictEqual(r.bank.experience[0].bullets, ['Built a fleet telemetry pipeline on AWS ingesting 2M events per day'])
+  assert.deepStrictEqual(r.bank.skills[0].items, ['Python', 'Go'])
+  assert.strictEqual(r.dropped.length, 2)
+})
