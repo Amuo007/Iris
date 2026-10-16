@@ -18,6 +18,7 @@
  */
 
 const prompts = require('./prompts')
+const { extractIds } = require('./memory')
 
 const DEFAULTS = {
   keepImages: 1,
@@ -47,6 +48,7 @@ function createHistory (options) {
   let files = [] // every file downloaded in this chat, kept compactly for long runs
   let kept = [] // judge decisions: names kept
   let skipped = 0
+  let judgedIds = [] // arXiv IDs / DOIs of everything judged, kept or not: never opened again
   let digest = [] // one line per step that fell out of the window
   let digestDropped = 0
   let observationCount = 0
@@ -116,6 +118,7 @@ function createHistory (options) {
       files = []
       kept = []
       skipped = 0
+      judgedIds = []
       digest = []
       digestDropped = 0
       observationCount = 0
@@ -171,8 +174,12 @@ function createHistory (options) {
       return e ? e.plan || null : null
     },
 
-    addVerdict (item, keep) {
+    addVerdict (item, keep, url) {
       if (keep) { if (!kept.includes(item)) kept.push(item) } else skipped++
+      extractIds(String(item || '') + ' ' + String(url || '')).forEach(function (id) {
+        const short = id.replace(/^arxiv:/, '').replace(/^doi:/, 'doi ')
+        if (!judgedIds.includes(short)) judgedIds.push(short)
+      })
     },
 
     decisions () {
@@ -257,7 +264,7 @@ function createHistory (options) {
             if (digest.length) text += '\n' + prompts.digestText(digest, digestDropped)
             const visited = Object.keys(sites).map(h => Object.assign({ host: h }, sites[h])).sort((a, b) => b.order - a.order)
             if (visited.length > 1 || (visited[0] && visited[0].host !== hostOf(e.url))) text += '\n' + prompts.sitesText(visited.slice(0, 6), hostOf(e.url))
-            if (kept.length || skipped) text += '\n' + prompts.decisionsText(kept, skipped)
+            if (kept.length || skipped) text += '\n' + prompts.decisionsText(kept, skipped, judgedIds)
             if (files.length) text += '\n' + prompts.filesText(files)
             if (notes.length) text += '\n' + prompts.notesText(notes.slice(-cfg.notesShown), Math.max(0, notes.length - cfg.notesShown))
             const plan = entries.find(x => x.kind === 'plan')
@@ -285,6 +292,7 @@ function createHistory (options) {
         files: files.slice(),
         kept: kept.slice(),
         skipped,
+        judgedIds: judgedIds.slice(),
         digest: digest.slice(),
         digestDropped,
         observationCount,
@@ -300,6 +308,7 @@ function createHistory (options) {
       files = Array.isArray(data.files) ? data.files.slice() : []
       kept = Array.isArray(data.kept) ? data.kept.slice() : []
       skipped = data.skipped || 0
+      judgedIds = Array.isArray(data.judgedIds) ? data.judgedIds.slice() : []
       digestDropped = data.digestDropped || 0
       observationCount = data.observationCount || entries.filter(e => e.kind === 'observation').length
       sites = data.sites && typeof data.sites === 'object' ? Object.assign({}, data.sites) : {}

@@ -661,7 +661,7 @@ function createAgent (opts) {
 
     // ---- a decision about a candidate: remembered, nothing happens on the page ------
     if (action.type === 'judge') {
-      history.addVerdict(action.item, action.keep)
+      history.addVerdict(action.item, action.keep, pageState.url || obs.url)
       emit('verdict', { step: state.step, item: action.item, keep: action.keep, why: action.why || '' })
       return {}
     }

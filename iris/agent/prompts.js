@@ -149,9 +149,10 @@ function reviewNote () {
   return 'Check-in: compare your progress with the plan. What is done, what is left, and does the approach need to change? Then continue.'
 }
 
-function decisionsText (kept, skipped) {
+function decisionsText (kept, skipped, ids) {
   const shown = kept.slice(-10)
-  return 'Your decisions so far: kept ' + kept.length + (shown.length ? ' (' + shown.join('; ') + ')' : '') + ', skipped ' + skipped + '. Use recall to check one.'
+  return 'Your decisions so far: kept ' + kept.length + (shown.length ? ' (latest: ' + shown.join('; ') + ')' : '') + ', skipped ' + skipped + '. Use recall to check one.' +
+    (ids && ids.length ? '\nAlready judged — never open these again: ' + ids.slice(-300).join(', ') : '')
 }
 
 function followUpMessage (text) {

@@ -567,7 +567,7 @@ test('judge records decisions without touching the page and shows a running tall
   await h.agent.run('choose papers')
   assert.strictEqual(h.computer.actions.length, 0)
   assert.deepStrictEqual(ev(h.events, 'verdict').map(v => [v.item, v.keep]), [['Paper A', true], ['Paper B', false]])
-  assert.match(h.last, /kept 1 \(Paper A\), skipped 1/)
+  assert.match(h.last, /kept 1 \(latest: Paper A\), skipped 1/)
 })
 
 test('a planned run gets a check-in every reviewEvery steps', async () => {
@@ -786,4 +786,16 @@ test('a reply stream cut off by a server reset counts as the server being down, 
   const r = await h.agent.run('anything')
   assert.strictEqual(r.status, 'done')
   assert.strictEqual(ev(h.events, 'error').filter(e => e.where === 'server').length, 2)
+})
+
+test('every judged paper ID stays listed on each step, even after its step is compacted away', () => {
+  const { createHistory } = require('../iris/agent/history')
+  const h = createHistory({ maxMessages: 6 })
+  h.start('keep researching')
+  h.addVerdict('OS-Helix (2610.22234)', true, 'https://arxiv.org/abs/2610.22234')
+  h.addVerdict('Some survey', false, 'https://arxiv.org/abs/2609.11111v2')
+  for (let i = 0; i < 20; i++) h.addAssistant(json('t', { type: 'wait' }), 't', { type: 'wait', ms: 1 }, 'https://arxiv.org/list')
+  h.addObservation({ url: 'https://arxiv.org/list', width: 100, height: 100 }, 30)
+  const last = h.messages().pop().content[0].text
+  assert.match(last, /Already judged — never open these again: 2610\.22234, 2609\.11111/)
 })
