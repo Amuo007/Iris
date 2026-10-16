@@ -388,7 +388,8 @@ function irisJobsPrompt (task, mode) {
     '7. log_application {"status":"applied"|"needs_you"|"failed","company":str,"title":str,"url":str,"note":str}',
     '   right after: applied once the site confirms it; needs_you when only the user can finish (a CAPTCHA, a login,',
     '   a question); failed when the site broke. Then the next job.',
-    '   log_application {"status":…} takes company, title and url of the job you were on.'
+    '   log_application {"status":…} takes company, title and url of the job you were on. When that was the last job to',
+    '   handle, send log_application and done in one "actions" list.'
   ]
   // what changes while Iris works goes in the live part (sent last, so the cached start stays the same)
   const live = []
