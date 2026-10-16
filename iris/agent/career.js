@@ -578,10 +578,12 @@ function mapColumns (kind, entries) {
     if (other.length) pick('company', other[0])
   } else if (kind === 'education') {
     const school = rest.filter(function (j) { return share(col(j), SCHOOL_RE) >= 0.5 })
-    const schoolCol = school.length ? school[0] : rest[0]
+    const degree = rest.filter(function (j) { return share(col(j), DEGREE_RE) >= 0.5 && school.indexOf(j) === -1 })
+    const schoolCol = school.length ? school[0] : rest.filter(function (j) { return degree.indexOf(j) === -1 })[0]
     if (schoolCol !== undefined) pick('school', schoolCol)
     const other = rest.filter(function (j) { return j !== schoolCol })
-    if (other.length) pick('degree', other[0])
+    const degreeCol = degree.length && degree[0] !== schoolCol ? degree[0] : other[0]
+    if (degreeCol !== undefined) pick('degree', degreeCol)
   } else if (kind === 'projects') {
     if (rest.length) pick('name', rest[0])
     if (rest.length > 1) pick('tech', rest[1])
@@ -1281,7 +1283,7 @@ const LETTER_WORDS = /^(i|i'm|i've|i'd|i'll|my|the|this|your|thank|thanks|please
 function parseCoverLetter (text, bank, job) {
   const places = [bank.basics.location].concat(bank.experience.map(function (e) { return e.location }), bank.education.map(function (e) { return e.location + ' ' + e.school }),
     bank.answers.map(function (a) { return a.value })).join(' ')
-  const all = bankText(bank) + ' ' + places + ' ' + (job && job.company || '') + ' ' + (job && job.title || '')
+  const all = bankText(bank) + ' ' + places + ' ' + ((job && job.company) || '') + ' ' + ((job && job.title) || '')
   const ctx = all.toLowerCase()
   const nums = numberSet(all)
   const removed = []

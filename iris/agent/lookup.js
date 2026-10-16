@@ -227,7 +227,7 @@ function boardApiUrl (b) {
 /** The board's JSON → [{ title, location, team, url }] */
 function parseBoardJobs (ats, json) {
   if (ats === 'greenhouse') {
-    return (json && json.jobs || []).map(function (j) { return { title: clip(j.title, 120), location: clip(j.location && j.location.name, 80), team: '', url: j.absolute_url } })
+    return ((json && json.jobs) || []).map(function (j) { return { title: clip(j.title, 120), location: clip(j.location && j.location.name, 80), team: '', url: j.absolute_url } })
   }
   if (ats === 'lever') {
     return (Array.isArray(json) ? json : []).map(function (j) {
@@ -235,7 +235,7 @@ function parseBoardJobs (ats, json) {
       return { title: clip(j.text, 120), location: clip((c.allLocations && c.allLocations.join(' / ')) || c.location, 80), team: clip(c.team, 40), url: j.hostedUrl }
     })
   }
-  return (json && json.jobs || []).filter(function (j) { return j.isListed !== false }).map(function (j) {
+  return ((json && json.jobs) || []).filter(function (j) { return j.isListed !== false }).map(function (j) {
     const more = (j.secondaryLocations || []).map(function (x) { return x.location }).filter(Boolean)
     return { title: clip(String(j.title || '').trim(), 120), location: clip([j.location].concat(more).join(' / ') + (j.isRemote ? ' (remote ok)' : ''), 100), team: clip(j.department, 40), url: j.jobUrl }
   })
