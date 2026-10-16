@@ -211,6 +211,9 @@ function parseJobBoardQuery (query) {
   if (l) return { ats: 'lever', company: l[1], words: jobWords(q.replace(l[0], '')) }
   const a = /(?:https?:\/\/)?jobs\.ashbyhq\.com\/([A-Za-z0-9_.%-]+)/i.exec(q)
   if (a) return { ats: 'ashby', company: decodeURIComponent(a[1]), words: jobWords(q.replace(a[0], '')) }
+  // Workday: <tenant>.wd<N>.myworkdayjobs.com/[en-US/]<site>
+  const w = /(?:https?:\/\/)?(([a-z0-9-]+)\.wd\d+\.myworkdayjobs\.com)\/(?:[a-z]{2}-[A-Z]{2}\/)?([A-Za-z0-9_-]+)/i.exec(q)
+  if (w) return { ats: 'workday', host: w[1].toLowerCase(), company: w[2].toLowerCase(), site: w[3], words: jobWords(q.replace(w[0], '')) }
   return null
 }
 
@@ -269,7 +272,7 @@ function createLookup (opts) {
   let queue = Promise.resolve()
 
   /* one request at a time, and never two to the same site within perHostGapMs */
-  function get (url, accept) {
+  function get (url, accept, json) {
     const run = async function () {
       const host = hostOf(url)
       const wait = lastHit[host] === undefined ? 0 : lastHit[host] + cfg.perHostGapMs - now()
@@ -278,11 +281,10 @@ function createLookup (opts) {
       const ctrl = typeof AbortController === 'function' ? new AbortController() : null
       const timer = setTimeout(function () { if (ctrl) ctrl.abort() }, cfg.timeoutMs)
       try {
-        const res = await o.fetch(url, {
-          headers: { 'User-Agent': cfg.userAgent, Accept: accept || 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8', 'Accept-Language': 'en-US,en;q=0.9' },
-          signal: ctrl ? ctrl.signal : undefined,
-          redirect: 'follow'
-        })
+        const headers = { 'User-Agent': cfg.userAgent, Accept: accept || 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8', 'Accept-Language': 'en-US,en;q=0.9' }
+        // a small JSON search (Workday's job search is a POST); everything else is a plain GET
+        if (json) headers['Content-Type'] = 'application/json'
+        const res = await o.fetch(url, Object.assign({ headers: headers, signal: ctrl ? ctrl.signal : undefined, redirect: 'follow' }, json ? { method: 'POST', body: JSON.stringify(json) } : {}))
         const body = await res.text()
         return { status: res.status, body: body, type: (res.headers && res.headers.get && res.headers.get('content-type')) || '', url: res.url || url }
       } finally {
@@ -366,7 +368,29 @@ function createLookup (opts) {
 
   async function jobs (query) {
     const board = parseJobBoardQuery(query)
-    if (!board) throw new Error('give a Greenhouse, Lever or Ashby board address (e.g. jobs.lever.co/acme) and the words to match')
+    if (!board) throw new Error('give a Greenhouse, Lever, Ashby or Workday board address (e.g. jobs.lever.co/acme) and the words to match')
+    if (board.ats === 'workday') {
+      // Workday searches on its side and wants every word ("firmware Toronto" finds nothing, as the place is not
+      // in the text): with no hits, drop words from the end (the place, usually) and rank by them here instead
+      const words = board.words.slice()
+      const dropped = []
+      let data = {}
+      for (;;) {
+        const r = await get('https://' + board.host + '/wday/cxs/' + board.company + '/' + board.site + '/jobs', 'application/json',
+          { appliedFacets: {}, limit: 20, offset: 0, searchText: words.join(' ') })
+        if (r.status === 404) throw new Error('no Workday job site "' + board.site + '" at ' + board.host)
+        if (r.status !== 200) throw new Error('workday answered ' + r.status)
+        data = JSON.parse(r.body) || {}
+        if ((data.total || (data.jobPostings || []).length) > 0 || words.length <= 1) break
+        dropped.unshift(words.pop())
+      }
+      const all = (data.jobPostings || []).filter(function (j) { return j.externalPath }).map(function (j) {
+        return { title: clip(j.title, 120), location: clip(j.locationsText, 80), team: '', url: 'https://' + board.host + '/' + board.site + j.externalPath }
+      })
+      const score = function (j) { const hay = (j.title + ' ' + j.location).toLowerCase(); return dropped.filter(function (w) { return hay.indexOf(w) !== -1 }).length }
+      const items = dropped.length ? all.slice().sort(function (a, b) { return score(b) - score(a) }) : all
+      return { source: board.company + ' on workday, ' + (data.total || all.length) + ' matching "' + words.join(' ') + '"' + (dropped.length ? ' (ranked by: ' + dropped.join(' ') + ')' : ''), items: items.slice(0, 15) }
+    }
     const r = await get(boardApiUrl(board), 'application/json')
     if (r.status === 404) throw new Error('no job board called "' + board.company + '" on ' + board.ats)
     if (r.status !== 200) throw new Error(board.ats + ' answered ' + r.status)

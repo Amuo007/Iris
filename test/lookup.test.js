@@ -214,3 +214,21 @@ test('a Workday posting (a JavaScript page) is read from the site\'s own JSON en
   assert.match(r.items[0].text, /3\+ years of C\+\+/)
   assert.match(r.items[0].text, /Python/)
 })
+
+test('a Workday board is searched on its side; with no hits the last words (a place) only rank the results', async () => {
+  const asked = []
+  const fetch = async (url, opts) => {
+    const body = JSON.parse(opts.body)
+    asked.push(body.searchText)
+    const hits = body.searchText === 'firmware' ? [
+      { title: 'Firmware Engineer', locationsText: 'US, Santa Clara', externalPath: '/job/US/Firmware-Engineer_JR1' },
+      { title: 'Firmware Engineer II', locationsText: 'Canada, Toronto', externalPath: '/job/Canada-Toronto/Firmware-Engineer-II_JR2' }
+    ] : []
+    return { status: 200, url, text: async () => JSON.stringify({ total: hits.length, jobPostings: hits }), headers: { get: () => 'application/json' } }
+  }
+  const lk = createLookup(Object.assign({ fetch }, instant))
+  const r = await lk.lookup({ kind: 'jobs', query: 'acme.wd5.myworkdayjobs.com/en-US/External firmware toronto' })
+  assert.deepStrictEqual(asked, ['firmware toronto', 'firmware'])
+  assert.strictEqual(r.items[0].title, 'Firmware Engineer II', 'the one in Toronto first')
+  assert.strictEqual(r.items[0].url, 'https://acme.wd5.myworkdayjobs.com/External/job/Canada-Toronto/Firmware-Engineer-II_JR2')
+})

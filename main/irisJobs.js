@@ -411,7 +411,8 @@ function irisJobsPrompt (task, mode) {
   const p = bank.prefs
   const lines = ['JOBS — the user keeps a career profile in Iris (Settings → Jobs). Applying for one job:',
     '1. Find postings that match' + (p.roles ? ': ' + p.roles : ' the profile') + (p.locations ? '; places: ' + p.locations : '') + (p.workplace !== 'any' ? '; ' + p.workplace + ' only' : '') + '.',
-    '   Company boards that need no account (boards.greenhouse.io, jobs.lever.co, jobs.ashbyhq.com) are quickest. To find',
+    '   Company boards that need no account (boards.greenhouse.io, jobs.lever.co, jobs.ashbyhq.com) are quickest; Workday',
+    '   boards (<company>.wd5.myworkdayjobs.com) usually need an account to apply but can be searched. To find',
     '   companies, search the web in the browser (navigate with words like "site:jobs.lever.co software engineer Toronto")',
     '   and open the results; never guess a company\'s board address. On a board with many openings, a jobs look-up',
     '   ({"kind":"jobs","query":"jobs.lever.co/<company> <role words> <place>"}) lists the matching ones at once.',
