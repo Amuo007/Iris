@@ -3,7 +3,7 @@
 const test = require('node:test')
 const assert = require('node:assert')
 
-const { parseAction, validateAction, describeAction, isTerminal, ACTION_TYPES } = require('../iris/agent/actionSchema')
+const { parseAction, validateAction, describeAction, isTerminal, ACTION_TYPES, parseObjectLoose } = require('../iris/agent/actionSchema')
 
 const LIMITS = { imageWidth: 2880, imageHeight: 1800 }
 
@@ -284,4 +284,26 @@ test('job actions: statuses are normalised, unknown ones refused', () => {
   assert.strictEqual(validateAction({ type: 'log_application', status: 'submitted' }, LIMITS).action.status, 'applied')
   assert.strictEqual(validateAction({ type: 'log_application', status: 'maybe' }, LIMITS).ok, false)
   assert.strictEqual(validateAction({ type: 'tailor', title: 'ML Engineer' }, LIMITS).action.type, 'tailor_resume')
+})
+
+test('quotes the model forgot to escape inside its text are repaired', () => {
+  // seen live: the reply was refused twice and the step was lost
+  const r = parseAction('{"thought":"Location dropdown shows "Toronto, Ontario, Canada" as the first match. I\'ll click it to select.","action":{"type":"click","x":640,"y":715}}', LIMITS)
+  assert.ok(r.ok)
+  assert.deepStrictEqual([r.action.type, r.action.x, r.action.y], ['click', 640, 715])
+  assert.match(r.thought, /shows "Toronto, Ontario, Canada" as/)
+  const d = parseAction('{"thought":"He said "hi", then left","action":{"type":"done","answer":"The page says "Draft deleted"."}}', LIMITS)
+  assert.ok(d.ok)
+  assert.strictEqual(d.action.answer, 'The page says "Draft deleted".')
+  // well-formed JSON with lists and numbers is untouched
+  assert.deepStrictEqual(parseObjectLoose('{"a":"x","b":["p","q"],"c":1}'), { a: 'x', b: ['p', 'q'], c: 1 })
+})
+
+test('a key that lost its opening quote, or a y written without its key, still parses', () => {
+  const a = parseAction('{"thought":"click Apply","action":{"type":"click","x":295,y":828}}', LIMITS)
+  assert.ok(a.ok)
+  assert.deepStrictEqual([a.action.x, a.action.y], [295, 828])
+  const b = parseAction('{"thought":"open the recipe","action":{"type":"click","x":141,896}}', LIMITS)
+  assert.ok(b.ok)
+  assert.deepStrictEqual([b.action.x, b.action.y], [141, 896])
 })

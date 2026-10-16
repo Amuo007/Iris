@@ -216,7 +216,39 @@ function repairJson (s) {
   // "y="329 or "y"=329: an equals sign where the colon belongs
   t = t.replace(/"([A-Za-z_]+)"?\s*=\s*"?(-?\d+(?:\.\d+)?)(?=\s*[,}])/g, '"$1":$2')
 
+  // ,y":828 — a key that lost its opening quote
+  t = t.replace(/([{,]\s*)([A-Za-z_]+)"\s*:/g, '$1"$2":')
+
+  // "x":141,896 — the y key left out after x
+  t = t.replace(/"x"\s*:\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)(?=\s*[,}])/g, '"x":$1,"y":$2')
+
   return t
+}
+
+/**
+ * Quotes the model forgot to escape inside a string: {"thought":"the list shows "Toronto, Ontario" first"}.
+ * A double quote ends a string only when JSON can go on after it (a colon, a comma and the next value,
+ * a closing brace or bracket); any other one is part of the text and gets escaped.
+ */
+function escapeInnerQuotes (s) {
+  let out = ''
+  let inStr = false
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (!inStr) {
+      if (c === '"') inStr = true
+      out += c
+      continue
+    }
+    if (c === '\\') { out += c + (s[i + 1] || ''); i++; continue }
+    if (c === '"') {
+      const rest = s.slice(i + 1).replace(/^\s+/, '')
+      if (rest === '' || /^[}\]:]/.test(rest) || /^,\s*("|\{|\[|-?\d|true\b|false\b|null\b|$)/.test(rest)) { inStr = false; out += c } else out += '\\"'
+      continue
+    }
+    out += c
+  }
+  return out
 }
 
 /**
@@ -252,6 +284,8 @@ function tryParseObject (candidate) {
   const attempts = [candidate, repairJson(candidate)]
   const sq = singleQuoteToJson(attempts[attempts.length - 1])
   if (sq !== attempts[attempts.length - 1]) attempts.push(sq, repairJson(sq))
+  const inner = escapeInnerQuotes(repairJson(candidate))
+  if (inner !== attempts[1]) attempts.push(inner)
 
   for (const a of attempts) {
     try {
