@@ -1,0 +1,64 @@
+{
+  "basics": { "name": "Jordan Lee", "email": "jordan.lee@example.com", "phone": "555-010-2234", "location": "Toronto, ON",
+    "links": [{ "label": "github.com/jordanlee-dev", "url": "https://github.com/jordanlee-dev" }, { "label": "linkedin.com/in/jordanlee-dev", "url": "https://linkedin.com/in/jordanlee-dev" }] },
+  "about": "Graduated in 2025. Comfortable across the stack, from microcontrollers to cloud services. Built and shipped two Android apps with 10,000+ downloads combined.",
+  "skills": [
+    { "group": "Languages", "items": ["Python", "Java", "Kotlin", "C", "C++", "TypeScript", "Go", "SQL", "Bash"] },
+    { "group": "Cloud & DevOps", "items": ["AWS (Lambda, ECS, S3)", "GCP", "Terraform", "Docker", "Kubernetes", "GitHub Actions"] },
+    { "group": "AI / ML", "items": ["PyTorch", "Hugging Face Transformers", "LLM fine-tuning (LoRA)", "RAG", "scikit-learn", "ONNX"] },
+    { "group": "Mobile", "items": ["Android SDK", "Jetpack Compose", "Room", "Firebase"] },
+    { "group": "Embedded", "items": ["STM32", "FreeRTOS", "ESP32", "I2C/SPI/UART", "Embedded C"] },
+    { "group": "Web", "items": ["React", "Node.js", "FastAPI", "PostgreSQL", "Redis"] }
+  ],
+  "experience": [
+    { "title": "Software Engineer", "company": "Northwind Robotics", "location": "Toronto, ON", "dates": "Jul 2025 -- Present",
+      "bullets": [
+        "Built a fleet telemetry pipeline on AWS (Lambda, Kinesis, S3) ingesting 2M events per day from 300 warehouse robots",
+        "Cut cloud costs by 35% by moving batch jobs from EC2 to ECS Fargate spot tasks with Terraform",
+        "Wrote STM32 firmware in C on FreeRTOS for a battery-monitoring board; reduced brown-out resets by 90%",
+        "Trained a PyTorch anomaly-detection model on motor current data and deployed it with ONNX on edge gateways",
+        "Set up GitHub Actions CI with hardware-in-the-loop tests for 4 firmware repositories",
+        "Mentored 2 interns and ran weekly code reviews"
+      ] },
+    { "title": "Machine Learning Intern", "company": "Maple AI Labs", "location": "Remote", "dates": "May 2024 -- Aug 2024",
+      "bullets": [
+        "Fine-tuned a 7B language model with LoRA on 40k support tickets, raising answer accuracy from 61% to 78%",
+        "Built a retrieval-augmented generation (RAG) service with FastAPI and pgvector serving 50 internal users",
+        "Wrote an evaluation harness in Python that scored model answers against 1,200 labelled questions",
+        "Reduced GPU inference latency by 2.1x with batching and 8-bit quantization"
+      ] },
+    { "title": "Android Developer Intern", "company": "Lakeside Health", "location": "Waterloo, ON", "dates": "Jan 2023 -- Apr 2023",
+      "bullets": [
+        "Rebuilt the patient check-in screens in Jetpack Compose, cutting check-in time from 3 minutes to 70 seconds",
+        "Added offline mode with Room and WorkManager so nurses could record vitals without Wi-Fi",
+        "Fixed 30+ crash reports from Firebase Crashlytics, raising crash-free sessions to 99.6%"
+      ] }
+  ],
+  "projects": [
+    { "name": "PocketTutor", "tech": "Kotlin, Jetpack Compose, Firebase", "dates": "2024",
+      "bullets": ["Android flashcard app with spaced repetition; 8,000+ downloads on Google Play", "Implemented on-device speech recognition with TensorFlow Lite"] },
+    { "name": "Edge Vision Doorbell", "tech": "ESP32, C++, TensorFlow Lite Micro", "dates": "2023",
+      "bullets": ["Ran person detection on an ESP32-S3 at 4 frames per second with a 300 KB model", "Designed a low-power wake-on-motion circuit giving 3 months of battery life"] },
+    { "name": "K8s Cost Watcher", "tech": "Go, Kubernetes, Prometheus", "dates": "2025",
+      "bullets": ["Kubernetes operator that flags idle workloads and right-sizes requests; open source with 400 GitHub stars", "Exports savings estimates as Prometheus metrics and Grafana dashboards"] },
+    { "name": "Paper Pilot", "tech": "Python, LangChain, PostgreSQL", "dates": "2025",
+      "bullets": ["Research assistant that summarizes arXiv papers with a local LLM and cites page numbers", "Built hybrid search (BM25 + embeddings) over 20k abstracts"] },
+    { "name": "Campus Ride Share", "tech": "React, Node.js, PostgreSQL", "dates": "2022",
+      "bullets": ["Web app matching students for rides; 600 sign-ups in the first month"] }
+  ],
+  "education": [
+    { "school": "University of Waterloo", "degree": "Bachelor of Applied Science in Computer Engineering", "location": "Waterloo, ON", "dates": "Sep 2020 -- Apr 2025",
+      "details": ["GPA 3.8/4.0, Dean's List", "Courses: Operating Systems, Embedded Microprocessor Systems, Machine Learning, Distributed Systems"] }
+  ],
+  "extras": [
+    { "kind": "Certification", "text": "AWS Certified Solutions Architect -- Associate (2025)" },
+    { "kind": "Award", "text": "1st place, Hack the North 2023 hardware track" }
+  ],
+  "prefs": { "roles": "Software Engineer, ML Engineer, Embedded Software Engineer", "locations": "Toronto, Remote", "workplace": "any", "fitCutoff": 60, "autoSubmit": true },
+  "answers": [
+    { "label": "Work authorization", "value": "Canadian citizen" },
+    { "label": "Needs visa sponsorship", "value": "No" },
+    { "label": "Earliest start date", "value": "2 weeks after an offer" },
+    { "label": "Years of experience", "value": "1" }
+  ]
+}

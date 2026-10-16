@@ -179,6 +179,8 @@ test('validateAction covers every declared action type', () => {
     bookmark: {},
     bookmarks: { query: 'news' },
     lookup: { query: 'best ski boots', kind: 'web' },
+    tailor_resume: { title: 'Android Developer', company: 'ShopFast', requirements: 'Kotlin, Compose' },
+    log_application: { status: 'applied', company: 'ShopFast', title: 'Android Developer' },
     done: {},
     fail: {}
   }
@@ -274,4 +276,11 @@ test('an equals sign instead of a colon is repaired', () => {
   assert.strictEqual(r.ok, true)
   assert.strictEqual(r.actions[0].y, 329)
   assert.strictEqual(r.actions[1].y, 390)
+})
+
+test('job actions: statuses are normalised, unknown ones refused', () => {
+  assert.strictEqual(validateAction({ type: 'log_application', status: 'Needs you' }, LIMITS).action.status, 'needs_you')
+  assert.strictEqual(validateAction({ type: 'log_application', status: 'submitted' }, LIMITS).action.status, 'applied')
+  assert.strictEqual(validateAction({ type: 'log_application', status: 'maybe' }, LIMITS).ok, false)
+  assert.strictEqual(validateAction({ type: 'tailor', title: 'ML Engineer' }, LIMITS).action.type, 'tailor_resume')
 })

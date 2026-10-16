@@ -371,7 +371,8 @@ function createAgent (opts) {
         // resumed after a sensitive-action pause: the human approved that action (or the payment)
         approvedKey = pendingApproval
         pendingApproval = null
-        history.addSystemNote(approvedKey === 'payment' ? 'The user approved the payment. Go ahead and pay now.' : 'The user approved it. Go ahead.')
+        history.addSystemNote(approvedKey === 'payment' ? 'The user approved the payment. Go ahead and pay now.'
+          : approvedKey === 'application' ? 'The user checked the application and approved it. Submit it now.' : 'The user approved it. Go ahead.')
       } else {
         approvedKey = null
       }
@@ -633,7 +634,7 @@ function createAgent (opts) {
       approved: approvedKey,
       thought: pageState.thought || ''
     })
-    if (approvedKey !== 'payment') approvedKey = null // a payment approval covers this whole step
+    if (approvedKey !== 'payment' && approvedKey !== 'application') approvedKey = null // these approvals cover the whole step
     if (!actionGate.allow) {
       emit('blocked', { step: state.step, kind: actionGate.kind, reason: actionGate.reason, action })
       if (actionGate.kind === 'loop') {

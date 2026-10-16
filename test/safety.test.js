@@ -197,3 +197,14 @@ test('paymentGuard auto never pauses', () => {
   g.beforeAction({ type: 'type', text: '{{Card CVC}}' }, {})
   assert.ok(g.beforeAction({ type: 'click', x: 5, y: 5 }, { thought: 'Pay now' }).allow)
 })
+
+test('ask-before-submit: the click that sends an application waits for the user', () => {
+  const gate = createSafetyGate({ applicationGuard: 'ask' })
+  const click = { type: 'click', x: 10, y: 10 }
+  const d = gate.beforeAction(click, { thought: 'All fields are filled. Click Submit Application.' })
+  assert.strictEqual(d.allow, false)
+  assert.strictEqual(d.key, 'application')
+  assert.strictEqual(gate.beforeAction(click, { thought: 'Click Submit Application.', approved: 'application' }).allow, true)
+  assert.strictEqual(gate.beforeAction({ type: 'click', x: 1, y: 2 }, { thought: 'Submit the search for Android jobs' }).allow, true)
+  assert.strictEqual(createSafetyGate({}).beforeAction(click, { thought: 'Click Submit Application.' }).allow, true, 'off unless asked for')
+})

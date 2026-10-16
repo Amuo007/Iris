@@ -22,7 +22,9 @@ const DEFAULTS = {
   allowSensitiveActions: true,
   // payments: 'ask' = once card details were typed, pause before the click that pays;
   // 'auto' = no pause. (With payments off, card details are never available to type.)
-  paymentGuard: 'ask'
+  paymentGuard: 'ask',
+  // job applications: 'ask' = pause before the click that submits one (the user reviews it first)
+  applicationGuard: 'auto'
 }
 
 /* A card placeholder from My info → Payments, e.g. {{Card number}} */
@@ -30,6 +32,9 @@ const CARD_PLACEHOLDER = /\{\{\s*(card|cvc|cvv|expiry|name on card|billing)/i
 
 /* What the step means to do, in the model's own words: pay, order, buy, book… */
 const PAY_WORDS = /\b(pay|payment|place (your |the |my )?order|purchase|buy|checkout|check out|subscribe|book now|complete (the |my )?(order|purchase|booking)|confirm (the |my )?(order|purchase|booking|payment)|submit (the |my )?(order|payment))\b/i
+
+/* The step means to send off a job application (not a search box or a filter) */
+const APPLY_WORDS = /\b(submit|send|complete|finish)\b[^.]{0,30}\bappl(ication|y)\b|\bapply now\b|\bsubmit\b(?![^.]{0,25}\b(search|query|filter|code|email address|look-?up)\b)/i
 
 /* Words that mean "this action is about to touch money, credentials or destruction". */
 const SENSITIVE_PATTERNS = [
@@ -165,6 +170,12 @@ function createSafetyGate (options) {
         return decision('confirmation', 'Iris is about to pay: "' + String(pageState.thought).slice(0, 160) + '". Press ▶ to allow it, or Stop.', { action, key: 'payment', payment: true })
       }
 
+      if (cfg.applicationGuard === 'ask' && !(pageState && pageState.approved === 'application') &&
+          (action.type === 'click' || action.type === 'double_click' || (action.type === 'key' && action.key === 'enter') || (action.type === 'type' && action.enter)) &&
+          APPLY_WORDS.test((pageState && pageState.thought) || '')) {
+        return decision('confirmation', 'Iris is about to submit an application: "' + String(pageState.thought).slice(0, 160) + '". Check it, then press ▶ to submit, or Stop.', { action, key: 'application' })
+      }
+
       if (!cfg.allowSensitiveActions && !(pageState && pageState.approved === key)) {
         for (const re of SENSITIVE_PATTERNS) {
           if (re.test(action.text || '') || re.test(action.url || '') || re.test(action.answer || '')) {
@@ -199,4 +210,4 @@ function createSafetyGate (options) {
   }
 }
 
-module.exports = { createSafetyGate, DEFAULTS, isBlockedUrl, SENSITIVE_PATTERNS, REPEATABLE }
+module.exports = { createSafetyGate, DEFAULTS, isBlockedUrl, SENSITIVE_PATTERNS, REPEATABLE, APPLY_WORDS }

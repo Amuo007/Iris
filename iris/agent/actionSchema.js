@@ -14,7 +14,7 @@
 const COORD_TYPES = new Set(['click', 'double_click', 'right_click', 'drag', 'scroll'])
 
 /* Actions after which the page (or the tab) is different, so a batch must stop there. */
-const PAGE_CHANGING = new Set(['navigate', 'back', 'switch_tab', 'new_tab', 'close_tab', 'zoom', 'find', 'dialog', 'upload', 'ask_user', 'recall', 'bookmarks', 'lookup'])
+const PAGE_CHANGING = new Set(['navigate', 'back', 'switch_tab', 'new_tab', 'close_tab', 'zoom', 'find', 'dialog', 'upload', 'ask_user', 'recall', 'bookmarks', 'lookup', 'tailor_resume'])
 
 const MAX_BATCH = 6
 
@@ -52,6 +52,8 @@ const SPEC = {
   update_plan: { required: ['plan'], optional: [] },
   bookmark: { required: [], optional: ['title', 'url', 'remove'] },
   bookmarks: { required: [], optional: ['query'] },
+  tailor_resume: { required: ['title'], optional: ['company', 'requirements', 'url'] },
+  log_application: { required: ['status'], optional: ['company', 'title', 'url', 'note'] },
   move: { required: ['x', 'y'], optional: [] },
   done: { required: [], optional: ['answer'] },
   fail: { required: [], optional: ['reason'] }
@@ -110,6 +112,11 @@ const TYPE_ALIASES = {
   choose_file: 'upload',
   ask: 'ask_user',
   ask_human: 'ask_user',
+  tailor: 'tailor_resume',
+  make_resume: 'tailor_resume',
+  tailor_cv: 'tailor_resume',
+  log_job: 'log_application',
+  record_application: 'log_application',
   web_search: 'lookup',
   quick_search: 'lookup',
   look_up: 'lookup',
@@ -518,6 +525,16 @@ function validateAction (obj, limits) {
         action.kind = ['web', 'papers', 'arxiv', 'wiki', 'page'].includes(kl) ? kl : 'web'
         break
       }
+      case 'status': {
+        const v = String(toStringValue(value) || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+        const map = { applied: 'applied', submitted: 'applied', done: 'applied', skipped: 'skipped', skip: 'skipped', not_a_fit: 'skipped', needs_you: 'needs_you', needs_user: 'needs_you', stuck: 'needs_you', blocked: 'needs_you', failed: 'failed', error: 'failed' }
+        if (!map[v]) errors.push('status must be applied|skipped|needs_you|failed')
+        else action.status = map[v]
+        break
+      }
+      case 'company':
+      case 'requirements':
+      case 'note':
       case 'purpose':
       case 'title':
       case 'plan':
@@ -709,6 +726,8 @@ function describeAction (action) {
     case 'bookmark': return action.remove ? 'Remove the bookmark' + (action.url ? ' for ' + action.url : '') : 'Bookmark ' + (action.url || 'this page')
     case 'lookup': return 'Look up (' + (action.kind || 'web') + ') "' + action.query + '"'
     case 'bookmarks': return action.query ? `Look up bookmarks for "${action.query}"` : 'List bookmarks'
+    case 'tailor_resume': return 'Tailor the resume for ' + action.title + (action.company ? ' at ' + action.company : '')
+    case 'log_application': return ({ applied: 'Applied', skipped: 'Skipped', needs_you: 'Needs you', failed: 'Could not apply' })[action.status] + (action.title ? ': ' + action.title : '') + (action.company ? ' at ' + action.company : '')
     case 'done': return action.answer ? `Done \u2014 ${action.answer}` : 'Done'
     case 'fail': return action.reason ? `Stopped \u2014 ${action.reason}` : 'Stopped'
     default: return action.type
@@ -790,6 +809,10 @@ const ACTION_SPEC_TEXT = [
   '- Date fields (mm/dd/yyyy): click the FIRST part of the field (the "mm" at its left end), then type all the',
   '  digits with no slashes (23 Oct 2026 → "10232026"); the field moves on by itself. If digits landed in the',
   '  wrong part, click "mm" again and retype. Time fields the same way. Do not use the calendar pop-up.',
+  '- Dropdowns (a box with ▼ or "Select…") whose options you can tell (Yes / No, a country): type the OPTION\'S OWN',
+  '  words into it, e.g. {"type":"type","x":..,"y":..,"text":"Yes","clear":false,"enter":true}, not your own wording',
+  '  ("Canadian citizen" is not an option; "Yes" is). Unsure what the options are: click it to open the list first.',
+  '  A whole form, dropdowns included, can go in one "actions" list; then check each field in the next screenshot.',
   '- Fields with suggestions (cities, airports, addresses): type, then make sure the list shows matches for what',
   '  you typed before clicking one (an old list can still be showing); if not, wait once. Check the field afterwards.',
   '- A "Verifying you are human" / "Just a moment" page often clears by itself: wait up to about 10 s.',
@@ -813,6 +836,7 @@ module.exports = {
   describeAction,
   isTerminal,
   extractJsonCandidates,
+  parseObjectLoose: tryParseObject,
   normalizeModifiers,
   normalizeKeyName,
   ACTION_SPEC_TEXT,

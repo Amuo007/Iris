@@ -34,6 +34,11 @@
       <a href="#iris-skills-container">Skills</a>
       <a href="#iris-bridge-container">Coding agents</a>
       <a href="#iris-usage-container">Usage</a>
+      <div class="iris-settings-group">Jobs</div>
+      <a href="#iris-career-container">Career profile</a>
+      <a href="#iris-apply-container">Applying</a>
+      <a href="#iris-resume-container">Resume template</a>
+      <a href="#iris-applications-container">Applications</a>
       <div class="iris-settings-group">Advanced</div>
       <a href="#proxy-settings-container">Proxy</a>
       <a href="#keymap-settings-container">Keyboard shortcuts</a>
@@ -277,6 +282,163 @@
         <span class="iris-inline-status" id="iris-profile-status"></span>
       </div>
 
+    </div>
+
+    <div class="settings-container" id="iris-career-container">
+      <h3>Career profile</h3>
+      <div class="setting-secondary-label">
+        Put in everything you have done, far more than fits on one page. For each job, Iris picks what
+        matches it and builds a one-page resume. It only reorders and rewords what is here: it never adds a
+        skill, job or number you did not write. Saved on this Mac only.
+      </div>
+      <div class="iris-career-import" id="iris-career-import" hidden>
+        <span>Start from your resume: Iris reads your LaTeX file and fills this in.</span>
+        <button class="iris-button" id="iris-career-from-tex" type="button">Read my LaTeX resume…</button>
+      </div>
+      <div class="iris-row-title iris-subtitle">You</div>
+      <div class="iris-grid" id="iris-career-basics"></div>
+      <div class="iris-row-title iris-subtitle">Skills</div>
+      <div class="iris-row-help">Group them any way you like, one group per row, skills separated by commas.</div>
+      <div id="iris-career-skills" class="iris-rows"></div>
+      <button class="iris-button" id="iris-career-add-skills" type="button">Add a skill group</button>
+      <div class="iris-row-title iris-subtitle">Experience</div>
+      <div class="iris-row-help">Every job, with every bullet you could ever use (one per line). Newest first.</div>
+      <div id="iris-career-experience" class="iris-cards"></div>
+      <button class="iris-button" id="iris-career-add-experience" type="button">Add a job</button>
+      <div class="iris-row-title iris-subtitle">Projects</div>
+      <div id="iris-career-projects" class="iris-cards"></div>
+      <button class="iris-button" id="iris-career-add-projects" type="button">Add a project</button>
+      <div class="iris-row-title iris-subtitle">Education</div>
+      <div id="iris-career-education" class="iris-cards"></div>
+      <button class="iris-button" id="iris-career-add-education" type="button">Add education</button>
+      <div class="iris-row-title iris-subtitle">Certifications, awards and more</div>
+      <textarea id="iris-career-extras" class="iris-career-text" rows="3" spellcheck="true" placeholder="One per line, e.g. AWS Certified Solutions Architect (2025)"></textarea>
+      <div class="iris-row-title iris-subtitle">Anything else about you</div>
+      <textarea id="iris-career-about" class="iris-career-text" rows="3" spellcheck="true" placeholder="True facts Iris may use for a summary or to answer questions: languages you speak, what you are looking for, availability…"></textarea>
+      <div class="setting-section iris-career-foot">
+        <span class="iris-inline-status" id="iris-career-status"></span>
+      </div>
+    </div>
+
+    <div class="settings-container" id="iris-apply-container">
+      <h3>Applying</h3>
+      <div class="setting-secondary-label">
+        What Iris looks for, and the answers it gives on application forms. Ask it to "apply to jobs for me"
+        (Non-stop keeps it going), or press Start.
+      </div>
+      <div class="iris-grid">
+        <div class="iris-setting iris-wide">
+          <label for="iris-pref-roles">Roles to look for</label>
+          <input type="text" id="iris-pref-roles" spellcheck="false" placeholder="e.g. Software Engineer, ML Engineer" />
+        </div>
+        <div class="iris-setting iris-wide">
+          <label for="iris-pref-locations">Places</label>
+          <input type="text" id="iris-pref-locations" spellcheck="false" placeholder="e.g. Toronto, Remote" />
+        </div>
+        <div class="iris-setting">
+          <label for="iris-pref-workplace">Workplace</label>
+          <select id="iris-pref-workplace">
+            <option value="any">Any</option>
+            <option value="remote">Remote only</option>
+            <option value="hybrid">Hybrid only</option>
+            <option value="onsite">On-site only</option>
+          </select>
+        </div>
+        <div class="iris-setting">
+          <label for="iris-pref-salary">Salary expectation</label>
+          <input type="text" id="iris-pref-salary" spellcheck="false" placeholder="e.g. 95,000 CAD" />
+        </div>
+        <div class="iris-setting">
+          <label for="iris-pref-cutoff">Fit needed to apply (0–100)</label>
+          <input type="number" id="iris-pref-cutoff" min="0" max="100" />
+        </div>
+        <div class="iris-setting">
+          <label for="iris-pref-submit">Before submitting</label>
+          <select id="iris-pref-submit">
+            <option value="auto">Submit on its own</option>
+            <option value="ask">Ask me first, every time</option>
+          </select>
+        </div>
+        <div class="iris-setting">
+          <label for="iris-pref-limit">Applications per day (0 = no limit)</label>
+          <input type="number" id="iris-pref-limit" min="0" max="500" />
+        </div>
+      </div>
+      <div class="iris-row-title iris-subtitle">Answers for application forms</div>
+      <div class="iris-row-help">Leave one empty and Iris asks you when a form needs it. Voluntary questions (gender, race, veteran, disability) left empty are declined.</div>
+      <div id="iris-career-answers" class="iris-rows"></div>
+      <button class="iris-button" id="iris-career-add-answer" type="button">Add an answer</button>
+      <div class="iris-row-setting iris-jobs-start-row">
+        <div>
+          <div class="iris-row-title">Start applying</div>
+          <div class="iris-row-help" id="iris-jobs-start-help">Opens a new tab and applies to matching jobs one by one until you press Stop.</div>
+        </div>
+        <button class="iris-button iris-primary" id="iris-jobs-start" type="button">Start</button>
+      </div>
+    </div>
+
+    <div class="settings-container" id="iris-resume-container">
+      <h3>Resume template</h3>
+      <div class="setting-secondary-label">
+        Iris fills a LaTeX template for each job and makes sure it comes out as exactly one, full page.
+      </div>
+      <div class="iris-row-setting">
+        <div>
+          <div class="iris-row-title" id="iris-template-name">Built-in: Classic</div>
+          <div class="iris-row-help" id="iris-template-help">A clean one-page layout. Or use your own LaTeX resume: Iris keeps its look and refills it.</div>
+        </div>
+        <div class="iris-row-buttons">
+          <button class="iris-button" id="iris-template-import" type="button">Use my LaTeX resume…</button>
+          <button class="iris-button" id="iris-template-builtin" type="button" hidden>Use the built-in one</button>
+        </div>
+      </div>
+      <div id="iris-template-report" class="iris-template-report" hidden></div>
+      <div class="iris-row-setting">
+        <div>
+          <div class="iris-row-title">LaTeX</div>
+          <div class="iris-row-help" id="iris-tex-status">Checking…</div>
+        </div>
+      </div>
+      <div class="iris-row-setting">
+        <div>
+          <div class="iris-row-title">Tailoring</div>
+          <div class="iris-row-help">How long Iris thinks about each job before picking.</div>
+        </div>
+        <select id="iris-tailor-thinking">
+          <option value="off">Fast (about 25 s)</option>
+          <option value="low">Careful (about a minute)</option>
+        </select>
+      </div>
+      <div class="iris-row-setting">
+        <div>
+          <div class="iris-row-title">Save resumes to</div>
+          <div class="iris-row-help" id="iris-resume-dir"></div>
+        </div>
+        <button class="iris-button" id="iris-resume-dir-change" type="button">Change…</button>
+      </div>
+      <div class="iris-row-title iris-subtitle">Try it</div>
+      <div class="iris-grid">
+        <div class="iris-setting iris-wide">
+          <label for="iris-preview-title">Job title</label>
+          <input type="text" id="iris-preview-title" spellcheck="false" placeholder="e.g. Embedded Software Engineer" />
+        </div>
+        <div class="iris-setting iris-wide">
+          <label for="iris-preview-req">What the job asks for</label>
+          <textarea id="iris-preview-req" class="iris-career-text" rows="3" placeholder="Paste the requirements from a posting"></textarea>
+        </div>
+      </div>
+      <div class="setting-section">
+        <button class="iris-button iris-primary" id="iris-preview-run" type="button">Make a resume</button>
+        <button class="iris-button" id="iris-preview-open" type="button" hidden>Open PDF</button>
+        <button class="iris-button" id="iris-preview-show" type="button" hidden>Show in Finder</button>
+        <span class="iris-inline-status" id="iris-preview-status"></span>
+      </div>
+    </div>
+
+    <div class="settings-container" id="iris-applications-container">
+      <h3>Applications</h3>
+      <div class="setting-secondary-label" id="iris-applications-summary">Every job Iris applied to, skipped, or left for you to finish.</div>
+      <div id="iris-applications-list" class="iris-list"></div>
     </div>
 
     <div class="settings-container" id="iris-skills-container">
@@ -689,5 +851,6 @@
     <script src="../../js/util/passwordManager.js"></script>
     <script src="../../dist/localization.build.js"></script>
     <script src="settings.js"></script>
+    <script src="jobs.js"></script>
   </body>
 </html>

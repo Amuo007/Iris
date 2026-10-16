@@ -970,3 +970,262 @@ a.iris-list-main:hover .iris-list-title {
   color: inherit;
   word-break: break-all;
 }
+
+/* --- Jobs: career profile, applying, resume template, applications --------- */
+
+.iris-settings .settings-container[id^="iris-"] .iris-card-body input[type="text"],
+.iris-settings .settings-container[id^="iris-"] textarea.iris-career-text {
+  width: 100%;
+  max-width: none;
+}
+.iris-settings textarea.iris-career-text {
+  display: block;
+  width: 100%;
+  max-width: 760px;
+  margin-top: 4px;
+  resize: vertical;
+  line-height: 1.45;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+#iris-career-container > textarea.iris-career-text {
+  margin-bottom: 4px;
+}
+#iris-career-container > .iris-button,
+#iris-apply-container > .iris-button {
+  margin-top: 2px;
+}
+#iris-career-container .iris-row-title.iris-subtitle,
+#iris-apply-container .iris-row-title.iris-subtitle {
+  margin-top: 20px;
+  font-weight: 600;
+}
+#iris-career-container .iris-row-help,
+#iris-apply-container > .iris-row-help {
+  max-width: 760px;
+  margin-bottom: 4px;
+}
+.iris-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 760px;
+  margin: 8px 0 10px;
+}
+.iris-cards > .iris-list-empty {
+  padding: 4px 0;
+}
+.iris-card {
+  border: 1px solid var(--s-line);
+  border-radius: 10px;
+  background: var(--s-bg);
+}
+.iris-card[open] {
+  border-color: var(--s-line-strong);
+}
+.iris-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 4px 8px 4px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+.iris-card-head::-webkit-details-marker {
+  display: none;
+}
+.iris-card-head::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--s-text-3);
+  border-bottom: 1.5px solid var(--s-text-3);
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+.iris-card[open] > .iris-card-head::before {
+  transform: rotate(45deg);
+}
+.iris-card-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+  font-weight: 550;
+}
+.iris-card-sub {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--s-text-3);
+}
+.iris-card-tools {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+.iris-card-body {
+  margin: 0 !important;
+  padding: 4px 14px 14px;
+  border-top: 1px solid var(--s-line);
+}
+.iris-card-body .iris-setting {
+  padding-top: 8px;
+}
+.iris-card-body textarea.iris-career-text {
+  max-width: none;
+}
+.iris-career-import {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  max-width: 760px;
+  margin: 0 0 6px;
+  padding: 10px 12px;
+  border: 1px dashed var(--s-line-strong);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--s-text-2);
+}
+.iris-career-import[hidden] {
+  display: none;
+}
+.iris-career-foot {
+  margin-top: 6px;
+}
+.iris-skill-group input.iris-row-label {
+  flex: 0 0 190px !important;
+}
+.iris-row-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.iris-row-buttons .iris-button {
+  margin-right: 0;
+}
+.iris-template-report {
+  max-width: 760px;
+  margin: 0 0 6px;
+  border: 1px solid var(--s-line);
+  border-radius: 10px;
+}
+.iris-template-report[hidden] {
+  display: none;
+}
+.iris-template-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 2px 12px;
+  border-bottom: 1px solid var(--s-line);
+  font-size: 13px;
+}
+.iris-template-row:last-child {
+  border-bottom: none;
+}
+.iris-template-mark {
+  flex: 0 0 14px;
+  font-weight: 700;
+  color: var(--s-text-3);
+}
+.iris-template-row.is-mapped .iris-template-mark {
+  color: var(--s-on);
+}
+.iris-template-section {
+  flex: 0 0 180px;
+  font-weight: 550;
+}
+#iris-resume-container select#iris-tailor-thinking {
+  width: auto;
+  min-width: 200px;
+}
+.iris-status {
+  flex: none;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--s-line-strong);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--s-text-2);
+}
+.iris-status-applied {
+  color: var(--s-on);
+  border-color: currentColor;
+}
+.iris-status-needs_you {
+  color: #b45309;
+  border-color: currentColor;
+}
+body.dark-mode .iris-status-needs_you {
+  color: #f59e0b;
+}
+.iris-status-failed {
+  color: #dc2626;
+  border-color: currentColor;
+}
+#iris-applications-list .iris-button {
+  margin-right: 0;
+}
+.iris-jobs-start-row {
+  margin-top: 16px;
+}
+.iris-career-import span,
+#iris-download-dir {
+  font-size: 13px;
+}
+#iris-download-dir {
+  word-break: break-all;
+}
+.iris-bullets {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.iris-bullet {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.iris-bullet-dot {
+  flex: none;
+  width: 12px;
+  padding-top: 7px;
+  text-align: center;
+  color: var(--s-text-3);
+}
+.iris-settings .iris-bullet textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.45;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.iris-bullet .iris-row-delete {
+  padding-top: 5px;
+  visibility: hidden;
+}
+.iris-bullet:hover .iris-row-delete,
+.iris-bullet textarea:focus + .iris-row-delete {
+  visibility: visible;
+}
+#iris-apply-container .iris-setting.iris-wide input[type="text"],
+#iris-resume-container .iris-setting.iris-wide input[type="text"] {
+  max-width: none;
+}
+#iris-apply-container .iris-setting input[type="number"],
+#iris-apply-container .iris-setting select {
+  width: 100%;
+  max-width: 560px;
+}

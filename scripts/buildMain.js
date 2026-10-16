@@ -25,6 +25,7 @@ const modules = [
   'js/util/proxy.js',
   'main/themeMain.js',
   'main/irisAgent.js',
+  'main/irisJobs.js',
   'main/irisBridge.js'
 ]
 

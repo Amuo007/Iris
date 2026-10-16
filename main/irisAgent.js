@@ -893,6 +893,8 @@ IrisComputer.prototype.screenshot = async function () {
     const seen = irisSeenNote(obs.url, obs.title, this.sessionId)
     // first line, and blunt: a soft hint at the end of the notes was read past
     if (seen) obs.note = 'STOP — you already judged this before: you ' + seen + '. Do not judge or download it again; go back and pick something new.' + (obs.note ? '\n' + obs.note : '')
+    const applied = this.jobsMode && !(this.lastJob && irisJobKey(this.lastJob.url) === irisJobKey(obs.url)) ? irisApplicationNote(obs.url) : null
+    if (applied) obs.note = applied + (obs.note ? '\n' + obs.note : '')
   }
   // Iris's own PDF viewer: say where its download button is (it fades out until the mouse is near)
   if (/^min:\/\/app\/pages\/pdfViewer\//.test(obs.url || '') && !crop) {
@@ -907,6 +909,7 @@ IrisComputer.prototype.screenshot = async function () {
   if (this.pendingChooser) {
     const files = irisRecentFiles(12)
     obs.note = (obs.note ? obs.note + '\n' : '') + 'A file picker is open (' + (this.pendingChooser.mode === 'selectMultiple' ? 'several files allowed' : 'one file') + '). ' +
+      (this.lastResume && fs.existsSync(this.lastResume) ? 'For the resume, use {"type":"upload","file":"resume"} (the PDF made for this job, ' + path.basename(this.lastResume) + '). ' : '') +
       'Pick a file with {"type":"upload","file":"<name>"}. Recent files: ' + (files.length ? files.map(function (f) { return f.name }).join(', ') : '(none found)') + '.'
   }
   if (!crop) this.lastObservation = obs
@@ -1061,6 +1064,55 @@ IrisComputer.prototype.act = async function (action) {
       }
       this.notes = (this.notes || []).concat('Saved the account for ' + action.site + ' (' + action.username + ') in Settings → Accounts.')
       return { ok: true }
+    case 'tailor_resume': {
+      const job = { title: action.title, company: action.company || '', requirements: action.requirements || '', url: action.url || wc.getURL() }
+      const before = irisApplicationFind(job)
+      if (before && before.status === 'applied') {
+        this.notes = (this.notes || []).concat('You already applied to ' + job.title + (job.company ? ' at ' + job.company : '') + ' on ' +
+          new Date(before.updated || before.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + '. Skip it and find another job.')
+        return { ok: true }
+      }
+      broadcastEvent({ type: 'resume:start', title: job.title, company: job.company, sessionId: this.sessionId })
+      let r
+      try { r = await irisTailorResume(job) } catch (e) { r = { ok: false, error: e.message } }
+      if (!r.ok) {
+        this.notes = (this.notes || []).concat('Could not make the resume: ' + r.error)
+        broadcastEvent({ type: 'resume', ok: false, error: r.error, title: job.title, company: job.company, sessionId: this.sessionId })
+        return { ok: true }
+      }
+      this.lastResume = r.file
+      this.lastJob = { title: job.title, company: job.company, url: job.url, fit: r.fit }
+      let note = 'Made a one-page resume for ' + job.title + (job.company ? ' at ' + job.company : '') + ' (' + (r.fit === null ? 'fit not rated' : 'fit ' + r.fit + '/100') +
+        (r.focus ? ', focus: ' + r.focus : '') + '): ' + r.file + '.' + (r.missing && r.missing.length ? ' The profile does not show: ' + r.missing.join(', ') + '.' : '')
+      note += r.below
+        ? ' The fit is below the user\'s cutoff (' + r.cutoff + '): do not apply. log_application {"status":"skipped","note":"fit ' + r.fit + '"} and find the next job.'
+        : ' When the form asks for a resume, click its upload button, then {"type":"upload","file":"resume"} picks this PDF.'
+      this.notes = (this.notes || []).concat(note)
+      broadcastEvent({ type: 'resume', ok: true, file: r.file, fit: r.fit, focus: r.focus, why: r.why, missing: r.missing, below: r.below, title: job.title, company: job.company, ms: r.ms, undone: (r.undone || []).length, sessionId: this.sessionId })
+      return { ok: true }
+    }
+    case 'log_application': {
+      const job = this.lastJob || {}
+      const rec = {
+        status: action.status,
+        company: action.company || job.company || '',
+        title: action.title || job.title || '',
+        url: job.url || action.url || wc.getURL(),
+        note: action.note || '',
+        resume: this.lastResume || '',
+        fit: job.fit === undefined ? null : job.fit,
+        sessionId: this.sessionId || ''
+      }
+      const item = irisApplicationAdd(rec)
+      const label = { applied: 'Applied', skipped: 'Skipped', needs_you: 'Waiting for the user', failed: 'Could not apply' }[rec.status]
+      this.notes = (this.notes || []).concat('Logged in Settings → Jobs → Applications: ' + label + ' — ' + (rec.title || 'job') + (rec.company ? ' at ' + rec.company : '') + '.' +
+        (rec.status === 'applied' ? ' Applications sent today: ' + irisAppliedToday() + '.' : '') + ' Go on to the next job.')
+      if (rec.status === 'needs_you') irisNotify('A job application needs you', (rec.title || 'A job') + (rec.company ? ' at ' + rec.company : '') + (rec.note ? ': ' + rec.note : ''))
+      broadcastEvent({ type: 'application', item: item, sessionId: this.sessionId })
+      this.lastResume = null
+      this.lastJob = null
+      return { ok: true }
+    }
     case 'dialog': {
       if (!this.pendingDialog) return { ok: false, error: 'no dialog is open' }
       try {
@@ -1074,7 +1126,11 @@ IrisComputer.prototype.act = async function (action) {
     case 'upload': {
       const chooser = this.pendingChooser
       if (!chooser) return { ok: false, error: 'no file picker is open; click the upload button or "Choose file" first' }
-      const file = irisFindFile(action.file)
+      // "resume" means the one tailor_resume just made (long paths get mistyped)
+      const wanted = String(action.file || '').trim()
+      let file = null
+      if (this.lastResume && fs.existsSync(this.lastResume) && (/^(the |my |tailored )*(resume|cv|résumé)( pdf| file)?$/i.test(wanted) || path.basename(wanted) === path.basename(this.lastResume))) file = this.lastResume
+      if (!file) file = irisFindFile(action.file)
       if (!file) return { ok: false, error: 'no file named "' + action.file + '" in Downloads, Desktop or Documents' }
       try {
         await wc.debugger.sendCommand('DOM.setFileInputFiles', { files: [file], backendNodeId: chooser.backendNodeId })
@@ -1142,7 +1198,9 @@ IrisComputer.prototype.findInPage = function (wc, text) {
   return new Promise(function (resolve) {
     let timer = null
     let latest = null
+    self.lastFindAnswered = false
     const report = function (result) {
+      self.lastFindAnswered = true
       clearTimeout(timer)
       wc.removeListener('found-in-page', onFound)
       self.lastFind = { text: text, url: wc.getURL() }
@@ -1163,6 +1221,8 @@ IrisComputer.prototype.findInPage = function (wc, text) {
     wc.on('found-in-page', onFound)
     timer = setTimeout(function () { report(latest) }, 6000)
     wc.findInPage(text, { findNext: !!again, forward: true })
+    // the first search on a page that has only just loaded sometimes gets no answer: ask once more
+    setTimeout(function () { if (!latest && !self.lastFindAnswered) wc.findInPage(text, { findNext: false, forward: true }) }, 2000)
   })
 }
 
@@ -1677,6 +1737,7 @@ function irisSystemExtra (mode, task, projectId, sessionId) {
   if (userSkills) parts.push(userSkills)
   const prior = irisPriorJudged(task, sessionId)
   if (prior) parts.push(prior)
+  if (irisJobsActive(task)) parts.push(irisJobsPrompt(task))
   if ((playbook || userSkills) && irisSkillsLogged !== task) {
     irisSkillsLogged = task
     DBUG('prompt extras: playbook=' + !!playbook + ' userSkills=' + (userSkills ? userSkills.split('\n').length - 1 : 0))
@@ -1739,6 +1800,7 @@ function startAgent (task, options) {
   computer.sessionId = session.id
   computer.projectId = session.projectId || null
   computer.projectMemory = irisProjectMemory(session.projectId)
+  computer.jobsMode = irisJobsActive(session.title + '\n' + task)
   irisComputer = computer
   irisBindInput(tabId, cfg)
 
@@ -1783,7 +1845,9 @@ function startAgent (task, options) {
       maxWallClockMs: unlimited ? 0 : Math.max(1, cfg.maxMinutes) * budgetScale * 60 * 1000,
       // a long run must survive a flaky moment instead of giving up after three errors
       maxConsecutiveFailures: unlimited ? 12 : 4,
-      maxRetriesPerStep: unlimited ? 8 : 3
+      maxRetriesPerStep: unlimited ? 8 : 3,
+      // Jobs with "ask before submitting": pause before the click that sends an application
+      applicationGuard: computer.jobsMode && irisCareerLoad().prefs.autoSubmit === false ? 'ask' : 'auto'
     },
     history: { keepImages: cfg.keepImages, maxMessages: unlimited ? 30 : 40 },
     log: DBUG,
@@ -2125,8 +2189,11 @@ ipc.on('iris-settings-action', async function (event, data) {
         if (data.args && data.args.cache) await ses.clearCache()
         return reply({ ok: true })
       }
-      default:
+      default: {
+        const jobs = irisJobsSettingsAction(data.action, data.args)
+        if (jobs) return reply(await jobs)
         return reply({ error: 'unknown action' })
+      }
     }
   } catch (err) {
     reply({ error: err.message })
