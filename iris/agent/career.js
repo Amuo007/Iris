@@ -1590,7 +1590,8 @@ async function fitToPage (opts) {
     layout = best.layout
     r = best.result
   }
-  return { ok: true, pages: r.pages, fill: r.fill, tex: r.tex, pdf: r.pdf, layout: layout, doc: layoutToDoc(bank, layout, pick.rewrite), compiles: compiles, steps: steps }
+  // the PDF of the layout kept, not of the last try (a try that ran onto page 2 is built after it)
+  return { ok: true, pages: r.pages, fill: r.fill, tex: r.tex, pdf: r.pdf, pdfData: r.pdfData, layout: layout, doc: layoutToDoc(bank, layout, pick.rewrite), compiles: compiles, steps: steps }
 }
 
 /** Read a pdfLaTeX log: page count and how full the last page is. */

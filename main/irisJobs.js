@@ -168,8 +168,12 @@ function irisCompileTex (tex, engine) {
         const info = irisCareerLib.readLatexLog(log)
         const pdf = path.join(dir, 'resume.pdf')
         const ok = code === 0 && info.pages > 0 && fs.existsSync(pdf)
+        // every build writes resume.pdf: keep this build's bytes with its result, since the page
+        // fitter may keep an earlier build than the last, and another build may start right after
+        let pdfData = null
+        if (ok) try { pdfData = fs.readFileSync(pdf) } catch (e) { DBUG('latex pdf read: ' + e.message) }
         DBUG('latex ' + (ok ? 'ok' : 'failed') + ' ' + (Date.now() - started) + 'ms pages=' + info.pages + ' fill=' + info.fill.toFixed(2) + (info.error ? ' ' + info.error : ''))
-        resolve({ ok: ok, pages: info.pages, fill: info.fill, error: ok ? null : (info.error || 'LaTeX stopped (exit ' + code + ')'), pdf: pdf, log: ok ? '' : log.slice(-3000) })
+        resolve({ ok: ok && !!pdfData, pages: info.pages, fill: info.fill, error: ok && pdfData ? null : (info.error || 'LaTeX stopped (exit ' + code + ')'), pdf: pdf, pdfData: pdfData, log: ok ? '' : log.slice(-3000) })
       })
     })
   })
@@ -226,7 +230,7 @@ async function irisTailorResume (job, hooks) {
   // recruiters see the file name: the person's name, not "resume (3).pdf"
   const fileName = irisSafeName((bank.basics.name ? bank.basics.name + ' ' : '') + 'Resume', 60) + '.pdf'
   const file = path.join(folder, fileName)
-  fs.copyFileSync(fitted.pdf, file)
+  fs.writeFileSync(file, fitted.pdfData)
   fs.writeFileSync(path.join(folder, 'resume.tex'), fitted.tex.replace(/\\par\\typeout\{IRIS-FILL[^\n]*\n/, ''))
   fs.writeFileSync(path.join(folder, 'job.json'), JSON.stringify({
     job: job, made: Date.now(), fit: pick.fit, focus: pick.focus, why: pick.why, missing: pick.missing,
@@ -284,7 +288,7 @@ async function irisWriteCoverLetter (job, text) {
   if (!r.ok) return { ok: false, error: 'LaTeX could not build the letter: ' + r.error }
   const folder = irisJobFolder(job)
   const file = path.join(folder, irisSafeName((bank.basics.name ? bank.basics.name + ' ' : '') + 'Cover Letter', 60) + '.pdf')
-  fs.copyFileSync(r.pdf, file)
+  fs.writeFileSync(file, r.pdfData)
   fs.writeFileSync(path.join(folder, 'cover-letter.txt'), letter.paragraphs.join('\n\n') + '\n')
   return { ok: true, file: file, removed: letter.removed, words: letter.paragraphs.join(' ').split(/\s+/).length, ms: Date.now() - started }
 }

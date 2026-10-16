@@ -152,6 +152,19 @@ test('room left on the page: more true things are added', async () => {
   assert.ok(r.fill >= 0.9)
 })
 
+test('the PDF kept is the one of the layout kept, not of a last try that ran onto page 2', async () => {
+  const bank = career.normalizeBank(SAMPLE)
+  const pick = career.parseTailorReply(JSON.stringify({ experience: [{ id: 'E1', bullets: ['E1.1'] }, { id: 'E2', bullets: ['E2.1'] }, { id: 'E3', bullets: ['E3.1'] }], projects: [], skills: [{ group: 'Languages', items: ['Python'] }] }), bank, {}, parseObjectLoose)
+  let builds = 0
+  let last = null
+  // the page never counts as full enough, so adding goes on until tries run onto page 2
+  const compile = tex => fakeCompile(tex).then(r => { last = Object.assign(r, { fill: r.pages === 1 ? Math.min(r.fill, 0.5) : r.fill, pdfData: 'build ' + (++builds) + ' pages ' + r.pages }); return last })
+  const r = await career.fitToPage({ bank, pick, template: career.DEFAULT_TEMPLATE, compile })
+  assert.strictEqual(last.pages, 2, 'the last build was a try that overflowed')
+  assert.strictEqual(r.pages, 1)
+  assert.match(r.pdfData, / pages 1$/)
+})
+
 test('a LaTeX log says how many pages and how full', () => {
   const info = career.readLatexLog('IRIS-FILL 600.0pt 650.0pt\nOutput written on resume.pdf (1 page, 123 bytes).')
   assert.strictEqual(info.pages, 1)
