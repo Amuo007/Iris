@@ -862,6 +862,8 @@ const ACTION_SPEC_TEXT = [
   '  as listed — a bare number picks the first option containing it. If a field then shows another option than the',
   '  one you meant, pick again.',
   '  A whole form, dropdowns included, can go in one "actions" list; then check each field in the next screenshot.',
+  '- Tick boxes and radio buttons are tiny in a screenshot: after setting several, zoom on them and check each',
+  '  one\'s state in the close-up before you submit (a missing or extra tick changes what the form claims).',
   '- Enter (enter:true) only picks a dropdown option or runs a search. Never press Enter in a form\'s text box: it',
   '  sends the whole form, often before it is complete. Send a form only with its own submit button.',
   '- Fields with suggestions (cities, airports, addresses): type, then make sure the list shows matches for what',
