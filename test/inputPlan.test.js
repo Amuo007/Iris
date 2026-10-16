@@ -129,6 +129,13 @@ test('type with a target clicks, selects all (replacing the old text), types, th
   assert.deepStrictEqual(plan.filter(p => p.event && p.event.type === 'char' && p.event.keyCode !== '\r').map(p => p.event.keyCode), ['h', 'i'])
 })
 
+test('Enter after typing waits for a dropdown\'s options to appear, but only briefly for a search', () => {
+  const pauseBeforeEnter = plan => plan[plan.findIndex(p => p.event && p.event.type === 'keyDown' && p.event.keyCode === 'Return') - 1].delayMs
+  assert.ok(pauseBeforeEnter(planInputEvents({ type: 'type', text: 'Waterloo', x: 5, y: 5, clear: false, enter: true })) >= 1000)
+  const search = pauseBeforeEnter(planInputEvents({ type: 'type', text: 'laptop', x: 5, y: 5, enter: true }))
+  assert.ok(search >= 100 && search < 500)
+})
+
 test('clear:false appends instead of replacing', () => {
   const plan = planInputEvents({ type: 'type', text: 'x', x: 1, y: 1, clear: false })
   assert.ok(!plan.some(p => p.command === 'selectAll'))

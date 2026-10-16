@@ -261,7 +261,13 @@ function planInputEvents (action, opts) {
           add(Object.assign({ type: 'char', keyCode: ch }, mods ? { modifiers: mods } : {}), 8)
         }
       }
-      if (action.enter) enterEvents(add, 60)
+      if (action.enter) {
+        // a pause before Enter, as a person waits for the list: typing into a dropdown (clear:false) filters
+        // or loads its options ("Loading…" while a school list is searched), and Enter picks the first
+        const last = out[out.length - 1]
+        if (last) last.delayMs = Math.max(last.delayMs, action.clear === false ? 1200 : 150)
+        enterEvents(add, 60)
+      }
       break
     }
 
