@@ -24,9 +24,8 @@ notification) so I know to come back and take over, instead of the task silently
   then record it under Accounts (already supported, just not tried on real sites).
 - **Research report file.** At the end of a research run, save the kept items (title, link, why) as a
   Markdown file next to the downloaded PDFs.
-- **Adaptive thinking.** Mechanical steps (click the download button, scroll, type into a known field)
-  don't need thinking; reading and judging pages do. Switching to "off" for the mechanical ones could
-  make research loops ~30% faster. Needs a reliable way to tell the two apart.
+- **Adaptive thinking.** *Tried Oct 16 ("Auto"): no gain* — at Balanced this model already writes only
+  ~80 tokens a step; the time is in reading the prompt and screenshot.
 - **One agent at a time on the server.** *Done Oct 16:* a lock file per model server; a second Iris
   window waits its turn (`iris/agent/modelLock.js`).
 
@@ -41,8 +40,20 @@ notification) so I know to come back and take over, instead of the task silently
 - **Iterative zoom for tiny targets.** Zoom-in grounding (AdaZoom-GUI, "Zoom Consistency", 2026) is
   more accurate but costs a model call per click. Iris now snaps near-misses with the pointer shape and
   marks missed clicks with a red ✕; zoom refinement could be added only for repeated misses.
-- **Job alerts.** A scheduled daily run ("find new matching jobs and apply") with the per-day limit is
-  already possible with Schedule + Jobs; a one-click "every morning" toggle in Settings → Jobs would
-  make it obvious.
-- **Answers learned from forms.** When a form asks something new and you answer it (ask_user), offer to
-  save the answer in Settings → Jobs → Answers so the next form fills it alone.
+- **Job alerts.** *Done Oct 16:* "Every day" in Settings → Applying.
+- **Answers learned from forms.** *Done Oct 16:* answers you give during an application are saved with a
+  short label and used on the next form.
+
+## Ideas from the evening of Oct 16
+
+- **Posting text from Workday.** Workday postings are built by JavaScript, but each tenant has a public
+  JSON endpoint (`/wday/cxs/<tenant>/<site>/job/<path>`) with the description — the same trick as Ashby.
+- **Tick-box lists in one look.** Six tick boxes 25 px apart is the hardest target left. Clicking the
+  option's text instead of the box, or a close-up before clicking, would trade one step for fewer fixes.
+- **Smaller screenshots.** Each step's fresh tokens are mostly the screenshot; 1024 px instead of 1280
+  could cut a step by a second or two if aim holds (being measured).
+- **Bigger forgetting chunks in long runs.** The cache starts over every 6–8 steps (when half the window
+  is forgotten); a 40-message window in non-stop runs would make that every ~10 steps at a cost of
+  longer prompts — worth an A/B.
+- **A "why not applied" view.** Applications already keep fit, focus and what was missing; a column for
+  the gaps would show which skills keep costing jobs.
