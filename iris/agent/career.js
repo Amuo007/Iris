@@ -847,8 +847,8 @@ function readHeader (src, body, firstSection) {
     const big = /\\(Huge|huge|LARGE|Large)\b/.exec(head)
     if (big) {
       // the smallest {…} around the big text, or the rest of that line
-      let open = head.lastIndexOf('{', big.index)
-      let g = open !== -1 ? readGroup(head, open) : null
+      const open = head.lastIndexOf('{', big.index)
+      const g = open !== -1 ? readGroup(head, open) : null
       const text = g && g.end > big.index ? g.content : head.slice(big.index, head.indexOf('\n', big.index) === -1 ? head.length : head.indexOf('\n', big.index))
       basics.name = latexToPlain(text).replace(/\*\*/g, '').trim().slice(0, 80)
     }
@@ -1651,7 +1651,6 @@ async function fitToPage (opts) {
  * Is this a job-hunting task? "apply to jobs", "find me an internship", "tailor my resume" — but not
  * "apply the coupon at checkout", "resume the download" or "papers about job scheduling".
  */
-const JOB_WORDS = '(jobs?|positions?|roles?|internships?|co-?ops?|openings?|postings?|vacanc(y|ies)|careers? pages?|greenhouse|lever|ashby|workday)'
 // words that mean job hunting wherever they stand next to "apply" ("roles" and "positions" are not
 // enough on their own: "apply the admin role", "apply the saved positions")
 const JOB_STRONG = /\b(jobs?|internships?|co-?ops?|openings|postings?|vacanc(y|ies)|careers? pages?|hiring|greenhouse|lever|ashby|workday)\b/i
