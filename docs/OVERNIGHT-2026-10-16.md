@@ -27,12 +27,25 @@ Draft, updated through the night. The final version is at the end of the night.
 - A click that changes nothing gets a hint: you probably missed, zoom in or aim at the centre.
 - "Verifying you are human" pages: wait up to ~10 s, else use another site, else ask you.
 
+### 3b. Answers you can trust
+- **Final-answer check**: before a long task's answer is shown, one quick call (no thinking) compares it
+  with what Iris noted, thought and sees, and takes out details it never saw. The panel says what was
+  left out. (Found because Iris invented train times on a booking page that didn't show them.)
+- New rule: details that will leave the screen (times, prices, codes) are saved with "remember" when seen.
+- A calendar hint (the coming Mondays) so weekday sums stop going wrong.
+- More forgiving reply parsing: actions nested one level too deep, "remember" written as an action, and
+  `"y="329` typos no longer make a step fail.
+- After typing into a field with suggestions, Iris waits a moment and checks the list matches before
+  choosing (Google Flights had picked "New Denver" from a stale list).
+
 ### 4. Research memory across chats
 - Every keep/skip judgement is saved permanently (`iris-seen.json`). A page or search result Iris judged
   before is flagged ("you skipped this on Oct 14: …"), so research doesn't re-read the same paper.
 - Look-up results are searchable with `recall`.
 - Downloads: also skipped when the same file (name and size) is already in the download folder.
 - PDFs: Iris knows exactly where the download button of its own PDF viewer is.
+- A research run that kept 2+ things saves `Iris report - <task>.md` next to the downloads (kept items
+  with links and reasons, files, the answer).
 
 ### 5. Long runs that look after themselves
 - Non-stop runs: if Iris asks you something and nobody answers in 10 minutes, it skips that item and
@@ -40,7 +53,10 @@ Draft, updated through the night. The final version is at the end of the night.
 - Repeat/Non-stop chats keep only their newest 6 follow-up messages pinned; older ones are summarised
   (they used to grow forever).
 - macOS notification when Iris asks you something, waits for your OK, or finishes, but only while
-  you're not looking at Iris.
+  you're not looking at Iris. A Non-stop run restarting itself after an error doesn't notify.
+- Non-stop tasks that say "keep going / until I stop you" carry on after the model calls it done.
+- The status bar shows what a run has produced so far (kept items, files) next to its clock.
+- The panel keeps at most 400 items, so a run of many hours stays fast.
 
 ### 6. Coding agents (MCP)
 - `bin/iris-mcp.js` + `main/irisBridge.js`. Turn on Settings → Iris AI → Coding agents, paste the
@@ -66,6 +82,8 @@ Draft, updated through the night. The final version is at the end of the night.
 - Fixed: the Quick button that ran off the panel (Smart and its level are now one control),
   descriptions aligned with headings, narrow My info fields, long skill URLs running out of the card,
   underlined history rows, the heavy content-blocking box. Checked in dark and light mode.
+- Fixed: Min's "Save password?" bar was hidden behind the taller Iris toolbar and left an empty black
+  gap above the page; it now shows under the toolbar in Iris colours.
 
 ## Ideas taken from coding harnesses (Claude Code, Codex, OpenCode, Manus)
 
@@ -81,7 +99,7 @@ Draft, updated through the night. The final version is at the end of the night.
 
 ## Tests
 
-- Unit tests: 151 → 178, all passing.
+- Unit tests: 151 → 188, all passing.
 - Live (your Qwen, Balanced thinking unless noted):
 
 | Test | Result |

@@ -769,3 +769,12 @@ test('short answers without numbers are not checked', async () => {
   await h.agent.run('open the page')
   assert.strictEqual(h.model.callCount, 1)
 })
+
+test('open-ended tasks are recognised; tasks with an end are not', () => {
+  const { isOpenEnded } = require('../iris/agent/prompts')
+  assert.ok(isOpenEnded('Keep researching papers until I stop you'))
+  assert.ok(isOpenEnded('download as many as you can'))
+  assert.ok(isOpenEnded('keep going'))
+  assert.ok(!isOpenEnded('find me 10 papers on harnesses'))
+  assert.ok(!isOpenEnded('book a train to Milwaukee'))
+})

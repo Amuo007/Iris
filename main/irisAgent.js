@@ -1601,6 +1601,8 @@ function irisBindInput (tabId, cfg) {
   }
 }
 
+var irisSkillsLogged = null
+
 /* Models are bad at weekday arithmetic: name the coming Mondays so dates can be checked, not guessed. */
 function irisCalendarHint (now) {
   const d = new Date(now)
@@ -1640,6 +1642,10 @@ function irisSystemExtra (mode, task, projectId) {
   if (playbook) parts.push(playbook)
   const userSkills = irisUserSkillsFor(task)
   if (userSkills) parts.push(userSkills)
+  if ((playbook || userSkills) && irisSkillsLogged !== task) {
+    irisSkillsLogged = task
+    DBUG('prompt extras: playbook=' + !!playbook + ' userSkills=' + (userSkills ? userSkills.split('\n').length - 1 : 0))
+  }
   const rules = String(settings.get('irisRules') || '').trim()
   if (rules) parts.push('Rules from the user. Always follow these, they override everything else:\n' + rules)
   return parts.join('\n\n')
@@ -1867,7 +1873,7 @@ function startAgent (task, options) {
     if (mode === 'repeat' && result.status !== 'stopped') irisScheduleRepeat(task, options)
     // "keep going until I stop you": a non-stop run that thinks it is finished looks for more
     const original = session.items.find(function (it) { return it.kind === 'user' }) || { text: task }
-    if (mode === 'continuous' && result.status === 'done' && IRIS_OPEN_ENDED.test(original.text) && (session.autoResumes || 0) < 200) {
+    if (mode === 'continuous' && result.status === 'done' && irisPrompts.isOpenEnded(original.text) && (session.autoResumes || 0) < 200) {
       session.autoResumes = (session.autoResumes || 0) + 1
       broadcastEvent({ type: 'repeat:scheduled', at: Date.now() + 20000, minutes: 1 / 3, sessionId: session.id, resume: true })
       irisRepeatTimer = setTimeout(function () {
@@ -1901,9 +1907,6 @@ function startAgent (task, options) {
   broadcastEvent({ type: 'session', session: irisSessionHeader(session) })
   return { ok: true, sessionId: session.id }
 }
-
-/* a task that asks to go on until the user stops it */
-const IRIS_OPEN_ENDED = /until (i|you are|you're) (stop|told)|keep (going|researching|looking|collecting|finding|searching|downloading)|non-?stop|forever|continuously|as many as (you can|possible)/i
 
 function irisScheduleRepeat (task, options) {
   const minutes = Math.max(1, Number(options.everyMinutes) || 60)

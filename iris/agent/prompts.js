@@ -209,6 +209,11 @@ function profileText (profile) {
   return lines.length > 1 ? lines.join('\n') : ''
 }
 
+/** "Keep going until I stop you": a task that has no natural end. */
+function isOpenEnded (task) {
+  return /until (i|you are|you're) (stop|tell)|keep (going|researching|looking|collecting|finding|searching|downloading)|non-?stop|forever|continuously|as many as (you can|possible)/i.test(String(task || ''))
+}
+
 function modeText (mode) {
   if (mode === 'continuous') {
     return 'This is a long, autonomous run with no step limit. Keep working until the task is fully done. ' +
@@ -287,6 +292,7 @@ module.exports = {
   notesText,
   profileText,
   modeText,
+  isOpenEnded,
   observationIntro,
   loadingWarning,
   correctionMessage,
