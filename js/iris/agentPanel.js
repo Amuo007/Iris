@@ -457,6 +457,7 @@ function newChat () {
   ipc.send('iris-agent-new-chat')
   currentSessionId = null
   repeatAt = 0
+  tally = { kept: 0, files: 0 }
   showHistory(false)
   streamEl.innerHTML = ''
   streamEl.appendChild(emptyState())
@@ -657,11 +658,17 @@ function formatElapsed (ms) {
   return m ? m + ':' + String(s % 60).padStart(2, '0') : s + 's'
 }
 
+/* what a long run has produced so far, next to its clock */
+let tally = { kept: 0, files: 0 }
+
 function tick () {
   if (repeatAt && !isBusy()) {
     statusTime.textContent = 'in ' + formatElapsed(repeatAt - Date.now())
   } else if (runStartedAt) {
-    statusTime.textContent = formatElapsed(Date.now() - runStartedAt)
+    const parts = []
+    if (tally.kept) parts.push(tally.kept + ' kept')
+    if (tally.files) parts.push(tally.files + (tally.files === 1 ? ' file' : ' files'))
+    statusTime.textContent = (parts.length ? parts.join(' · ') + ' · ' : '') + formatElapsed(Date.now() - runStartedAt)
   }
 }
 
@@ -971,6 +978,7 @@ function handleEvent (payload) {
       currentSessionId = payload.session && payload.session.id
       break
     case 'run:start':
+      if (!payload.followUp) tally = { kept: 0, files: 0 }
       setStatus('running', 'Starting…')
       break
     case 'observation':
@@ -1019,10 +1027,11 @@ function handleEvent (payload) {
       break
     case 'verdict':
       addVerdict(payload)
+      if (payload.keep) tally.kept++
       break
     case 'download':
       if (payload.state === 'started') setStatus(keep, 'Downloading ' + (payload.name || 'a file') + '…')
-      else if (payload.state === 'completed') addNote('Downloaded ' + payload.name + ' to your Downloads folder', 'memo')
+      else if (payload.state === 'completed') { tally.files++; addNote('Downloaded ' + payload.name + ' to your Downloads folder', 'memo') }
       else if (payload.state === 'skipped') addNote('Skipped ' + payload.name + ' — already downloaded as ' + payload.existing, 'memo')
       else addNote('Download failed: ' + payload.name + ' (' + payload.state + ')', 'warn')
       break
@@ -1073,7 +1082,9 @@ function handleEvent (payload) {
     case 'repeat:scheduled':
       repeatAt = payload.at
       setStatus(lastStatus)
-      addNote('Next run in ' + formatElapsed(payload.minutes * 60000) + '. Press Stop to cancel.', 'memo')
+      addNote(payload.resume
+        ? 'Non-stop: carrying on in ' + formatElapsed(payload.at - Date.now()) + '. Press Stop to end it.'
+        : 'Next run in ' + formatElapsed(payload.minutes * 60000) + '. Press Stop to cancel.', 'memo')
       break
     case 'repeat:cancelled':
       repeatAt = 0

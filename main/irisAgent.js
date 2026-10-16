@@ -1865,6 +1865,20 @@ function startAgent (task, options) {
     irisAgentState.answer = result.answer
     irisAgentState.reason = result.reason
     if (mode === 'repeat' && result.status !== 'stopped') irisScheduleRepeat(task, options)
+    // "keep going until I stop you": a non-stop run that thinks it is finished looks for more
+    const original = session.items.find(function (it) { return it.kind === 'user' }) || { text: task }
+    if (mode === 'continuous' && result.status === 'done' && IRIS_OPEN_ENDED.test(original.text) && (session.autoResumes || 0) < 200) {
+      session.autoResumes = (session.autoResumes || 0) + 1
+      broadcastEvent({ type: 'repeat:scheduled', at: Date.now() + 20000, minutes: 1 / 3, sessionId: session.id, resume: true })
+      irisRepeatTimer = setTimeout(function () {
+        irisRepeatTimer = null
+        const tabId = irisComputer ? irisComputer.tabId : options.tabId
+        const again = startAgent('Keep going (you were asked to continue until stopped): find more that you have not covered yet, ' +
+          'and skip everything you already judged or downloaded. The task: ' + original.text, Object.assign({}, options, { tabId: tabId, sessionId: session.id, plan: false }))
+        if (!again.ok) DBUG('continue failed: ' + again.error)
+      }, 20000)
+      return
+    }
     // a non-stop run that hit trouble overnight picks itself back up (only Stop ends it)
     if (mode === 'continuous' && result.status === 'failed' && (session.autoResumes || 0) < 50) {
       session.autoResumes = (session.autoResumes || 0) + 1
@@ -1887,6 +1901,9 @@ function startAgent (task, options) {
   broadcastEvent({ type: 'session', session: irisSessionHeader(session) })
   return { ok: true, sessionId: session.id }
 }
+
+/* a task that asks to go on until the user stops it */
+const IRIS_OPEN_ENDED = /until (i|you are|you're) (stop|told)|keep (going|researching|looking|collecting|finding|searching|downloading)|non-?stop|forever|continuously|as many as (you can|possible)/i
 
 function irisScheduleRepeat (task, options) {
   const minutes = Math.max(1, Number(options.everyMinutes) || 60)
