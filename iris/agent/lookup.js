@@ -375,8 +375,23 @@ function createLookup (opts) {
     return { source: board.company + ' on ' + board.ats + ', ' + all.length + ' open', items: items }
   }
 
+  /* An Ashby posting page is built by JavaScript; its public posting API has the same text. */
+  async function ashbyPosting (url, chars) {
+    const m = /^https?:\/\/jobs\.ashbyhq\.com\/([^/?#]+)\/([0-9a-f-]{36})/i.exec(url)
+    if (!m) return null
+    const r = await get(boardApiUrl({ ats: 'ashby', company: decodeURIComponent(m[1]) }), 'application/json')
+    if (r.status !== 200) return null
+    const job = ((JSON.parse(r.body) || {}).jobs || []).find(function (j) { return String(j.id).toLowerCase() === m[2].toLowerCase() })
+    if (!job || !job.descriptionPlain) return null
+    const title = String(job.title || '').trim()
+    const head = [title, job.location, job.department].filter(Boolean).join(' · ')
+    return { source: 'ashby posting api', items: [{ title: title, url: job.jobUrl || url, text: clip(head + '\n' + job.descriptionPlain, chars || cfg.pageChars) }] }
+  }
+
   async function page (url, chars) {
     if (!/^https?:\/\//i.test(url)) url = 'https://' + String(url).replace(/^\/+/, '')
+    const ashby = await ashbyPosting(url, chars)
+    if (ashby) return ashby
     const r = await get(url)
     if (looksBlocked(r.status, r.body)) throw new Error(hostOf(url) + ' blocks quick reading; open it in the browser instead')
     if (r.status >= 400) throw new Error(hostOf(url) + ' answered ' + r.status)

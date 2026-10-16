@@ -191,3 +191,15 @@ test('a job posting can be read further than a usual page, so its requirements a
   const long = await lk.lookup({ kind: 'page', query: 'https://jobs.test/emb', chars: 8000 })
   assert.match(long.text, /2\+ years writing embedded C/)
 })
+
+test('an Ashby posting (a JavaScript page) is read from Ashby\'s public posting API', async () => {
+  const id = '34413f8d-26bf-4bbc-8ade-eb309a0e2245'
+  const board = { jobs: [{ id, title: ' Security Engineer, Cloud', location: 'New York', department: 'Engineering', jobUrl: 'https://jobs.ashbyhq.com/ramp/' + id, descriptionPlain: 'What you bring: 3+ years securing AWS.' }] }
+  const log = []
+  const lk = createLookup(Object.assign({ fetch: fakeFetch([['api.ashbyhq.com/posting-api/job-board/ramp', JSON.stringify(board), 200, 'application/json']], log) }, instant))
+  const r = await lk.lookup({ kind: 'page', query: 'https://jobs.ashbyhq.com/ramp/' + id + '/application', chars: 8000 })
+  assert.ok(r.ok)
+  assert.strictEqual(r.items[0].title, 'Security Engineer, Cloud')
+  assert.match(r.items[0].text, /3\+ years securing AWS/)
+  assert.ok(!log.some(u => u.startsWith('https://jobs.ashbyhq.com')), 'the JavaScript page itself is not fetched')
+})
