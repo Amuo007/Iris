@@ -1674,6 +1674,25 @@ function isJobTask (text) {
   return JOB_TASK.some(function (re) { return re.test(t) })
 }
 
+/*
+ * A short label for an answer Iris learned from the user: the form's own question when Iris quoted it,
+ * otherwise the first sentence without "The application asks for your …" around it.
+ */
+function answerLabel (question) {
+  const q = String(question || '').replace(/\s+/g, ' ').trim()
+  const quoted = /["“]([^"”]{8,200})["”]/.exec(q)
+  let label = quoted ? quoted[1].trim() : q.split(/(?<=[.?!])\s+/)[0]
+  if (!quoted) {
+    label = label.replace(/^question\s*:\s*/i, '')
+      .replace(/^(the|this)\s+(application|form|site|page|job|posting|employer|company)\s+(asks?|needs?|wants?|requires?)\s+((for|about)\s+)?/i, '')
+      .replace(/^(your|the)\s+/i, '')
+      .replace(/\.$/, '')
+    label = label.charAt(0).toUpperCase() + label.slice(1)
+  }
+  if (label.length > 100) label = label.slice(0, 100).replace(/\s+\S*$/, '') + '…'
+  return label
+}
+
 /** Read a pdfLaTeX log: page count and how full the last page is. */
 function readLatexLog (log) {
   const text = String(log || '')
@@ -1689,6 +1708,7 @@ function readLatexLog (log) {
 module.exports = {
   SECTION_KINDS,
   isJobTask,
+  answerLabel,
   yearsAsked,
   yearsWorked,
   DEFAULT_TEMPLATE,

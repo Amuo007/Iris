@@ -390,10 +390,8 @@ function irisJobsLearnAnswer (question, answer) {
   const a = String(answer || '').trim()
   if (!q || !a || a.length > 300 || /^(skip|no idea|don'?t know|stop|cancel)\b/i.test(a)) return false
   const raw = irisCareerLoad()
-  // the form's own question when Iris quoted it ("… asks: \"Do you have a driver's licence?\"")
-  const quoted = /["“]([^"”]{8,200})["”]/.exec(q)
-  let label = (quoted ? quoted[1] : q.replace(/^.*?(?:asks?|question)[^:]*:\s*/i, '')).trim()
-  if (label.length > 100) label = label.slice(0, 100).replace(/\s+\S*$/, '') + '…'
+  // the form's own question when Iris quoted it ("… asks: \"Do you have a driver's licence?\""), else a short one
+  const label = irisCareerLib.answerLabel(q)
   if (raw.answers.some(function (x) { return x.label.toLowerCase() === label.toLowerCase() })) return false
   raw.answers.push({ label: label, value: a, learned: Date.now() })
   irisCareerSave(raw)

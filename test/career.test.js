@@ -296,3 +296,10 @@ test('a job asking for more years than the profile shows cannot get a high fit',
   const ok = career.parseTailorReply(reply, bank, { title: 'Embedded', requirements: '1+ years writing C' }, parseObjectLoose, now)
   assert.strictEqual(ok.fit, 85)
 })
+
+test('a learned answer gets a short label', () => {
+  assert.strictEqual(career.answerLabel('The form asks: "Do you have a valid driver\'s licence?" What should I answer?'), 'Do you have a valid driver\'s licence?')
+  assert.strictEqual(career.answerLabel('The application asks for your expected annual base salary (CAD). What range should I select? Let me know.'), 'Expected annual base salary (CAD)')
+  assert.strictEqual(career.answerLabel('Question: Are you willing to travel 25% of the time?'), 'Are you willing to travel 25% of the time?')
+  assert.strictEqual(career.answerLabel('Do you need visa sponsorship? The form requires an answer.'), 'Do you need visa sponsorship?')
+})
