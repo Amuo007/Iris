@@ -188,6 +188,17 @@ function irisProfileForPrompt () {
   })
 }
 
+/* 20 characters from letters, digits and symbols sites accept: made for one site, never shown to the model */
+function irisNewPassword () {
+  const sets = ['abcdefghijkmnopqrstuvwxyz', 'ABCDEFGHJKLMNPQRSTUVWXYZ', '23456789', '!#%+=?@']
+  const bytes = require('crypto').randomBytes(40)
+  const chars = sets.map(function (set, i) { return set[bytes[i] % set.length] }) // one of each kind
+  const all = sets.join('')
+  for (let i = 4; chars.length < 20; i++) chars.push(all[bytes[i] % all.length])
+  for (let i = chars.length - 1; i > 0; i--) { const j = bytes[20 + (i % 20)] % (i + 1); const t = chars[i]; chars[i] = chars[j]; chars[j] = t }
+  return chars.join('')
+}
+
 /** Swap {{Label}} placeholders for the real secret right before typing. */
 function irisFillSecrets (text) {
   if (!text || text.indexOf('{{') === -1) return text
@@ -1134,7 +1145,10 @@ IrisComputer.prototype.act = async function (action) {
     }
     case 'save_account':
       try {
-        irisAccountSave({ site: action.site, username: action.username, password: action.password, url: wc.getURL(), title: wc.getTitle(), purpose: action.purpose || this.taskTitle || '' })
+        const host = irisSiteOf(wc.getURL()) || ''
+        const made = this.newPasswords && (this.newPasswords[host] || this.newPasswords[String(action.site || '').replace(/^www\./, '')])
+        const pw = /\{\{\s*new password\s*\}\}/i.test(action.password || '') || (!action.password && made) ? made || '' : action.password
+        irisAccountSave({ site: action.site, username: action.username, password: pw, url: wc.getURL(), title: wc.getTitle(), purpose: action.purpose || this.taskTitle || '' })
       } catch (e) {
         return { ok: false, error: 'could not save the account: ' + e.message }
       }
@@ -1268,7 +1282,15 @@ IrisComputer.prototype.act = async function (action) {
   }
 
   // secrets are filled in here, at the last moment: the model and the panel only see {{Label}}
-  const real = action.type === 'type' ? Object.assign({}, action, { text: irisFillSecrets(action.text) }) : action
+  let typed = action.type === 'type' ? action.text : null
+  if (typed && /\{\{\s*new password\s*\}\}/i.test(typed)) {
+    // a strong password made for this one site (the same one again for "confirm password"); saved with the account
+    const site = irisSiteOf(wc.getURL()) || 'site'
+    this.newPasswords = this.newPasswords || {}
+    if (!this.newPasswords[site]) this.newPasswords[site] = irisNewPassword()
+    typed = typed.replace(/\{\{\s*new password\s*\}\}/gi, this.newPasswords[site])
+  }
+  const real = action.type === 'type' ? Object.assign({}, action, { text: irisFillSecrets(typed) }) : action
   const plan = irisInputPlan.planInputEvents(real, { from: this.pointer })
 
   // Mark "we are driving" so genuine human input can be told apart from our own events.
@@ -1912,7 +1934,9 @@ function irisSystemExtra (mode, task, projectId, sessionId) {
   if (irisProfileForPrompt().length) {
     parts.push(accountMode === 'login'
       ? 'When a site needs an account, log in with the user\'s saved email or username and password. Never create new accounts; if logging in fails, use ask_user.'
-      : 'When a site needs an account, first log in with the user\'s saved email or username and password. If the user has no account there, sign up with their saved details (name, email, password, and anything else the form asks that you know), accept the usual terms, then continue the task. Never guess personal details (country, address, birthday, phone, gender, job): if My info does not have one a form needs, use ask_user — even when the site suggests a default. After creating an account, record it with save_account.')
+      : 'When a site needs an account: if Settings → Accounts has one for that site (listed below), log in with its username and its password placeholder. Otherwise sign up with the user\'s saved details (name, email, and anything else the form asks that you know); for the password type {{New password}} — Iris makes a strong password just for that site, types the same one into "confirm password", and saves it. Accept the usual terms, then continue the task. Never guess personal details (country, address, birthday, phone, gender, job): if My info does not have one a form needs, use ask_user — even when the site suggests a default. After creating an account, record it with save_account (password "{{New password}}").')
+    const accounts = irisAccountsLoad()
+    if (accounts.length) parts.push('Accounts Iris made for the user (log in with these): ' + accounts.slice(-40).map(function (a) { return a.site + ' — ' + a.username + ' / {{account:' + a.site + '}}' }).join('; ') + '.')
     parts.push(irisSettings().emailAccess
       ? 'If a site emails a verification code or link: open a new tab, go to the user\'s email inbox (the "Email inbox URL" in their details, or their usual webmail), sign in with their saved details if needed, open the newest message from that site, read the code or click the link, then close that tab and switch back. Codes sent by text message or phone: use ask_user.'
       : 'If a site sends a verification code or link (email or phone), use ask_user: the user will tell you the code or open the link.')
@@ -2099,8 +2123,10 @@ function startAgent (task, options) {
         const a = payload.action
         if (a.type === 'save_account') session.signup.saved = true
         if (a.type === 'type' && /\{\{[^}]+\}\}/.test(a.text) && !irisCardLikeLabel(a.text)) {
-          session.signup.password = a.text.trim()
           session.signup.site = irisSiteOf(computer.state().url)
+          // a password made for this site is saved itself, not the placeholder
+          const made = /new password/i.test(a.text) && computer.newPasswords && computer.newPasswords[session.signup.site]
+          session.signup.password = made || a.text.trim()
         } else if (a.type === 'type' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.text.trim())) {
           session.signup.username = a.text.trim()
         }
