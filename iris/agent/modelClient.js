@@ -123,7 +123,8 @@ function createModelClient (config) {
   const refused = new Set()
 
   function buildBody (messages, thinking) {
-    const level = thinking || cfg.thinking
+    // 'auto' is decided per step by the agent loop; a call without its own level thinks a little
+    const level = (thinking && thinking !== 'auto') ? thinking : (cfg.thinking === 'auto' ? 'low' : cfg.thinking)
     const body = {
       model: cfg.model,
       messages,

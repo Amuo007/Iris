@@ -846,3 +846,23 @@ test('time spent waiting for the user is not charged to the time budget', async 
   const result = await run
   assert.strictEqual(result.status, 'done', 'not stopped by the 60 s budget')
 })
+
+test('auto thinking: thinks on a new page or after a miss, answers quickly on routine steps', async () => {
+  const { createAgent } = require('../iris/agent/agentLoop')
+  const urls = ['https://a.test/', 'https://a.test/', 'https://a.test/', 'https://b.test/', 'https://b.test/']
+  const replies = [
+    { type: 'scroll', direction: 'down' },
+    { type: 'type', text: 'x', x: 5, y: 5 },
+    { type: 'click', x: 5, y: 5 },
+    { type: 'scroll', direction: 'down' },
+    { type: 'done', answer: 'ok' }
+  ].map(a => JSON.stringify({ thought: 't', action: a }))
+  let i = 0
+  const levels = []
+  const model = { next: async (o) => { levels.push(o.thinking); return replies[i++] } }
+  let shot = 0
+  const computer = { screenshot: async () => ({ dataUrl: 'data:image/jpeg;base64,AA', width: 100, height: 100, url: urls[shot], fingerprint: 'f' + shot++ }), act: async () => ({ ok: true }), state: () => ({}) }
+  const agent = createAgent({ model, computer, delay: async () => {}, config: { thinking: 'auto', answerCheck: false }, safety: { maxSteps: 10 } })
+  await agent.run('do it')
+  assert.deepStrictEqual(levels, ['low', 'off', 'off', 'low', 'off'], 'first look thinks; scroll and type on the same page do not; a new page thinks; a scroll after it does not')
+})

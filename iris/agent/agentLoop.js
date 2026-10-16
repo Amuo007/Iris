@@ -160,7 +160,25 @@ function createAgent (opts) {
     })
   }
 
-  async function modelNext (messages, step, obs) {
+  /*
+   * Auto thinking: think (low) where it pays — the first look, a new page, after a miss or an error,
+   * when Iris has something to say about the page, or after 4 quick steps in a row — and answer
+   * straight away on routine steps on the same page (scrolling on, filling the rest of a form).
+   */
+  let quickRun = 0
+  let lastObsUrl = null
+  function thinkingFor (obs, unchanged, lastActed, lastFailed) {
+    if (cfg.thinking !== 'auto') return undefined
+    const sameUrl = lastObsUrl !== null && obs.url === lastObsUrl
+    lastObsUrl = obs.url || ''
+    const routine = sameUrl && !unchanged && !lastFailed && !obs.note && !obs.firstOfTask && lastActed &&
+      ['scroll', 'type', 'wait', 'zoom', 'find', 'upload', 'key'].indexOf(lastActed.type) !== -1
+    if (routine && quickRun < 4) { quickRun++; return 'off' }
+    quickRun = 0
+    return 'low'
+  }
+
+  async function modelNext (messages, step, obs, thinking) {
     const timeoutMs = safety.config.maxModelMsPerStep || cfg.maxModelMsPerStep
     let timer = null
     const timeout = new Promise((resolve, reject) => {
@@ -173,6 +191,7 @@ function createAgent (opts) {
         Promise.resolve(model.next({
           messages: messages,
           step: step,
+          thinking: thinking,
           history: history.transcript(),
           signal: modelAbort ? modelAbort.signal : undefined,
           onProgress: function (p) {
@@ -359,6 +378,7 @@ function createAgent (opts) {
     let compactions = 0
     let lastFingerprint = null
     let lastActed = null
+    let lastFailed = false
     asking = false
 
     /* eslint-disable no_constant_condition */
@@ -479,6 +499,7 @@ function createAgent (opts) {
       history.addObservation(obs, state.step)
 
       // ---- 4. think ----------------------------------------------------------
+      const stepThinking = thinkingFor(obs, unchanged, lastActed, lastFailed)
       let raw
       safety.beforeModelCall()
       emit('model:start', { step: state.step })
@@ -486,7 +507,7 @@ function createAgent (opts) {
         const extra = typeof cfg.systemExtra === 'function' ? cfg.systemExtra() : cfg.systemExtra
         // { stable, live }: the stable part opens the prompt (cached), the live part goes last
         const split = extra && typeof extra === 'object' ? extra : { stable: extra, live: '' }
-        raw = await modelNext(history.messages(split.stable || undefined, split.live || undefined), state.step, obs)
+        raw = await modelNext(history.messages(split.stable || undefined, split.live || undefined), state.step, obs, stepThinking)
       } catch (err) {
         if (stopRequested) return finish('stopped', stopRequested)
         const message = err && err.message ? err.message : String(err)
@@ -536,6 +557,7 @@ function createAgent (opts) {
       if (!parsed.ok) {
         const gate = safety.noteRetry(parsed.error)
         emit('rejected', { step: state.step, error: parsed.error, raw: text })
+        lastFailed = true
         history.addCorrection(parsed.error)
         if (!gate.allow) return finish('failed', gate.reason)
         continue
@@ -561,9 +583,11 @@ function createAgent (opts) {
 
       pageState.thought = parsed.thought || ''
       let outcome = null
+      lastFailed = false
       for (let i = 0; i < batch.length; i++) {
         outcome = await perform(batch[i], i, batch.length, mapping, obs, pageState, unchanged)
         if (outcome.finished) return outcome.finished
+        if (outcome.failed) lastFailed = true
         if (outcome.stopBatch) break
       }
       lastActed = batch[batch.length - 1]
@@ -741,7 +765,7 @@ function createAgent (opts) {
       emit('action:result', { step: state.step, index, ok: false, error: message })
       history.addFailure(message)
       if (!gate.allow) return { finished: finish('failed', gate.reason) }
-      return { stopBatch: true }
+      return { stopBatch: true, failed: true }
     }
     emit('action:result', { step: state.step, index, ok: true })
 

@@ -27,7 +27,7 @@ const SUGGESTIONS = [
   'Summarize this page in three bullet points'
 ]
 
-const THINKING_LABELS = { off: 'Fast', low: 'Balanced', medium: 'Careful', full: 'Deep' }
+const THINKING_LABELS = { off: 'Fast', auto: 'Auto', low: 'Balanced', medium: 'Careful', full: 'Deep' }
 const THINKING_HELP = 'How long Iris thinks before each action. Fast is quickest; Deep is slowest but most careful.'
 
 const RUN_MODES = [

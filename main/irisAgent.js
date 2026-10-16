@@ -2024,6 +2024,7 @@ function startAgent (task, options) {
       maxServerWaitMs: unlimited ? 0 : 10 * 60 * 1000,
       askTimeoutMs: unlimited ? 10 * 60 * 1000 : 0, // an overnight run does not wait all night for an answer
       planThinking: cfg.thinking === 'full' ? 'full' : 'medium',
+      thinking: cfg.thinking, // 'auto': the loop decides per step
       runLookups: cfg.lookups === false ? 0 : (Number(cfg.runLookups) >= 0 ? Number(cfg.runLookups) : 6)
     },
     safety: {
