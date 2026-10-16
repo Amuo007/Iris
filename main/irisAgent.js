@@ -1498,9 +1498,15 @@ IrisComputer.prototype.findInPage = function (wc, text) {
     }
     wc.on('found-in-page', onFound)
     timer = setTimeout(function () { report(latest) }, 6000)
-    wc.findInPage(text, { findNext: !!again, forward: true })
-    // the first search on a page that has only just loaded sometimes gets no answer: ask once more
-    setTimeout(function () { if (!latest && !self.lastFindAnswered) wc.findInPage(text, { findNext: false, forward: true }) }, 2000)
+    // Electron's findNext means "start a new search session" (true) or "go on with this one" (false) — not
+    // "find the next match". A new search sent as false was a follow-up to a session that did not exist,
+    // and Chromium never answered: every find on a fresh page timed out after 6 s.
+    wc.findInPage(text, { findNext: !again, forward: true })
+    // still no answer (a page still busy loading): start the search once more
+    setTimeout(function () {
+      if (latest || self.lastFindAnswered) return
+      wc.findInPage(text, { findNext: true, forward: true })
+    }, 2000)
   })
 }
 
