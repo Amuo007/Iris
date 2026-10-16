@@ -226,7 +226,7 @@ async function irisTailorResume (job, hooks) {
   const fitted = await irisCareerLib.fitToPage({ bank: bank, pick: pick, job: job, template: template, compile: function (tex) { return irisCompileTex(tex, engine) } })
   if (!fitted.ok) return { ok: false, error: 'LaTeX could not build the resume: ' + fitted.error, log: fitted.log }
 
-  const folder = irisJobFolder(job)
+  const folder = irisJobFolder(job, hooks && hooks.preview)
   // recruiters see the file name: the person's name, not "resume (3).pdf"
   const fileName = irisSafeName((bank.basics.name ? bank.basics.name + ' ' : '') + 'Resume', 60) + '.pdf'
   const file = path.join(folder, fileName)
@@ -286,10 +286,11 @@ async function irisPostingText (job) {
 /* ---------- cover letters ---------- */
 
 /* the folder for this job's papers (the resume's folder, same name) */
-function irisJobFolder (job) {
+function irisJobFolder (job, preview) {
   const day = new Date()
   const stamp = day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0')
-  const folder = path.join(irisResumeDir(), irisSafeName(stamp + ' ' + (job.company || 'Company') + ' - ' + (job.title || 'Job'), 90))
+  // a Settings preview never replaces the resume that went out with a real application
+  const folder = path.join(irisResumeDir(), preview ? 'Previews' : '', irisSafeName(stamp + ' ' + (job.company || 'Company') + ' - ' + (job.title || 'Job'), 90))
   fs.mkdirSync(folder, { recursive: true })
   return folder
 }
@@ -515,7 +516,7 @@ async function irisResumePreview (args) {
     if (job.company === 'Preview' && at) job.company = at[1].trim().slice(0, 60)
   }
   if (!job.title) job.title = 'Software Engineer'
-  const r = await irisTailorResume(job, { alwaysBuild: true })
+  const r = await irisTailorResume(job, { alwaysBuild: true, preview: true })
   if (r.ok) irisLastPreview = r.file
   return r
 }
