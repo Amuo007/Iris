@@ -1011,6 +1011,10 @@ function trimStream () {
       streamEl.insertBefore(el('div', 'iris-note iris-trimmed', 'Older steps are hidden to keep the panel fast. Everything is saved in History.'), streamEl.firstChild)
     }
   }
+  // let go of what the hidden rows held: each step keeps its screenshot, and a 5-hour run kept all 650
+  // of them in memory (140 MB) after their rows were gone
+  Object.keys(steps).forEach(function (k) { if (!steps[k].row.isConnected) delete steps[k] })
+  Object.keys(lookupRows).forEach(function (k) { const m = lookupRows[k]; if (m && m.isConnected === false) delete lookupRows[k] })
 }
 
 /* ------------------------------------------------------------------ *
