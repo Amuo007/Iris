@@ -312,3 +312,18 @@ test('job title and company from a posting link and its page title', () => {
   assert.deepStrictEqual(career.jobFromPage('https://careers.example.test/jobs/42', 'Firmware Engineer | Northwind'), { title: 'Firmware Engineer', company: 'Northwind' })
   assert.deepStrictEqual(career.jobFromPage('http://localhost:8765/gh/emb.html', 'Job Application for Embedded Software Engineer at Lumen Labs'), { title: 'Embedded Software Engineer', company: 'Lumen Labs' })
 })
+
+test('years with each skill come from the jobs that mention it', () => {
+  const bank = career.normalizeBank({
+    skills: [{ group: 'Embedded', items: ['FreeRTOS', 'C', 'Zephyr'] }, { group: 'Cloud', items: ['AWS (Lambda, S3)'] }],
+    experience: [
+      { title: 'Software Engineer', company: 'A', dates: 'Jul 2025 -- Present', bullets: ['Wrote STM32 firmware in C on FreeRTOS'] },
+      { title: 'Intern', company: 'B', dates: 'May 2024 -- Aug 2024', bullets: ['Built a dashboard on AWS Lambda'] }
+    ]
+  })
+  const y = Object.fromEntries(career.skillYears(bank, Date.UTC(2026, 9, 16)).map(x => [x.skill, x.years]))
+  assert.strictEqual(y.FreeRTOS, 1.3)
+  assert.strictEqual(y.C, 1.3)
+  assert.strictEqual(y.AWS, 0.3)
+  assert.strictEqual(y.Zephyr, undefined, 'a skill no job mentions has no years')
+})

@@ -431,7 +431,7 @@ function irisJobsPrompt (task, mode) {
     '   know (a driver\'s licence, a car, willingness to travel or relocate, notice period) come from the answers below;',
     '   if they are not there, the user has to say. What follows from the profile is not a question for the user: living',
     '   in the job\'s city already ("I already live there"), years of experience counted from the jobs\' dates, years',
-    '   with one skill or tool counted from the dates of the jobs that mention it (Jul 2025 to now is over 1 year).',
+    '   with one skill or tool from the list below.',
     nonStop
       ? '   Only the user can finish it (a CAPTCHA that stays, a login you have no account for, a required question or file the profile does not have): log_application {"status":"needs_you","note":"<what is missing>"} — Iris tells the user — and go on to the next job. Do not wait.'
       : '   A required question you cannot answer from them, a CAPTCHA that stays, or a login you cannot do: ask_user.',
@@ -468,6 +468,9 @@ function irisJobsPrompt (task, mode) {
   if (bank.education.length) summary.push('Education: ' + bank.education.map(function (e) { return [e.degree, e.school, e.dates].filter(Boolean).join(', ') }).join('; '))
   if (bank.skills.length) summary.push('Skills: ' + bank.skills.map(function (g) { return g.group + ' (' + g.items.slice(0, 8).join(', ') + ')' }).join('; '))
   if (summary.length) lines.push('Profile in short — ' + summary.join('. ') + '.')
+  // "How many years have you worked with X?": counted by code from the jobs that mention X
+  const years = irisCareerLib.skillYears(bank).slice(0, 30)
+  if (years.length) lines.push('Years with each skill (from the dates of the jobs that mention it — use these for "how many years with X"): ' + years.map(function (y) { return y.skill + ' ' + y.years }).join(', ') + '.')
   const done = irisApplicationsLoad().slice(-60)
   if (done.length) {
     live.push('Jobs already handled — never apply to these again: ' + done.map(function (a) {

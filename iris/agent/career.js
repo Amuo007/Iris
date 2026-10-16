@@ -1179,6 +1179,31 @@ function yearsWorked (bank, now) {
   return total
 }
 
+/*
+ * Years with each skill: the dates of the jobs whose title or bullets mention it, overlaps once.
+ * Forms ask "How many years have you used X?"; the model cannot count this from titles alone.
+ * → [{ skill, years }] with years > 0, most first.
+ */
+function skillYears (bank, now) {
+  const out = []
+  const seen = new Set()
+  ;(bank.skills || []).forEach(function (g) {
+    g.items.forEach(function (item) {
+      const name = String(item).replace(/\s*\(.*\)\s*$/, '').trim() // "AWS (Lambda, ECS)" → AWS
+      const key = name.toLowerCase()
+      if (!name || seen.has(key)) return
+      seen.add(key)
+      const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const re = new RegExp('(^|[^A-Za-z0-9+#])' + esc + '(?![A-Za-z0-9+#])', 'i')
+      const jobs = (bank.experience || []).filter(function (e) { return re.test([e.title].concat(e.bullets || []).join(' \n ')) })
+      if (!jobs.length) return
+      const years = yearsWorked({ experience: jobs }, now)
+      if (years > 0) out.push({ skill: name, years: Math.round(years * 10) / 10 })
+    })
+  })
+  return out.sort(function (a, b) { return b.years - a.years })
+}
+
 function parseTailorReply (text, bank, job, parseObject, now) {
   let obj = null
   if (parseObject) {
@@ -1730,6 +1755,7 @@ function readLatexLog (log) {
 module.exports = {
   SECTION_KINDS,
   isJobTask,
+  skillYears,
   jobFromPage,
   answerLabel,
   yearsAsked,
