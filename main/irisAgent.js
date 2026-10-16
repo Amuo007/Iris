@@ -17,7 +17,7 @@
  *   • RUN MODES     once, non-stop, repeat every N minutes, and scheduled tasks
  */
 
-const { webContents: allWebContents } = require('electron') // nativeImage comes from main.js (shared scope)
+const { webContents: allWebContents, Notification: IrisNotification } = require('electron') // nativeImage comes from main.js (shared scope)
 const irisActionSchema = require('./iris/agent/actionSchema.js')
 const irisMapper = require('./iris/agent/coordinateMapper.js')
 const irisInputPlan = require('./iris/agent/inputPlan.js')
@@ -471,6 +471,75 @@ function irisLearn (url, tip) {
   settings.set('irisSkills', all)
 }
 
+/*
+ * Playbooks: a Smart plan that led to a finished task, with the sites that worked. A later task
+ * that reads alike starts from it instead of from nothing.
+ */
+/*
+ * Skills the user writes: "when the task is about <words>, do this". Like a coding agent's skills,
+ * only the ones whose words appear in the task are put in the prompt.
+ */
+function irisUserSkillsFor (task) {
+  const list = settings.get('irisUserSkills')
+  if (!Array.isArray(list) || !list.length) return ''
+  const t = String(task || '').toLowerCase()
+  const hits = list.filter(function (sk) {
+    if (!sk || !sk.text || sk.enabled === false) return false
+    const words = String(sk.when || '').toLowerCase().split(/[,;\n]+/).map(function (w) { return w.trim() }).filter(Boolean)
+    return words.length === 0 || words.some(function (w) { return t.indexOf(w) !== -1 })
+  }).slice(0, 4)
+  if (!hits.length) return ''
+  return 'The user\'s own instructions for this kind of task (follow them):\n' + hits.map(function (sk) {
+    return '- ' + (sk.name ? sk.name + ': ' : '') + String(sk.text).slice(0, 600)
+  }).join('\n')
+}
+
+function irisPlaybooksPath () {
+  return path.join(userDataPath, 'iris-playbooks.json')
+}
+
+function irisPlaybooksLoad () {
+  try { return JSON.parse(fs.readFileSync(irisPlaybooksPath(), 'utf8')).playbooks || [] } catch (e) { return [] }
+}
+
+function irisPlaybooksSave (list) {
+  try { fs.writeFileSync(irisPlaybooksPath(), JSON.stringify({ playbooks: list }, null, 1)) } catch (e) { DBUG('playbooks save: ' + e.message) }
+  settings.set('irisPlaybooks', list)
+}
+
+function irisPlaybookAdd (rec) {
+  const words = irisMemoryLib.words(rec.task)
+  const list = irisPlaybooksLoad().filter(function (p) {
+    // a newer plan for the same kind of task replaces the older one
+    const w = irisMemoryLib.words(p.task)
+    const shared = w.filter(function (x) { return words.includes(x) }).length
+    return shared < Math.max(3, Math.min(w.length, words.length) * 0.8)
+  })
+  list.push(rec)
+  irisPlaybooksSave(list.slice(-60))
+}
+
+function irisPlaybookFor (task) {
+  const words = Array.from(new Set(irisMemoryLib.words(task)))
+  if (words.length < 2) return ''
+  let best = null
+  irisPlaybooksLoad().forEach(function (p) {
+    const w = Array.from(new Set(irisMemoryLib.words(p.task)))
+    const shared = w.filter(function (x) { return words.includes(x) }).length
+    const score = shared / Math.max(1, Math.min(w.length, words.length))
+    if (shared >= 2 && score >= 0.5 && (!best || score > best.score)) best = { p: p, score: score }
+  })
+  if (!best) return ''
+  const p = best.p
+  return 'A plan that worked before for a similar task ("' + p.task.slice(0, 120) + '", ' + new Date(p.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+    ', ' + p.steps + ' steps). Reuse what fits:\n' + p.plan.slice(0, 700) + (p.sites && p.sites.length ? '\nSites that worked: ' + p.sites.slice(0, 6).join(', ') : '')
+}
+
+settings.listen('irisPlaybooks', function (value) {
+  if (!Array.isArray(value)) return
+  try { fs.writeFileSync(irisPlaybooksPath(), JSON.stringify({ playbooks: value }, null, 1)) } catch (e) { /* ignore */ }
+})
+
 /* the settings page removes tips through the synced setting; keep the file in step */
 settings.listen('irisSkills', function (value) {
   if (!value || typeof value !== 'object') return
@@ -789,6 +858,16 @@ IrisComputer.prototype.screenshot = async function () {
     this.memory.add('visit', obs.title || obs.url, { url: obs.url, title: obs.title })
     const seen = irisSeenNote(obs.url, obs.title)
     if (seen) obs.note = (obs.note ? obs.note + '\n' : '') + 'You have seen this page before: you ' + seen + '. Do not spend steps on it again unless the task needs it.'
+  }
+  // Iris's own PDF viewer: say where its download button is (it fades out until the mouse is near)
+  if (/^min:\/\/app\/pages\/pdfViewer\//.test(obs.url || '') && !crop) {
+    const sx = obs.width / obs.viewWidth
+    const sy = obs.height / obs.viewHeight
+    let pdf = ''
+    try { pdf = new URL(obs.url).searchParams.get('url') || '' } catch (e) { /* not a URL */ }
+    obs.note = (obs.note ? obs.note + '\n' : '') + 'This is Iris\'s PDF viewer' + (pdf ? ' showing ' + pdf : '') +
+      '. To save the PDF to Downloads, click its round download button at (' + Math.round((obs.viewWidth - 60) * sx) + ', ' + Math.round((obs.viewHeight - 50) * sy) +
+      ') in the bottom-right corner (it may look faded).'
   }
   if (this.pendingChooser) {
     const files = irisRecentFiles(12)
@@ -1402,6 +1481,24 @@ var irisAgentState = {
   steps: 0
 }
 
+/*
+ * A macOS notification when Iris needs the user (a question, a CAPTCHA, an approval) or
+ * finishes, but only while Iris is not the app in front: if the user is watching, the panel says it.
+ */
+function irisNotify (title, body) {
+  try {
+    if (!IrisNotification.isSupported()) return
+    const win = windows.getCurrent()
+    if (win && !win.isDestroyed() && win.isFocused()) return
+    const n = new IrisNotification({ title: title, body: String(body || '').slice(0, 220), silent: false })
+    n.on('click', function () {
+      const w = windows.getCurrent()
+      if (w && !w.isDestroyed()) { w.show(); w.focus() }
+    })
+    n.show()
+  } catch (e) { DBUG('notify: ' + e.message) }
+}
+
 function broadcast (channel, payload) {
   const all = allWebContents.getAllWebContents()
   for (var i = 0; i < all.length; i++) {
@@ -1484,8 +1581,13 @@ function irisSystemExtra (mode, task, projectId) {
       ? 'If a site emails a verification code or link: open a new tab, go to the user\'s email inbox (the "Email inbox URL" in their details, or their usual webmail), sign in with their saved details if needed, open the newest message from that site, read the code or click the link, then close that tab and switch back. Codes sent by text message or phone: use ask_user.'
       : 'If a site sends a verification code or link (email or phone), use ask_user: the user will tell you the code or open the link.')
   }
+  parts.push('Payments: Iris has no payment card. If the task needs a payment, go as far as the payment page, then stop and tell the user what is ready (or use ask_user). Never make up card details.')
   const skills = irisSkillsForTask(task)
   if (skills) parts.push(skills)
+  const playbook = irisPlaybookFor(task)
+  if (playbook) parts.push(playbook)
+  const userSkills = irisUserSkillsFor(task)
+  if (userSkills) parts.push(userSkills)
   const rules = String(settings.get('irisRules') || '').trim()
   if (rules) parts.push('Rules from the user. Always follow these, they override everything else:\n' + rules)
   return parts.join('\n\n')
@@ -1610,6 +1712,18 @@ function startAgent (task, options) {
         payload = Object.assign({}, payload, { items: undefined })
       }
       if (session.projectId && type === 'plan' && payload.text) irisProjectUpdate(session.projectId, { plan: payload.text })
+      if (type === 'plan' && payload.text) session.lastPlan = payload.text
+      if (type === 'observation' && payload.url) {
+        const host = irisSiteOf(payload.url)
+        if (host && !/^(duckduckgo\.com|google\.|bing\.com)/.test(host)) {
+          session.runHosts = session.runHosts || []
+          if (!session.runHosts.includes(host)) session.runHosts.push(host)
+        }
+      }
+      if (type === 'run:end' && payload.status === 'done' && session.lastPlan) {
+        irisPlaybookAdd({ task: task.slice(0, 300), plan: session.lastPlan.slice(0, 1200), sites: (session.runHosts || []).slice(0, 8), steps: payload.steps || 0, at: Date.now() })
+      }
+      if (type === 'run:end') { session.lastPlan = null; session.runHosts = [] }
       // remember direct URLs that led to a successful answer: next time they are the shortcut
       if (type === 'action' && payload.action && payload.action.type === 'navigate') {
         const resolved = irisResolveUrl(payload.action.url)
@@ -1645,6 +1759,10 @@ function startAgent (task, options) {
         session.runUrls = []
       }
       if (type === 'learn') irisLearn(payload.url, payload.tip)
+      if (type === 'ask') irisNotify('Iris needs you', payload.question)
+      if (type === 'questions') irisNotify('Iris has a few questions', 'Answer them in the Iris panel so it can plan "' + session.title + '".')
+      if (type === 'blocked' && payload.kind === 'confirmation') irisNotify('Iris is waiting for your OK', payload.reason)
+      if (type === 'run:end' && payload.status !== 'stopped') irisNotify(payload.status === 'done' ? 'Iris finished' : 'Iris could not finish', (payload.status === 'done' ? payload.answer : payload.reason) || session.title)
       if (type === 'thought' && payload.usage) irisUsageRecord('request', Object.assign({ ms: payload.modelMs }, payload.usage))
       if (type === 'thought' && payload.usage) {
         DBUG('usage step ' + payload.step + ' prompt=' + payload.usage.prompt_tokens + ' completion=' + payload.usage.completion_tokens + ' ms=' + payload.modelMs)
@@ -1818,6 +1936,17 @@ ipc.on('iris-agent-settings-changed', function () {
 })
 
 /* Settings page actions that need the main process */
+/* Cookies grouped by site, most first, for Settings → Cookies & site data. */
+async function irisCookieSites () {
+  const all = await session.fromPartition('persist:webcontent').cookies.get({})
+  const by = {}
+  all.forEach(function (c) {
+    const d = c.domain.replace(/^\./, '').toLowerCase().replace(/^www\./, '')
+    by[d] = (by[d] || 0) + 1
+  })
+  return Object.keys(by).map(function (d) { return { domain: d, count: by[d] } }).sort(function (a, b) { return b.count - a.count || a.domain.localeCompare(b.domain) })
+}
+
 ipc.on('iris-settings-action', async function (event, data) {
   const reply = function (result) { event.reply('iris-settings-action-reply', { tabId: data.tabId, action: data.action, result: result }) }
   try {
@@ -1834,6 +1963,20 @@ ipc.on('iris-settings-action', async function (event, data) {
         const pick = await dialog.showOpenDialog(windows.getCurrent(), { properties: ['openDirectory', 'createDirectory'], defaultPath: settings.get('irisDownloadDir') || app.getPath('downloads') })
         if (!pick.canceled && pick.filePaths[0]) settings.set('irisDownloadDir', pick.filePaths[0])
         return reply({ dir: settings.get('irisDownloadDir') || app.getPath('downloads') })
+      }
+      case 'cookiesList':
+        return reply({ sites: await irisCookieSites() })
+      case 'bridgeInfo':
+        return reply(irisBridgeInfo())
+      case 'cookiesRemove': {
+        const ses = session.fromPartition('persist:webcontent')
+        const domain = String((data.args && data.args.domain) || '').toLowerCase()
+        const all = await ses.cookies.get({})
+        await Promise.all(all.filter(function (c) { return c.domain.replace(/^\./, '').toLowerCase().replace(/^www\./, '') === domain }).map(function (c) {
+          const url = (c.secure ? 'https://' : 'http://') + c.domain.replace(/^\./, '') + (c.path || '/')
+          return ses.cookies.remove(url, c.name).catch(function () {})
+        }))
+        return reply({ sites: await irisCookieSites() })
       }
       case 'clearData': {
         const ses = session.fromPartition('persist:webcontent')

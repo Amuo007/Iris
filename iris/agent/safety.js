@@ -19,8 +19,17 @@ const DEFAULTS = {
   // the only thing Iris never does is run code in a page: it acts through the screen like a person
   blockSchemes: ['javascript:'],
   blockHosts: [],
-  allowSensitiveActions: true
+  allowSensitiveActions: true,
+  // payments: 'ask' = once card details were typed, pause before the click that pays;
+  // 'auto' = no pause. (With payments off, card details are never available to type.)
+  paymentGuard: 'ask'
 }
+
+/* A card placeholder from My info → Payments, e.g. {{Card number}} */
+const CARD_PLACEHOLDER = /\{\{\s*(card|cvc|cvv|expiry|name on card|billing)/i
+
+/* What the step means to do, in the model's own words: pay, order, buy, book… */
+const PAY_WORDS = /\b(pay|payment|place (your |the |my )?order|purchase|buy|checkout|check out|subscribe|book now|complete (the |my )?(order|purchase|booking)|confirm (the |my )?(order|purchase|booking|payment)|submit (the |my )?(order|payment))\b/i
 
 /* Words that mean "this action is about to touch money, credentials or destruction". */
 const SENSITIVE_PATTERNS = [
@@ -65,6 +74,7 @@ function createSafetyGate (options) {
   let retries = 0
   let consecutiveFailures = 0
   const recentActions = []
+  let cardTyped = false
 
   function decision (kind, reason, extra) {
     return Object.assign({ allow: false, kind, reason }, extra || {})
@@ -93,6 +103,7 @@ function createSafetyGate (options) {
       retries = 0
       consecutiveFailures = 0
       recentActions.length = 0
+      cardTyped = false
       startedAt = cfg.now ? cfg.now() : Date.now()
     },
 
@@ -144,6 +155,14 @@ function createSafetyGate (options) {
       const counts = !REPEATABLE.has(action.type) || (pageState && pageState.pageUnchanged)
       if (counts && streak > cfg.repeatActionLimit) {
         return decision('loop', `The same action (${action.type}) had no effect ${streak} times in a row — pausing for you to check.`, { action, key })
+      }
+
+      if (action.type === 'type' && CARD_PLACEHOLDER.test(action.text || '')) cardTyped = true
+      // the user approves "the payment", not exact pixels: the next pay click after Resume goes through
+      if (cfg.paymentGuard !== 'auto' && cardTyped && !(pageState && pageState.approved === 'payment') &&
+          (action.type === 'click' || action.type === 'double_click' || (action.type === 'key' && action.key === 'enter') || (action.type === 'type' && action.enter)) &&
+          PAY_WORDS.test((pageState && pageState.thought) || '')) {
+        return decision('confirmation', 'Iris is about to pay: "' + String(pageState.thought).slice(0, 160) + '". Press ▶ to allow it, or Stop.', { action, key: 'payment', payment: true })
       }
 
       if (!cfg.allowSensitiveActions && !(pageState && pageState.approved === key)) {

@@ -695,7 +695,11 @@ var IRIS_AI_DEFAULTS = {
   screenshotMaxDimension: 1280,
   screenshotQuality: 82,
   markerEnabled: true,
-  autoPauseOnUserInput: true
+  autoPauseOnUserInput: true,
+  lookups: true,
+  runLookups: 6,
+  smartLevel: 'quick',
+  planFirst: false
 }
 
 var irisAI = Object.assign({}, IRIS_AI_DEFAULTS)
@@ -712,12 +716,15 @@ var irisFields = [
   { key: 'temperature', id: 'iris-temperature', type: 'float' },
   { key: 'screenshotMaxDimension', id: 'iris-screenshot-size', type: 'int' },
   { key: 'screenshotQuality', id: 'iris-screenshot-quality', type: 'int' },
-  { key: 'keepImages', id: 'iris-keep-images', type: 'int' }
+  { key: 'keepImages', id: 'iris-keep-images', type: 'int' },
+  { key: 'smartLevel', id: 'iris-smart-level', type: 'string' },
+  { key: 'runLookups', id: 'iris-run-lookups', type: 'int' }
 ]
 
 var irisMarkerCheckbox = document.getElementById('checkbox-iris-marker')
 var irisTakeoverCheckbox = document.getElementById('checkbox-iris-takeover')
 var irisEmailCheckbox = document.getElementById('checkbox-iris-email')
+var irisLookupsCheckbox = document.getElementById('checkbox-iris-lookups')
 
 function irisSave () {
   // settings.set() is forwarded to the main process, which notifies the agent
@@ -734,6 +741,8 @@ function irisRenderAll () {
   irisMarkerCheckbox.checked = irisAI.markerEnabled !== false
   irisTakeoverCheckbox.checked = irisAI.autoPauseOnUserInput !== false
   irisEmailCheckbox.checked = irisAI.emailAccess === true
+  irisLookupsCheckbox.checked = irisAI.lookups !== false
+  document.getElementById('iris-run-lookups').disabled = irisAI.lookups === false
 }
 
 irisFields.forEach(function (field) {
@@ -778,6 +787,16 @@ irisEmailCheckbox.addEventListener('change', function () {
   irisAI.emailAccess = this.checked
   irisSave()
 })
+
+irisLookupsCheckbox.addEventListener('change', function () {
+  irisAI.lookups = this.checked
+  document.getElementById('iris-run-lookups').disabled = !this.checked
+  irisSave()
+})
+
+var irisLookupNever = document.getElementById('iris-lookup-never')
+irisLookupNever.addEventListener('change', function () { settings.set('irisLookupNever', irisLookupNever.value.trim()) })
+settings.listen('irisLookupNever', function (v) { if (document.activeElement !== irisLookupNever) irisLookupNever.value = v || '' })
 
 document.getElementById('iris-reset-defaults').addEventListener('click', function () {
   irisAI = Object.assign({}, IRIS_AI_DEFAULTS)
@@ -831,6 +850,13 @@ window.addEventListener('message', function (e) {
       document.getElementById('iris-download-dir').textContent = (r.dir || '').replace(/^\/Users\/[^/]+/, '~')
     } else if (d.action === 'clearData') {
       document.getElementById('iris-clear-status').textContent = r.error ? 'Could not clear: ' + r.error : 'Cleared.'
+      irisLoadHistory()
+      irisAction('cookiesList')
+    } else if (d.action === 'historyList') {
+      irisRenderHistory(r.items || [], r.total || 0)
+    } else if (d.action === 'cookiesList' || d.action === 'cookiesRemove') {
+      irisCookieSites = r.sites || []
+      irisRenderCookies()
     }
   } else if (e.data.message === 'irisImportResult') {
     var res = e.data.data || {}
@@ -868,6 +894,135 @@ document.getElementById('iris-clear-data').addEventListener('click', function ()
   document.getElementById('iris-clear-status').textContent = 'Clearing…'
   irisAction('clearData', args)
 })
+
+/* --- History ------------------------------------------------------------ */
+
+var irisHistorySearch = document.getElementById('iris-history-search')
+var irisHistoryList = document.getElementById('iris-history-list')
+var irisHistoryTimer = null
+
+function irisLoadHistory () {
+  irisAction('historyList', { query: irisHistorySearch.value.trim() })
+}
+
+function irisDayLabel (ms) {
+  var d = new Date(ms)
+  var today = new Date()
+  var y = new Date()
+  y.setDate(y.getDate() - 1)
+  if (d.toDateString() === today.toDateString()) return 'Today'
+  if (d.toDateString() === y.toDateString()) return 'Yesterday'
+  return d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })
+}
+
+function irisRenderHistory (items, total) {
+  irisHistoryList.innerHTML = ''
+  if (!items.length) {
+    irisHistoryList.appendChild(irisEmptyLine(irisHistorySearch.value ? 'Nothing in your history matches that.' : 'No history yet.'))
+    return
+  }
+  var lastDay = ''
+  items.forEach(function (it) {
+    var day = irisDayLabel(it.lastVisit)
+    if (day !== lastDay) {
+      lastDay = day
+      var h = document.createElement('div')
+      h.className = 'iris-list-day'
+      h.textContent = day
+      irisHistoryList.appendChild(h)
+    }
+    var row = document.createElement('div')
+    row.className = 'iris-list-row'
+    var time = document.createElement('span')
+    time.className = 'iris-list-time'
+    time.textContent = new Date(it.lastVisit).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    var link = document.createElement('a')
+    link.className = 'iris-list-main'
+    link.href = it.url
+    link.title = it.url
+    var t = document.createElement('span')
+    t.className = 'iris-list-title'
+    t.textContent = it.title || it.url
+    var u = document.createElement('span')
+    u.className = 'iris-list-sub'
+    u.textContent = it.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 90)
+    link.appendChild(t)
+    link.appendChild(u)
+    var del = document.createElement('button')
+    del.type = 'button'
+    del.className = 'iris-row-delete'
+    del.title = 'Remove from history'
+    del.textContent = '×'
+    del.addEventListener('click', function () { row.remove(); irisAction('historyDelete', { url: it.url, query: irisHistorySearch.value.trim() }) })
+    row.appendChild(time)
+    row.appendChild(link)
+    row.appendChild(del)
+    irisHistoryList.appendChild(row)
+  })
+  if (total > items.length) irisHistoryList.appendChild(irisEmptyLine('Showing the latest ' + items.length + ' of ' + total + '. Search to find older pages.'))
+}
+
+function irisEmptyLine (text) {
+  var p = document.createElement('div')
+  p.className = 'iris-list-empty'
+  p.textContent = text
+  return p
+}
+
+irisHistorySearch.addEventListener('input', function () {
+  clearTimeout(irisHistoryTimer)
+  irisHistoryTimer = setTimeout(irisLoadHistory, 200)
+})
+document.getElementById('iris-history-clear').addEventListener('click', function () {
+  if (!confirm('Clear all browsing history? Bookmarks are kept.')) return
+  irisAction('clearData', { history: true })
+})
+irisLoadHistory()
+
+/* --- Cookies & site data ------------------------------------------------ */
+
+var irisCookieSites = []
+var irisCookiesSearch = document.getElementById('iris-cookies-search')
+var irisCookiesList = document.getElementById('iris-cookies-list')
+
+function irisRenderCookies () {
+  var q = irisCookiesSearch.value.trim().toLowerCase()
+  var list = irisCookieSites.filter(function (s) { return !q || s.domain.indexOf(q) !== -1 })
+  irisCookiesList.innerHTML = ''
+  if (!list.length) {
+    irisCookiesList.appendChild(irisEmptyLine(q ? 'No site matches that.' : 'No sites have stored cookies.'))
+    return
+  }
+  list.forEach(function (site) {
+    var row = document.createElement('div')
+    row.className = 'iris-list-row'
+    var main = document.createElement('div')
+    main.className = 'iris-list-main'
+    var t = document.createElement('span')
+    t.className = 'iris-list-title'
+    t.textContent = site.domain
+    var u = document.createElement('span')
+    u.className = 'iris-list-sub'
+    u.textContent = site.count + (site.count === 1 ? ' cookie' : ' cookies')
+    main.appendChild(t)
+    main.appendChild(u)
+    var del = document.createElement('button')
+    del.type = 'button'
+    del.className = 'iris-button'
+    del.textContent = 'Remove'
+    del.addEventListener('click', function () { del.disabled = true; irisAction('cookiesRemove', { domain: site.domain }) })
+    row.appendChild(main)
+    row.appendChild(del)
+    irisCookiesList.appendChild(row)
+  })
+}
+
+irisCookiesSearch.addEventListener('input', irisRenderCookies)
+document.getElementById('iris-cookies-clear').addEventListener('click', function () {
+  if (!confirm('Remove cookies and site data for every site? You will be signed out everywhere.')) return
+  irisAction('clearData', { cookies: true })
+})
+irisAction('cookiesList')
 
 /* sidebar: highlight the section in view */
 var irisNavLinks = Array.prototype.slice.call(document.querySelectorAll('#iris-settings-nav a'))
@@ -955,6 +1110,46 @@ function irisRenderSkills (all) {
 }
 
 settings.listen('irisSkills', irisRenderSkills)
+
+var irisPlaybooksList = document.getElementById('iris-playbooks-list')
+
+function irisRenderPlaybooks (list) {
+  list = Array.isArray(list) ? list : []
+  irisPlaybooksList.innerHTML = ''
+  if (!list.length) {
+    irisPlaybooksList.textContent = 'None yet. Finish a task with Smart on to keep its plan.'
+    return
+  }
+  list.slice().reverse().forEach(function (p) {
+    var row = document.createElement('div')
+    row.className = 'iris-row iris-playbook-row'
+    var main = document.createElement('details')
+    main.className = 'iris-playbook'
+    var sum = document.createElement('summary')
+    sum.textContent = p.task
+    var meta = document.createElement('span')
+    meta.className = 'iris-list-sub'
+    meta.textContent = '  ' + new Date(p.at).toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · ' + p.steps + ' steps' + (p.sites && p.sites.length ? ' · ' + p.sites.slice(0, 3).join(', ') : '')
+    sum.appendChild(meta)
+    var plan = document.createElement('pre')
+    plan.textContent = p.plan
+    main.appendChild(sum)
+    main.appendChild(plan)
+    var del = document.createElement('button')
+    del.type = 'button'
+    del.className = 'iris-row-delete'
+    del.title = 'Forget this plan'
+    del.textContent = '×'
+    del.addEventListener('click', function () {
+      settings.set('irisPlaybooks', list.filter(function (x) { return x !== p }))
+    })
+    row.appendChild(main)
+    row.appendChild(del)
+    irisPlaybooksList.appendChild(row)
+  })
+}
+
+settings.listen('irisPlaybooks', irisRenderPlaybooks)
 
 /* --- Rules ------------------------------------------------------------- */
 
@@ -1063,8 +1258,16 @@ function irisRenderAccounts (data) {
   accounts.forEach(function (a) {
     var row = document.createElement('div')
     row.className = 'iris-row iris-account-row'
-    var site = document.createElement('b')
-    site.textContent = a.site
+    var site = document.createElement('div')
+    site.className = 'iris-account-site'
+    var siteName = document.createElement(a.url ? 'a' : 'b')
+    siteName.textContent = a.site
+    if (a.url) { siteName.href = a.url; siteName.title = a.url }
+    site.appendChild(siteName)
+    var meta = document.createElement('span')
+    meta.className = 'iris-list-sub'
+    meta.textContent = [a.purpose ? 'For: ' + a.purpose : '', a.created ? 'Created ' + new Date(a.created).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : ''].filter(Boolean).join(' · ')
+    if (meta.textContent) site.appendChild(meta)
     var user = document.createElement('span')
     user.className = 'iris-account-user'
     user.textContent = a.username
@@ -1211,3 +1414,93 @@ settings.listen('irisSchedules', function (value) {
 if (location.hash === '#iris-ai') {
   document.getElementById('iris-ai-settings-container').scrollIntoView()
 }
+
+/* --- Coding agents (MCP bridge) ------------------------------------------ */
+
+var irisBridgeCheckbox = document.getElementById('checkbox-iris-bridge')
+var irisBridgeConfig = document.getElementById('iris-bridge-config')
+var irisBridgeStatus = document.getElementById('iris-bridge-status')
+
+settings.get('irisBridge', function (v) {
+  irisBridgeCheckbox.checked = v === true
+  document.getElementById('iris-bridge-help').hidden = v !== true
+})
+irisBridgeCheckbox.addEventListener('change', function () {
+  settings.set('irisBridge', this.checked)
+  document.getElementById('iris-bridge-help').hidden = !this.checked
+  setTimeout(function () { irisAction('bridgeInfo') }, 400)
+})
+
+window.addEventListener('message', function (e) {
+  if (!e.data || e.data.message !== 'irisSettingsActionResult' || !e.data.data || e.data.data.action !== 'bridgeInfo') return
+  var r = e.data.data.result || {}
+  irisBridgeConfig.textContent = JSON.stringify({ mcpServers: { iris: { command: 'node', args: [r.script || 'iris-mcp.js'] } } }, null, 2)
+  irisBridgeStatus.textContent = r.running ? 'Listening on this Mac only (port ' + r.port + ')' + (r.lastUse ? ' · last used ' + new Date(r.lastUse).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '') : (r.enabled ? 'Starting…' : '')
+})
+document.getElementById('iris-bridge-copy').addEventListener('click', function () {
+  navigator.clipboard.writeText(irisBridgeConfig.textContent).then(function () { irisBridgeStatus.textContent = 'Copied.' })
+})
+irisAction('bridgeInfo')
+
+/* --- Your skills ----------------------------------------------------------- */
+
+var irisUserSkillsEl = document.getElementById('iris-user-skills')
+var irisUserSkills = []
+
+function irisSaveUserSkills () {
+  settings.set('irisUserSkills', irisUserSkills.filter(function (s) { return s.text || s.when || s.name }))
+}
+
+function irisRenderUserSkills () {
+  irisUserSkillsEl.innerHTML = ''
+  if (!irisUserSkills.length) {
+    irisUserSkillsEl.appendChild(irisEmptyLine('None yet. Example — words: "flight, train"; do: "Prefer direct trips, and check the price on two sites before choosing."'))
+    return
+  }
+  irisUserSkills.forEach(function (sk, i) {
+    var row = document.createElement('div')
+    row.className = 'iris-user-skill'
+    var top = document.createElement('div')
+    top.className = 'iris-user-skill-top'
+    var name = document.createElement('input')
+    name.type = 'text'
+    name.placeholder = 'Name (e.g. Job search)'
+    name.value = sk.name || ''
+    name.addEventListener('change', function () { sk.name = name.value.trim(); irisSaveUserSkills() })
+    var when = document.createElement('input')
+    when.type = 'text'
+    when.placeholder = 'When the task mentions… (words, comma-separated)'
+    when.value = sk.when || ''
+    when.addEventListener('change', function () { sk.when = when.value.trim(); irisSaveUserSkills() })
+    var del = document.createElement('button')
+    del.type = 'button'
+    del.className = 'iris-row-delete'
+    del.title = 'Delete this skill'
+    del.textContent = '×'
+    del.addEventListener('click', function () { irisUserSkills.splice(i, 1); irisSaveUserSkills(); irisRenderUserSkills() })
+    top.appendChild(name)
+    top.appendChild(when)
+    top.appendChild(del)
+    var text = document.createElement('textarea')
+    text.rows = 2
+    text.placeholder = 'What Iris should do'
+    text.value = sk.text || ''
+    text.addEventListener('change', function () { sk.text = text.value.trim(); irisSaveUserSkills() })
+    row.appendChild(top)
+    row.appendChild(text)
+    irisUserSkillsEl.appendChild(row)
+  })
+}
+
+document.getElementById('iris-user-skill-add').addEventListener('click', function () {
+  irisUserSkills.push({ name: '', when: '', text: '' })
+  irisRenderUserSkills()
+  var inputs = irisUserSkillsEl.querySelectorAll('input')
+  if (inputs.length) inputs[inputs.length - 2].focus()
+})
+
+settings.listen('irisUserSkills', function (value) {
+  if (irisUserSkillsEl.contains(document.activeElement)) return
+  irisUserSkills = Array.isArray(value) ? value.map(function (s) { return Object.assign({}, s) }) : []
+  irisRenderUserSkills()
+})

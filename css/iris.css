@@ -237,6 +237,21 @@ body.iris-panel-open .iris-ask-button {
 .iris-ask-button.is-working svg {
   animation: iris-spin 2.4s linear infinite;
 }
+/* a coding agent is driving Iris through the MCP bridge */
+.iris-ask-button.is-bridged {
+  position: relative;
+}
+.iris-ask-button.is-bridged::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--iris-ok);
+  box-shadow: 0 0 0 2px var(--iris-bg);
+}
 @keyframes iris-spin {
   to {
     transform: rotate(360deg);

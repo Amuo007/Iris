@@ -493,6 +493,8 @@
   pointer-events: none;
 }
 .iris-select select {
+  field-sizing: content; /* as wide as the chosen option, not the longest one */
+  min-width: 0;
   height: 26px;
   padding: 0 22px 0 2px;
   border: none !important;
@@ -910,4 +912,40 @@
 }
 .iris-lookup.is-failed .iris-lookup-meta {
   color: var(--iris-warn);
+}
+
+/* Smart: one bordered control — the switch, then Quick/Deep when it is on */
+.iris-smart-group {
+  display: inline-flex;
+  align-items: stretch;
+  height: 28px;
+  margin-left: auto;
+  flex: none;
+  border: 1px solid var(--iris-border);
+  border-radius: var(--iris-r-sm);
+  overflow: hidden;
+  transition: border-color var(--iris-fast);
+}
+.iris-smart-group.is-on {
+  border-color: var(--iris-text-3);
+}
+.iris-smart-group .iris-plan-toggle,
+.iris-smart-group .iris-smart-level {
+  height: 26px;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+}
+.iris-smart-group .iris-plan-toggle {
+  padding: 0 9px 0 8px;
+}
+.iris-smart-group .iris-smart-level {
+  padding: 0 9px;
+  border-left: 1px solid var(--iris-border);
+}
+.iris-composer-meta {
+  min-width: 0;
+}
+.iris-composer-meta .iris-select {
+  flex: none;
 }

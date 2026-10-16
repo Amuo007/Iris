@@ -283,9 +283,13 @@ function buildPanel () {
     planToggle.classList.toggle('is-on', on)
     planToggle.setAttribute('aria-pressed', String(on))
     smartLevelBtn.hidden = !on
+    smartGroup.classList.toggle('is-on', on)
     settings.set('irisAI', Object.assign({}, settings.get('irisAI') || {}, { planFirst: on }))
   })
-  meta.appendChild(planToggle)
+  // the switch and its level are one control, so the row never runs past the panel
+  const smartGroup = el('div', 'iris-smart-group')
+  smartGroup.appendChild(planToggle)
+  meta.appendChild(smartGroup)
   // how much Smart does before it starts: Quick (a look-up or two) or Deep (researches the task)
   smartLevelBtn = el('button', 'iris-smart-level', 'Quick')
   smartLevelBtn.type = 'button'
@@ -296,7 +300,7 @@ function buildPanel () {
     settings.set('irisAI', Object.assign({}, settings.get('irisAI') || {}, { smartLevel: deep ? 'deep' : 'quick' }))
     renderSmartLevel()
   })
-  meta.appendChild(smartLevelBtn)
+  smartGroup.appendChild(smartLevelBtn)
   composer.appendChild(meta)
   panelEl.appendChild(composer)
 
@@ -311,6 +315,19 @@ function buildPanel () {
   document.getElementById('navbar').appendChild(openButton)
 }
 
+/* A coding agent is using Iris through the MCP bridge: say so on the Ask Iris button. */
+let bridgeTimer = null
+function bridgeActivity () {
+  if (!openButton) return
+  openButton.classList.add('is-bridged')
+  openButton.title = 'A coding agent is using Iris right now'
+  clearTimeout(bridgeTimer)
+  bridgeTimer = setTimeout(function () {
+    openButton.classList.remove('is-bridged')
+    openButton.title = 'Ask Iris  (⌘⇧Space)'
+  }, 60000)
+}
+
 function smartLevel () {
   return currentSettings().smartLevel === 'deep' ? 'deep' : 'quick'
 }
@@ -321,6 +338,7 @@ function renderSmartLevel () {
   smartLevelBtn.textContent = deep ? 'Deep' : 'Quick'
   smartLevelBtn.classList.toggle('is-deep', deep)
   smartLevelBtn.hidden = !planToggle.classList.contains('is-on')
+  smartLevelBtn.parentNode.classList.toggle('is-on', planToggle.classList.contains('is-on'))
 }
 
 function openSettings () {
@@ -1096,6 +1114,28 @@ function runTabAction (cmd) {
   pushTabs()
 }
 
+/* Settings → History: newest visits first, searchable, one at a time removable. */
+function historyAction (tabId, a) {
+  const places = require('places/places.js')
+  const reply = function (result) { webviews.callAsync(tabId, 'send', ['irisSettingsActionResult', { action: 'historyList', result }]) }
+  const list = function () {
+    return places.getAllItems().then(function (all) {
+      const q = String((a.args && a.args.query) || '').toLowerCase().split(/\s+/).filter(Boolean)
+      const visited = (all || []).filter(function (i) { return i.lastVisit && i.visitCount > 0 && !/^min:/.test(i.url) })
+      const hits = visited.filter(function (i) {
+        const hay = ((i.title || '') + ' ' + i.url).toLowerCase()
+        return q.every(function (w) { return hay.indexOf(w) !== -1 })
+      }).sort(function (x, y) { return y.lastVisit - x.lastVisit })
+      reply({ items: hits.slice(0, 200).map(function (i) { return { url: i.url, title: i.title, lastVisit: i.lastVisit } }), total: hits.length })
+    })
+  }
+  if (a.action === 'historyDelete' && a.args && a.args.url) {
+    places.deleteHistory(a.args.url)
+    return setTimeout(list, 150)
+  }
+  return list()
+}
+
 /* The settings page (a min:// tab) edits "My info" through here; secrets never travel back. */
 function bindProfileBridge () {
   webviews.bindIPC('irisProfileGet', function (tabId) {
@@ -1121,6 +1161,7 @@ function bindProfileBridge () {
     if (!urlParser.isInternalURL(tabs.get(tabId).url)) return
     const a = args[0] || {}
     // history lives in the browser UI's places database; the rest is done by the main process
+    if (a.action === 'historyList' || a.action === 'historyDelete') return historyAction(tabId, a)
     if (a.action === 'clearData' && a.args && a.args.history) require('places/places.js').deleteAllHistory()
     ipc.send('iris-settings-action', { tabId, action: a.action, args: a.args })
   })
@@ -1143,6 +1184,8 @@ function initialize () {
   ipc.on('iris-agent-event', function (e, payload) {
     handleEvent(payload)
   })
+
+  ipc.on('iris-bridge-activity', bridgeActivity)
 
   ipc.on('iris-agent-control-reply', function (e, reply) {
     if (reply && reply.status && reply.status !== lastStatus && (reply.status === 'paused' || reply.status === 'running')) setStatus(reply.status)

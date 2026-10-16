@@ -17,17 +17,21 @@
       <a href="#general-settings-container">General</a>
       <a href="#bookmarks-settings-container">Bookmarks</a>
       <a href="#appearance-settings-container">Appearance</a>
+      <a href="#history-settings-container">History</a>
+      <a href="#cookies-settings-container">Cookies &amp; site data</a>
       <a href="#privacy-settings-container">Privacy &amp; security</a>
       <a href="#search-engine-settings-container">Search engine</a>
       <a href="#password-autofill-container">Passwords</a>
       <a href="#additional-settings-container">Browsing</a>
       <div class="iris-settings-group">Iris AI</div>
       <a href="#iris-ai-settings-container">Model &amp; behaviour</a>
+      <a href="#iris-lookups-container">Look-ups</a>
       <a href="#iris-profile-container">My info</a>
       <a href="#iris-accounts-container">Accounts</a>
       <a href="#iris-rules-container">Rules</a>
       <a href="#iris-schedule-container">Schedule</a>
       <a href="#iris-skills-container">Skills</a>
+      <a href="#iris-bridge-container">Coding agents</a>
       <a href="#iris-usage-container">Usage</a>
       <div class="iris-settings-group">Advanced</div>
       <a href="#proxy-settings-container">Proxy</a>
@@ -74,6 +78,27 @@
       </div>
     </div>
 
+    <div class="settings-container" id="history-settings-container">
+      <h3>History</h3>
+      <div class="iris-row-setting">
+        <input type="search" id="iris-history-search" class="iris-search" placeholder="Search history" spellcheck="false" />
+        <button class="iris-button" id="iris-history-clear" type="button">Clear all history</button>
+      </div>
+      <div id="iris-history-list" class="iris-list"></div>
+    </div>
+
+    <div class="settings-container" id="cookies-settings-container">
+      <h3>Cookies &amp; site data</h3>
+      <div class="setting-secondary-label">
+        Sites that keep you signed in or remember your choices. Removing a site signs you out of it.
+      </div>
+      <div class="iris-row-setting">
+        <input type="search" id="iris-cookies-search" class="iris-search" placeholder="Filter sites" spellcheck="false" />
+        <button class="iris-button" id="iris-cookies-clear" type="button">Remove all</button>
+      </div>
+      <div id="iris-cookies-list" class="iris-list"></div>
+    </div>
+
     <div class="settings-container" id="iris-ai-settings-container">
       <h3>Iris AI</h3>
       <div class="setting-secondary-label">
@@ -95,12 +120,19 @@
           <input type="password" id="iris-api-key" spellcheck="false" autocomplete="off" />
         </div>
         <div class="iris-setting">
-          <label for="iris-thinking">Thinking</label>
+          <label for="iris-thinking">Thinking (each step)</label>
           <select id="iris-thinking">
             <option value="off">Fast (no thinking)</option>
             <option value="low">Balanced</option>
             <option value="medium">Careful</option>
             <option value="full">Deep (slowest)</option>
+          </select>
+        </div>
+        <div class="iris-setting">
+          <label for="iris-smart-level">Smart mode</label>
+          <select id="iris-smart-level">
+            <option value="quick">Quick — plans in seconds</option>
+            <option value="deep">Deep — researches the task first</option>
           </select>
         </div>
         <div class="iris-setting">
@@ -164,6 +196,49 @@
 
     </div>
 
+    <div class="settings-container" id="iris-lookups-container">
+      <h3>Look-ups</h3>
+      <div class="setting-secondary-label">
+        Quick text look-ups outside the browser: web search results, papers with abstracts, encyclopedia
+        summaries and public pages. Smart mode uses them to plan, and Iris can use a few during a task.
+        They never use your tabs, cookies or logins, and never contact LinkedIn, Facebook, Instagram, X,
+        TikTok or sites where Iris has an account for you.
+      </div>
+      <div class="setting-section">
+        <input type="checkbox" id="checkbox-iris-lookups" />
+        <label for="checkbox-iris-lookups">Allow look-ups</label>
+      </div>
+      <div class="iris-grid">
+        <div class="iris-setting">
+          <label for="iris-run-lookups">Look-ups during one task</label>
+          <input type="number" id="iris-run-lookups" min="0" max="50" />
+        </div>
+      </div>
+      <div class="iris-setting iris-wide">
+        <label for="iris-lookup-never">Never look up these sites (one per line)</label>
+        <textarea id="iris-lookup-never" class="iris-rules" rows="3" spellcheck="false" placeholder="example.com"></textarea>
+      </div>
+    </div>
+
+    <div class="settings-container" id="iris-bridge-container">
+      <h3>Coding agents</h3>
+      <div class="setting-secondary-label">
+        Let a coding agent (Claude Code, OpenCode, Codex…) use Iris to look at what it is building: it gets
+        screenshots of the current tab and can click, type and scroll there, like Iris does. Iris's own model
+        does not run. Only programs on this Mac with the secret key can connect.
+      </div>
+      <div class="setting-section">
+        <input type="checkbox" id="checkbox-iris-bridge" />
+        <label for="checkbox-iris-bridge">Allow coding agents to use Iris</label>
+      </div>
+      <div class="iris-bridge-help" id="iris-bridge-help">
+        <div class="iris-row-help">Add this to your coding agent's MCP servers:</div>
+        <pre class="iris-code" id="iris-bridge-config"></pre>
+        <button class="iris-button" id="iris-bridge-copy" type="button">Copy</button>
+        <span class="iris-inline-status" id="iris-bridge-status"></span>
+      </div>
+    </div>
+
     <div class="settings-container" id="iris-usage-container">
       <h3>Usage</h3>
       <div class="setting-secondary-label">What Iris has used on your model server.</div>
@@ -204,6 +279,21 @@
         the next time it visits that site, so repeat tasks get faster. Remove any that are wrong.
       </div>
       <div id="iris-skills-list" class="iris-rows"></div>
+      <div class="iris-row-title iris-subtitle">Your skills</div>
+      <div class="setting-secondary-label">
+        Teach Iris how you like a kind of task done. When a task mentions one of the words, Iris follows
+        your instructions. Leave the words empty to use a skill for every task.
+      </div>
+      <div id="iris-user-skills" class="iris-rows"></div>
+      <div class="setting-section">
+        <button class="iris-button" id="iris-user-skill-add" type="button">Add a skill</button>
+      </div>
+      <div class="iris-row-title iris-subtitle">Plans that worked</div>
+      <div class="setting-secondary-label">
+        When a Smart task finishes, its plan and the sites that worked are kept. A similar task later
+        starts from that plan.
+      </div>
+      <div id="iris-playbooks-list" class="iris-rows"></div>
 
     </div>
 

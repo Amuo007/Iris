@@ -722,3 +722,180 @@ body * {
     padding: 20px 16px 80px;
   }
 }
+
+/* --- History, Cookies & site data: plain lists -------------------------- */
+
+.iris-settings input[type="search"].iris-search {
+  flex: 1;
+  max-width: 420px;
+  box-sizing: border-box;
+  min-height: 32px;
+  padding: 5px 12px;
+  border: 1px solid var(--s-line-strong) !important;
+  border-radius: 8px;
+  background: var(--s-bg) !important;
+  color: var(--s-text) !important;
+  font-size: 13px;
+  outline: none;
+}
+.iris-settings input[type="search"].iris-search:focus {
+  border-color: var(--s-text-3) !important;
+  box-shadow: 0 0 0 3px rgba(127, 127, 127, 0.18);
+}
+
+.iris-list {
+  max-height: 460px;
+  overflow-y: auto;
+  margin-top: 6px;
+  border: 1px solid var(--s-line);
+  border-radius: 10px;
+}
+.iris-list-day {
+  position: sticky;
+  top: 0;
+  padding: 8px 14px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--s-text-2);
+  background: var(--s-bg);
+  border-bottom: 1px solid var(--s-line);
+}
+.iris-list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 4px 10px 4px 14px;
+  border-bottom: 1px solid var(--s-line);
+}
+.iris-list-row:last-child {
+  border-bottom: none;
+}
+.iris-list-row:hover {
+  background: var(--s-muted);
+}
+.iris-list-time {
+  flex: 0 0 64px;
+  font-size: 12px;
+  color: var(--s-text-3);
+  font-variant-numeric: tabular-nums;
+}
+.iris-list-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  color: inherit;
+  text-decoration: none;
+}
+.iris-list-title {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.iris-list-sub {
+  font-size: 12px;
+  color: var(--s-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+a.iris-list-main:hover .iris-list-title {
+  text-decoration: underline;
+}
+.iris-list-empty {
+  padding: 14px;
+  font-size: 12.5px;
+  color: var(--s-text-3);
+}
+
+#iris-lookups-container textarea.iris-rules {
+  width: 100%;
+  max-width: 760px;
+  margin-top: 6px;
+  resize: vertical;
+}
+#iris-lookups-container .iris-setting.iris-wide {
+  margin-top: 10px;
+}
+
+.iris-account-site {
+  flex: 0 0 240px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 0.85rem;
+}
+.iris-account-site a,
+.iris-account-site b {
+  font-weight: 600;
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.iris-subtitle {
+  margin-top: 18px;
+}
+.iris-playbook {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+}
+.iris-playbook summary {
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.iris-playbook pre {
+  margin: 6px 0 4px 14px;
+  white-space: pre-wrap;
+  font: 12px/1.5 -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--s-text-2);
+}
+
+.iris-bridge-help {
+  margin-top: 8px;
+}
+.iris-bridge-help[hidden] {
+  display: none;
+}
+.iris-code {
+  margin: 6px 0 8px;
+  padding: 10px 12px;
+  max-width: 760px;
+  overflow-x: auto;
+  border: 1px solid var(--s-line);
+  border-radius: 8px;
+  background: var(--s-muted);
+  font: 12px/1.5 "SF Mono", ui-monospace, Menlo, monospace;
+}
+
+.iris-user-skill {
+  max-width: 760px;
+  padding: 10px 12px;
+  border: 1px solid var(--s-line);
+  border-radius: 10px;
+}
+.iris-user-skill-top {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.iris-user-skill-top input:first-child {
+  flex: 0 0 180px;
+}
+.iris-user-skill-top input:nth-child(2) {
+  flex: 1;
+}
+.iris-user-skill textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}

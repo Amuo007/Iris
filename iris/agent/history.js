@@ -38,6 +38,7 @@ function textPart (text) {
 }
 
 const KEEP_KINDS = new Set(['task', 'followup', 'plan'])
+const KEEP_FOLLOWUPS = 6 // a repeating run adds one per repeat: only the newest few are pinned
 
 function createHistory (options) {
   const cfg = Object.assign({}, DEFAULTS, options || {})
@@ -66,6 +67,10 @@ function createHistory (options) {
   }
 
   function remember (e) {
+    if (e.kind === 'followup') {
+      digest.push('- (earlier message from the user) ' + String(e.text || '').replace(/^New message from the user[^:]*: /, '').slice(0, 140))
+      return
+    }
     if (e.kind !== 'assistant' || !e.action) return
     const where = e.url ? ' on ' + String(e.url).replace(/^https?:\/\//, '').slice(0, 60) : ''
     digest.push('- ' + prompts.digestLine(e.action, e.thought) + where)
@@ -73,6 +78,15 @@ function createHistory (options) {
       digestDropped += digest.length - cfg.maxDigest
       digest = digest.slice(-cfg.maxDigest)
     }
+  }
+
+  /* pinned: the task, the plan and the newest follow-ups; everything else can be summarised away */
+  function pinned (e, i) {
+    if (!KEEP_KINDS.has(e.kind)) return false
+    if (e.kind !== 'followup') return true
+    let newer = 0
+    for (let j = i + 1; j < entries.length; j++) if (entries[j].kind === 'followup') newer++
+    return newer < KEEP_FOLLOWUPS
   }
 
   function push (entry) {
@@ -84,7 +98,7 @@ function createHistory (options) {
     if (entries.length > cfg.maxMessages) {
       const target = Math.floor(cfg.maxMessages / 2)
       while (entries.length > target) {
-        const dropIndex = entries.findIndex(e => !KEEP_KINDS.has(e.kind))
+        const dropIndex = entries.findIndex((e, i) => !pinned(e, i))
         if (dropIndex < 0) break
         remember(entries[dropIndex])
         entries.splice(dropIndex, 1)
@@ -119,7 +133,7 @@ function createHistory (options) {
 
     /** Drop the older half of the steps (never the task, follow-ups or notes). */
     compact () {
-      const droppable = entries.map((e, i) => KEEP_KINDS.has(e.kind) ? -1 : i).filter(i => i >= 0)
+      const droppable = entries.map((e, i) => pinned(e, i) ? -1 : i).filter(i => i >= 0)
       // always keep the newest observation so the model can still see the page
       const lastObs = entries.map(e => e.kind).lastIndexOf('observation')
       const candidates = droppable.filter(i => i !== lastObs)

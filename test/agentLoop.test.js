@@ -549,7 +549,7 @@ test('plan first: one planning call, the plan stays at the top, then normal step
   ])
   const result = await h.agent.run('find me a few good papers on harnesses', { plan: true })
   assert.strictEqual(result.status, 'done')
-  assert.strictEqual(h.planCtx.thinking, 'medium')
+  assert.strictEqual(h.planCtx.thinking, 'low', 'Quick plans think lightly')
   assert.ok(!JSON.stringify(h.planCtx.messages).includes('image_url'), 'the plan call has no screenshot')
   assert.strictEqual(ev(h.events, 'plan')[0].text, plan)
   assert.match(h.firstStep[2].content, /Your plan[\s\S]*Done when: 3 kept/)
@@ -705,4 +705,18 @@ test('an answer on the last steps is accepted even if nothing was judged', async
   const r = await h.agent.run('find jobs', { plan: true, noQuestions: true })
   assert.strictEqual(r.status, 'done')
   assert.strictEqual(r.answer, 'partial: one job')
+})
+
+test('a repeating chat keeps only the newest follow-ups pinned', () => {
+  const { createHistory } = require('../iris/agent/history')
+  const h = createHistory({ maxMessages: 10 })
+  h.start('check the price')
+  for (let i = 1; i <= 30; i++) {
+    h.addFollowUp('Do the task again now (repeat ' + i + ')')
+    h.addAssistant(json('t', { type: 'wait' }), 't', { type: 'wait', ms: 1 }, 'https://a.test')
+  }
+  const kinds = h.messages().map(m => m.content)
+  const follow = kinds.filter(c => typeof c === 'string' && /repeat \d+/.test(c) && /^New message/.test(c))
+  assert.ok(follow.length <= 8, 'old follow-ups are summarised, not pinned forever (' + follow.length + ')')
+  assert.ok(follow.some(c => /repeat 30\b/.test(c)), 'the newest one is kept')
 })

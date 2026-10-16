@@ -179,3 +179,21 @@ test('reset starts the budget again for a follow-up', () => {
   gate.reset()
   assert.strictEqual(gate.beforeStep().allow, true)
 })
+
+test('after card details are typed, a click that means "pay" waits for the user', () => {
+  const g = createSafetyGate({})
+  assert.ok(g.beforeAction({ type: 'click', x: 1, y: 1 }, { thought: 'Click Pay now' }).allow, 'no card typed yet: normal click')
+  assert.ok(g.beforeAction({ type: 'type', text: '{{Card number}}' }, { thought: 'fill card' }).allow)
+  const d = g.beforeAction({ type: 'click', x: 5, y: 5 }, { thought: 'Card filled. Click Place order.' })
+  assert.strictEqual(d.allow, false)
+  assert.strictEqual(d.kind, 'confirmation')
+  assert.strictEqual(d.key, 'payment')
+  assert.ok(g.beforeAction({ type: 'click', x: 6, y: 6 }, { thought: 'Click Place order.', approved: 'payment' }).allow, 'approved')
+  assert.ok(g.beforeAction({ type: 'click', x: 7, y: 7 }, { thought: 'Open the receipt' }).allow, 'not a pay click')
+})
+
+test('paymentGuard auto never pauses', () => {
+  const g = createSafetyGate({ paymentGuard: 'auto' })
+  g.beforeAction({ type: 'type', text: '{{Card CVC}}' }, {})
+  assert.ok(g.beforeAction({ type: 'click', x: 5, y: 5 }, { thought: 'Pay now' }).allow)
+})

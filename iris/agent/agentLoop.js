@@ -263,7 +263,9 @@ function createAgent (opts) {
             level: smartLevel,
             lookups: canLook ? { max: perRound } : null
           }).concat(convo)
-          reply = await model.next({ messages, step: 0, thinking: cfg.planThinking, history: [], signal: undefined })
+          // Quick plans with light thinking; Deep (and "full" thinking users) think it through
+          const thinking = smartLevel === 'quick' && cfg.planThinking === 'medium' ? 'low' : cfg.planThinking
+          reply = await model.next({ messages, step: 0, thinking, history: [], signal: undefined })
           if (stopRequested) return finish('stopped', stopRequested)
           text = String(typeof reply === 'string' ? reply : (reply && reply.content) || '').trim()
 
@@ -328,9 +330,12 @@ function createAgent (opts) {
       if (stopRequested) return finish('stopped', stopRequested)
       if (pauseRequested && !(await waitForResume())) return finish('stopped', stopRequested)
       if (pendingApproval) {
-        // resumed after a sensitive-action pause: the human approved that exact action
+        // resumed after a sensitive-action pause: the human approved that action (or the payment)
         approvedKey = pendingApproval
         pendingApproval = null
+        history.addSystemNote(approvedKey === 'payment' ? 'The user approved the payment. Go ahead and pay now.' : 'The user approved it. Go ahead.')
+      } else {
+        approvedKey = null
       }
 
       const stepGate = safety.beforeStep()
@@ -386,7 +391,8 @@ function createAgent (opts) {
       // did the last action visibly do anything? (cheap, pixel-level)
       const unchanged = !!(lastActed && obs.fingerprint && lastFingerprint && obs.fingerprint === lastFingerprint)
       if (unchanged && !obs.note) {
-        obs.note = 'Your last action (' + describeAction(lastActed) + ') did not visibly change the page.'
+        obs.note = 'Your last action (' + describeAction(lastActed) + ') did not visibly change the page.' +
+          (/click/.test(lastActed.type) ? ' If you aimed at a small button or link, you probably missed it: zoom in on it, or aim at its exact centre.' : '')
       }
       if (obs.fingerprint) lastFingerprint = obs.fingerprint
 
@@ -507,6 +513,7 @@ function createAgent (opts) {
         devicePixelRatio: obs.devicePixelRatio
       })
 
+      pageState.thought = parsed.thought || ''
       let outcome = null
       for (let i = 0; i < batch.length; i++) {
         outcome = await perform(batch[i], i, batch.length, mapping, obs, pageState, unchanged)
@@ -554,9 +561,10 @@ function createAgent (opts) {
       pausedByUser: pauseRequested,
       url: pageState.url,
       pageUnchanged: unchanged && index === 0,
-      approved: approvedKey
+      approved: approvedKey,
+      thought: pageState.thought || ''
     })
-    approvedKey = null
+    if (approvedKey !== 'payment') approvedKey = null // a payment approval covers this whole step
     if (!actionGate.allow) {
       emit('blocked', { step: state.step, kind: actionGate.kind, reason: actionGate.reason, action })
       if (actionGate.kind === 'loop') {
