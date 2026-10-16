@@ -98,6 +98,15 @@ Updated 2026-10-16 (evening).
 - **Result:** run 1: 20 steps, one wrong answer. Run 2 (range rule): every field right, RTOS "1-2
   years". Run 3 with the pause: see the day report.
 
+### 5e. Where the clicks landed (new today)
+- **Found:** a "select all that apply" list of 8 tick boxes, 25 px apart. Six clicks in one step landed
+  a row off (Rust and Zephyr instead of C and Python); fixing them by guessing again took 9 steps,
+  since every click toggles. Pointer-shape aiming cannot help: tick boxes show the plain arrow.
+- **Now:** after a step with two or more clicks, the next screenshot shows a small blue ring where each
+  click landed (hollow, so the page shows through), with a note: check each is on the option you meant;
+  a tick box clicked twice is unticked again. Anything that moves the page in between (scroll, key,
+  navigation, a close-up) drops the rings, since they would be in the wrong place.
+
 ### 5d. Replies that are almost JSON (new today)
 - **Before:** a reply like `{"thought":"the list shows "Toronto, Ontario" first", …}` — quotes the model
   forgot to escape inside its own sentence — was refused and the model asked again (a lost step,
@@ -370,6 +379,19 @@ Updated 2026-10-16 (evening).
   browser — a plain request in the empty look-up session, never LinkedIn and the like, never a site
   you have an account on — the page's text (up to 8,000 characters) goes to the tailoring next to the
   summary. Pages that need JavaScript, or whose text does not name the job, give nothing and are skipped.
+- **Years with each skill (new today):** "How many years have you worked with an RTOS?" was answered
+  "Less than 1 year" because Iris only saw job titles and dates, not which job used FreeRTOS. Code now
+  counts, for every skill in the profile, the dates of the jobs whose title or bullets mention it
+  (overlaps once) and gives Iris the table ("FreeRTOS 1.3, STM32 1.3, Python 0.3 …").
+- **Every log names its own job (fixed today):** logging a job ruled out from the list ("skipped:
+  Senior PM") right after making a resume for another one gave the skipped job the other job's link,
+  fit and resume, and cleared the job in progress — so its application was never logged, and its link
+  now read "skipped". Now each job Iris makes a resume for is remembered with its own link, fit and PDF;
+  a log by title gets that job's details; a job with no resume gets none; and any job with a resume but
+  no log is pointed out on the next resume and after each log.
+- **Boards you name are the only ones (new today):** after finishing the two boards in the task, Iris
+  went on to another board it had learned about. When the task names boards or links, it now finishes
+  there.
 - **Fit and years (new today):** the model rated a "3+ years on AWS" job 85 for a person with about 1.9
   years of work — while listing the years as missing. Now code reads the most years a posting asks
   for ("3+ years", "at least 5 years", "2-4 years", "3 years of experience"; "around for 10 years" is
