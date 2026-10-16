@@ -391,7 +391,10 @@ Updated 2026-10-16 (evening).
   `remember` in the same reply as the scroll, and (b) when the posting's link can be read without the
   browser — a plain request in the empty look-up session, never LinkedIn and the like, never a site
   you have an account on — the page's text (up to 8,000 characters) goes to the tailoring next to the
-  summary. Pages that need JavaScript, or whose text does not name the job, give nothing and are skipped.
+  summary. Pages that need JavaScript, or whose text does not name the job, give nothing and are skipped —
+  except Ashby and Workday postings, which are built by JavaScript but read from the same public JSON
+  the page itself loads (Ashby's posting API, Workday's `/wday/cxs/…` endpoint). Checked on real
+  postings: Greenhouse (Anthropic), Lever (Palantir), Ashby (Ramp), Workday (NVIDIA).
 - **Years with each skill (new today):** "How many years have you worked with an RTOS?" was answered
   "Less than 1 year" because Iris only saw job titles and dates, not which job used FreeRTOS. Code now
   counts, for every skill in the profile, the dates of the jobs whose title or bullets mention it
