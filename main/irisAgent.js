@@ -1178,8 +1178,8 @@ IrisComputer.prototype.act = async function (action) {
       }
       this.lastResume = r.file
       this.lastJob = { title: job.title, company: job.company, url: job.url, fit: r.fit }
-      let note = 'Made a one-page resume for ' + job.title + (job.company ? ' at ' + job.company : '') + ' (' + (r.fit === null ? 'fit not rated' : 'fit ' + r.fit + '/100') +
-        (r.focus ? ', focus: ' + r.focus : '') + '): ' + r.file + '.' + (r.missing && r.missing.length ? ' The profile does not show: ' + r.missing.join(', ') + '.' : '')
+      let note = (r.file ? 'Made a one-page resume for ' : 'Checked the fit for ') + job.title + (job.company ? ' at ' + job.company : '') + ' (' + (r.fit === null ? 'fit not rated' : 'fit ' + r.fit + '/100') +
+        (r.focus ? ', focus: ' + r.focus : '') + ')' + (r.file ? ': ' + r.file : '') + '.' + (r.missing && r.missing.length ? ' The profile does not show: ' + r.missing.join(', ') + '.' : '')
       note += r.below
         ? ' The fit is below the user\'s cutoff (' + r.cutoff + '): do not apply. log_application {"status":"skipped","note":"fit ' + r.fit + '"} and find the next job.'
         : ' When the form asks for a resume, click its upload button, then {"type":"upload","file":"resume"} picks this PDF.'
@@ -1744,7 +1744,7 @@ function irisRecord (session, type, p) {
   } else if (type === 'remember') {
     items.push({ kind: 'note', text: p.note })
   } else if (type === 'resume' && p.ok) {
-    items.push({ kind: 'note', text: 'Made a resume for ' + p.title + (p.company ? ' at ' + p.company : '') + (p.fit !== null && p.fit !== undefined ? ' (fit ' + p.fit + ')' : '') + ': ' + path.basename(path.dirname(p.file)) })
+    items.push({ kind: 'note', text: (p.file ? 'Made a resume for ' : 'Checked the fit for ') + p.title + (p.company ? ' at ' + p.company : '') + (p.fit !== null && p.fit !== undefined ? ' (fit ' + p.fit + ')' : '') + (p.file ? ': ' + path.basename(path.dirname(p.file)) : '') })
   } else if (type === 'application' && p.item) {
     items.push({ kind: 'note', text: ({ applied: 'Applied', skipped: 'Skipped', needs_you: 'Needs you', failed: 'Could not apply' }[p.item.status] || p.item.status) + ': ' + (p.item.title || 'job') + (p.item.company ? ' — ' + p.item.company : '') })
   } else if (type === 'plan') {

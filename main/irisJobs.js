@@ -187,6 +187,11 @@ async function irisTailorResume (job, hooks) {
     }
   }
   const pick = irisCareerLib.parseTailorReply(text, bank, job, irisActionSchema.parseObjectLoose)
+  // below the cutoff the job is skipped: no PDF needed (unless asked for one, as in Settings → Try it)
+  const cutoff0 = bank.prefs.fitCutoff
+  if (!(hooks && hooks.alwaysBuild) && pick.fit !== null && cutoff0 > 0 && pick.fit < cutoff0) {
+    return { ok: true, file: null, fit: pick.fit, focus: pick.focus, why: pick.why, missing: pick.missing, undone: pick.undone, cutoff: cutoff0, below: true, usedModel: pick.usedModel, modelError: modelError, ms: Date.now() - started }
+  }
   const template = irisTemplateText()
   const engine = irisTemplateInfo().kind === 'custom' ? (irisTemplateInfo().engine || 'pdflatex') : 'pdflatex'
   const fitted = await irisCareerLib.fitToPage({ bank: bank, pick: pick, job: job, template: template, compile: function (tex) { return irisCompileTex(tex, engine) } })
@@ -446,7 +451,7 @@ var irisLastPreview = null
 /* Preview: the profile tailored to a sample job, or (with no job) everything that fits, then opened. */
 async function irisResumePreview (args) {
   const job = { title: (args && args.title) || 'Software Engineer', company: (args && args.company) || 'Preview', requirements: (args && args.requirements) || '' }
-  const r = await irisTailorResume(job)
+  const r = await irisTailorResume(job, { alwaysBuild: true })
   if (r.ok) irisLastPreview = r.file
   return r
 }

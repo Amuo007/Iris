@@ -951,6 +951,7 @@ function addResumeCard (p) {
     if (p.missing && p.missing.length) bits.push('not in your profile: ' + p.missing.slice(0, 3).join(', '))
     if (p.undone) bits.push(p.undone + (p.undone === 1 ? ' rewrite' : ' rewrites') + ' undone (added facts)')
     if (bits.length) card.appendChild(el('div', 'iris-resume-meta', bits.join(' · ')))
+    if (!p.file) { streamEl.appendChild(card); trimStream(); scrollToEnd(); return }
     const tools = el('div', 'iris-resume-tools')
     const open = el('button', 'iris-btn-quiet', 'Open PDF')
     open.type = 'button'
