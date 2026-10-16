@@ -595,6 +595,24 @@ function irisSeenNote (url, title, sessionId) {
     (dl ? '; its file is already in Downloads as ' + (dl.name || dl.text) : (hit.keep ? '; not downloaded yet' : ''))
 }
 
+/* IDs of papers judged in earlier chats about the same thing: skipped before they are even opened. */
+function irisPriorJudged (task, sessionId) {
+  const want = Array.from(new Set(irisMemoryLib.words(task)))
+  if (want.length < 3) return ''
+  const ids = []
+  irisSeen().items().forEach(function (it) {
+    if (it.kind !== 'verdict' || it.sessionId === sessionId || !it.ids || !it.ids.length) return
+    const w = Array.from(new Set(irisMemoryLib.words(it.chat || '')))
+    const shared = w.filter(function (x) { return want.includes(x) }).length
+    if (shared / Math.max(1, Math.min(w.length, want.length)) < 0.5) return
+    it.ids.forEach(function (id) {
+      const short = id.replace(/^arxiv:/, '').replace(/^doi:/, 'doi ')
+      if (!ids.includes(short)) ids.push(short)
+    })
+  })
+  return ids.length ? 'Already judged in earlier chats on this topic — skip these, never open or download them again: ' + ids.slice(-300).join(', ') : ''
+}
+
 /* ------------------------------------------------------------------ *
  * Quick look-ups outside the browser (iris/agent/lookup.js). They go through an empty,
  * in-memory Chromium session — never the tabs' cookies or logins — and never to sites that
@@ -865,7 +883,8 @@ IrisComputer.prototype.screenshot = async function () {
     this.lastVisit = obs.url
     this.memory.add('visit', obs.title || obs.url, { url: obs.url, title: obs.title })
     const seen = irisSeenNote(obs.url, obs.title, this.sessionId)
-    if (seen) obs.note = (obs.note ? obs.note + '\n' : '') + 'You have seen this page before: you ' + seen + '. Do not spend steps on it again unless the task needs it.'
+    // first line, and blunt: a soft hint at the end of the notes was read past
+    if (seen) obs.note = 'STOP — you already judged this before: you ' + seen + '. Do not judge or download it again; go back and pick something new.' + (obs.note ? '\n' + obs.note : '')
   }
   // Iris's own PDF viewer: say where its download button is (it fades out until the mouse is near)
   if (/^min:\/\/app\/pages\/pdfViewer\//.test(obs.url || '') && !crop) {
@@ -1622,7 +1641,7 @@ function irisCalendarHint (now) {
   return 'Coming Mondays: ' + mondays.join(', ') + ' (use them to work out weekdays).'
 }
 
-function irisSystemExtra (mode, task, projectId) {
+function irisSystemExtra (mode, task, projectId, sessionId) {
   const parts = []
   const brief = irisProjectBrief(projectId)
   if (brief) parts.push(brief)
@@ -1648,6 +1667,8 @@ function irisSystemExtra (mode, task, projectId) {
   if (playbook) parts.push(playbook)
   const userSkills = irisUserSkillsFor(task)
   if (userSkills) parts.push(userSkills)
+  const prior = irisPriorJudged(task, sessionId)
+  if (prior) parts.push(prior)
   if ((playbook || userSkills) && irisSkillsLogged !== task) {
     irisSkillsLogged = task
     DBUG('prompt extras: playbook=' + !!playbook + ' userSkills=' + (userSkills ? userSkills.split('\n').length - 1 : 0))
@@ -1742,7 +1763,7 @@ function startAgent (task, options) {
     computer: computer,
     lookup: cfg.lookups === false ? null : irisDoLookup,
     config: {
-      systemExtra: function () { return irisSystemExtra(mode, session.title + '\n' + task, session.projectId) },
+      systemExtra: function () { return irisSystemExtra(mode, session.title + '\n' + task, session.projectId, session.id) },
       maxServerWaitMs: unlimited ? 0 : 10 * 60 * 1000,
       askTimeoutMs: unlimited ? 10 * 60 * 1000 : 0, // an overnight run does not wait all night for an answer
       planThinking: cfg.thinking === 'full' ? 'full' : 'medium',
