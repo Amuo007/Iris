@@ -1653,7 +1653,7 @@ async function fitToPage (opts) {
  */
 // words that mean job hunting wherever they stand next to "apply" ("roles" and "positions" are not
 // enough on their own: "apply the admin role", "apply the saved positions")
-const JOB_STRONG = /\b(jobs?|internships?|co-?ops?|openings|postings?|vacanc(y|ies)|careers? pages?|hiring|greenhouse|lever|ashby|workday)\b/i
+const JOB_STRONG = /\b(jobs?|internships?|co-?ops?|openings?|postings?|vacanc(y|ies)|careers? pages?|hiring|greenhouse|lever|ashby|workday)\b/i
 const JOB_TASK = [
   /\bjob (applications?|hunt(ing)?|search(es|ing)?|boards?)\b/i,
   // "apply for software engineer roles", "apply for this senior role" — but not "apply the admin role to Sam"

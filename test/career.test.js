@@ -255,7 +255,8 @@ test('job tasks are told apart from tasks that merely say "apply" or "resume"', 
     'Go through the openings at Lumen Labs (http://localhost:8765/gh/) and apply to the ones that fit my profile.',
     'Apply for this role: https://jobs.example.test/123',
     'Apply to 3 positions at Shopify',
-    'Check the Ramp careers page and apply where I fit'
+    'Check the Ramp careers page and apply where I fit',
+    'Apply to this opening: https://x.test/1'
   ]
   const no = [
     'apply the coupon SAVE10 at checkout',
