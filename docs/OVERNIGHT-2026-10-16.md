@@ -1,6 +1,6 @@
 # Iris: overnight report (Oct 15–16, 2026)
 
-Everything below was built and tested between 22:40 and 02:30 on your Mac against your Qwen server.
+Everything below was built and tested between 22:40 and 04:15 on your Mac against your Qwen server.
 All code is pushed to GitHub (`Amuo007/Iris`, branch `main`); the packaged app is in `dist/app/mac-arm64/Iris.app`.
 
 ## What I built
@@ -85,7 +85,9 @@ All code is pushed to GitHub (`Amuo007/Iris`, branch `main`); the packaged app i
   descriptions aligned with headings, narrow My info fields, long skill URLs running out of the card,
   underlined history rows, the heavy content-blocking box. Checked in dark and light mode.
 - Fixed: Min's "Save password?" bar was hidden behind the taller Iris toolbar and left an empty black
-  gap above the page; it now shows under the toolbar in Iris colours.
+  gap above the page; it now shows under the toolbar in Iris colours, and is dismissed while Iris works.
+- Fixed: the downloads card covered the panel's message box; it now sits left of the panel.
+- New README screenshots (`docs/screenshots/agent-panel.png`, `settings.png`).
 
 ## Ideas taken from coding harnesses (Claude Code, Codex, OpenCode, Manus)
 
@@ -124,6 +126,9 @@ All code is pushed to GitHub (`Amuo007/Iris`, branch `main`); the packaged app i
 | Long Non-stop research, part 4 (new chat, final build, 26 min) | 85 steps, 18 kept, 1 skipped, **0 re-judged — in the chat or from earlier chats** |
 | **Final regression, 14 tasks on the final build** | **14/14 done**: date field (3 steps), hover menu, slider, confirm dialog, file upload, sign-up with email code (11 steps), GitHub trending, YouTube channel, OpenStreetMap directions (143 km, 1 h 53), Google Translate, a real form on httpbin, banana bread on allrecipes (18 steps, ads), Tokyo population/area on Wikipedia. Found one problem: on the sign-up Iris picked a country the site suggested instead of asking → rule fixed, re-checked: it now asks |
 | **All parts together** | **59 PDFs, 59 different papers — zero duplicate files** over ~2 hours and 4 chats, one server reset survived |
+| Long Non-stop research, run 5 (new topic: memory for LLM agents, final build, 90 min) | **225 steps, 46 kept, 1 skipped, 0 re-judged, 45 files, 0 duplicates**; memory steady at ~1.2 GB for all Iris processes; prompt stayed ~11–14K tokens |
+| Follow-up chat: "find 3 good papers about agent memory that I don't have yet" (Smart Quick) | **done**, 11 steps, 3 min 40 s: 3 papers, **none of them among the 47 judged in run 5**; saved `Iris report - … .md` |
+| Starting a task on a tab whose last address was a download | failed ("can't see this page") → fixed: a blank tab that isn't loading counts as empty |
 
 ## Fast vs Balanced thinking (same tasks, final build)
 
@@ -179,6 +184,8 @@ fine for quick look-ups and simple forms.
 - **Small targets.** It sometimes misses small buttons by a few pixels (a chat pop-up's ×, a calendar day).
   The hint after a missed click and `zoom` help; it recovers, but it costs steps.
 - **Weekday and date sums.** Better with the calendar hint, not perfect.
+- **Lenient judging on broad topics.** On "memory for LLM agents" it kept 46 of 47 papers it opened;
+  its search already filters, but a stricter "Good result means" would make it more selective.
 - **Bot checks.** Amazon's "I am human" box, Indeed's Cloudflare wall: Iris stops and asks you (or
   uses another site). That is deliberate.
 - **Sites that hide details behind sign-ups** (job boards). Iris works around them by reading

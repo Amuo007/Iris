@@ -816,12 +816,20 @@ IrisComputer.prototype.screenshot = async function () {
 
   // a brand-new tab has no page at all: describe it instead of photographing nothing
   if (!url || url === 'about:blank' || /^min:\/\/newtab/.test(url)) {
-    if (info && info.url && !/^min:\/\/newtab/.test(info.url) && (wc.isLoading() || !url)) {
+    // still opening: try again in a moment. Not loading: it is simply empty (a download link leaves
+    // its tab blank, and a page that failed to load too) — Iris can carry on from there.
+    if (info && info.url && !/^min:\/\/newtab/.test(info.url) && wc.isLoading() && Date.now() - (this.blankSince || (this.blankSince = Date.now())) < 8000) {
       this.tabNote = tabNote
       throw new Error('the new tab is still opening')
     }
-    return irisAttachEvents(this, Object.assign(this.emptyTabObservation(bounds), { tabs: irisTabList(), tabChanged: tabNote }))
+    this.blankSince = 0
+    const empty = Object.assign(this.emptyTabObservation(bounds), { tabs: irisTabList(), tabChanged: tabNote })
+    if (info && info.url && !/^min:\/\/newtab/.test(info.url)) {
+      empty.note = 'This tab shows nothing: its last address (' + info.url.slice(0, 120) + ') was a download or did not load. Open a page with navigate.'
+    }
+    return irisAttachEvents(this, empty)
   }
+  this.blankSince = 0
 
   if (!this.isAttached()) {
     // the address bar or a menu put Min into placeholder mode; ask the UI to show the page again
