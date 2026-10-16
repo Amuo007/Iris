@@ -1188,7 +1188,8 @@ IrisComputer.prototype.act = async function (action) {
         (r.focus ? ', focus: ' + r.focus : '') + ')' + (r.file ? ': ' + r.file : '') + '.' + (r.missing && r.missing.length ? ' The profile does not show: ' + r.missing.join(', ') + '.' : '')
       note += r.below
         ? ' The fit is below the user\'s cutoff (' + r.cutoff + '): do not apply. log_application {"status":"skipped","note":"fit ' + r.fit + '"} and find the next job.'
-        : ' When the form asks for a resume, click its upload button, then {"type":"upload","file":"resume"} picks this PDF.'
+        : (r.fit !== null && r.cutoff > 0 ? ' That is at or above the user\'s cutoff (' + r.cutoff + '): apply.' : '') +
+          ' When the form asks for a resume, click its upload button, then {"type":"upload","file":"resume"} picks this PDF.'
       this.notes = (this.notes || []).concat(note)
       broadcastEvent({ type: 'resume', ok: true, file: r.file, fit: r.fit, focus: r.focus, why: r.why, missing: r.missing, below: r.below, title: job.title, company: job.company, ms: r.ms, undone: (r.undone || []).length, sessionId: this.sessionId })
       return { ok: true }
