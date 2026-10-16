@@ -333,7 +333,7 @@ function irisJobsLearnAnswer (question, answer) {
   let label = (quoted ? quoted[1] : q.replace(/^.*?(?:asks?|question)[^:]*:\s*/i, '')).trim()
   if (label.length > 100) label = label.slice(0, 100).replace(/\s+\S*$/, '') + '…'
   if (raw.answers.some(function (x) { return x.label.toLowerCase() === label.toLowerCase() })) return false
-  raw.answers.push({ label: label, value: a })
+  raw.answers.push({ label: label, value: a, learned: Date.now() })
   irisCareerSave(raw)
   broadcast('iris-agent-event', { type: 'remember', note: 'Saved your answer for next time (Settings → Jobs → Answers): ' + label, automatic: false })
   return true
@@ -447,9 +447,16 @@ function irisJobsSettingsAction (action, args) {
   switch (action) {
     case 'careerGet':
       return Promise.resolve(irisCareerForPage())
-    case 'careerSave':
-      irisCareerSave(args && args.bank)
-      return Promise.resolve(Object.assign(irisCareerForPage(), { saved: true }))
+    case 'careerSave': {
+      // answers Iris learned after this page loaded are not in what the page sends: keep them
+      const incoming = (args && args.bank) || {}
+      const loadedAt = Number(args && args.loadedAt) || 0
+      const labels = new Set((incoming.answers || []).map(function (a) { return String(a.label || '').toLowerCase() }))
+      const learned = irisCareerLoad().answers.filter(function (a) { return a.learned && a.learned > loadedAt && !labels.has(a.label.toLowerCase()) })
+      if (learned.length) incoming.answers = (incoming.answers || []).concat(learned)
+      irisCareerSave(incoming)
+      return Promise.resolve(Object.assign(irisCareerForPage(), { saved: true, learnedKept: learned.length }))
+    }
     case 'templateImport':
       return dialog.showOpenDialog(windows.getCurrent(), { title: 'Choose your LaTeX resume', properties: ['openFile'], filters: [{ name: 'LaTeX', extensions: ['tex'] }] }).then(function (pick) {
         if (pick.canceled || !pick.filePaths[0]) return irisCareerForPage()

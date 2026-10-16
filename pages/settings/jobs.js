@@ -2,13 +2,14 @@
  * irisEmptyLine() from settings.js. Everything is saved by the main process (iris-career.json). */
 
 var irisCareer = null
+var irisCareerLoadedAt = 0
 var irisCareerSaveTimer = null
 var irisCareerStatus = document.getElementById('iris-career-status')
 
 function irisCareerScheduleSave () {
   irisCareerStatus.textContent = 'Saving…'
   clearTimeout(irisCareerSaveTimer)
-  irisCareerSaveTimer = setTimeout(function () { irisAction('careerSave', { bank: irisCareer }) }, 600)
+  irisCareerSaveTimer = setTimeout(function () { irisAction('careerSave', { bank: irisCareer, loadedAt: irisCareerLoadedAt }) }, 600)
 }
 
 function irisEl (tag, cls, text) {
@@ -519,9 +520,16 @@ window.addEventListener('message', function (e) {
     if (r.error && !r.bank) { irisCareerStatus.textContent = r.error; return }
     if (d.action === 'careerSave') {
       irisCareerStatus.textContent = 'Saved · ' + irisCountsText(r.counts)
+      // answers Iris learned meanwhile were kept by the main process: show them too
+      if (r.learnedKept && r.bank) {
+        irisCareer.answers = r.bank.answers
+        irisCareerLoadedAt = Date.now()
+        if (!document.getElementById('iris-career-answers').contains(document.activeElement)) irisRenderAnswers()
+      }
       return
     }
     if (d.action === 'careerGet' || !irisCareer) {
+      irisCareerLoadedAt = Date.now()
       irisCareer = r.bank
       irisRenderCareer()
       irisCareerStatus.textContent = irisCountsText(r.counts)

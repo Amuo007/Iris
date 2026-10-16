@@ -76,7 +76,10 @@ function normalizeBank (raw) {
   ;['roles', 'locations', 'salary'].forEach(function (k) { prefs[k] = str(prefs[k], 300) })
 
   const answers = (Array.isArray(b.answers) ? b.answers : []).map(function (a) {
-    return a && typeof a === 'object' ? { label: str(a.label, 80), value: str(a.value, 400) } : null
+    if (!a || typeof a !== 'object') return null
+    const out = { label: str(a.label, 200), value: str(a.value, 400) }
+    if (Number(a.learned) > 0) out.learned = Number(a.learned) // saved from a reply during an application
+    return out
   }).filter(function (a) { return a && a.label })
   DEFAULT_ANSWERS.forEach(function (label) {
     if (!answers.some(function (a) { return a.label.toLowerCase() === label.toLowerCase() })) answers.push({ label: label, value: '' })
