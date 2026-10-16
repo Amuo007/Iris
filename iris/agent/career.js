@@ -941,6 +941,17 @@ function words (text) {
   return String(text || '').toLowerCase().replace(/[^a-z0-9+#.]+/g, ' ').split(' ').map(function (w) { return w.replace(/\.+$/, '') }).filter(function (w) { return w.length > 1 && !STOP.has(w) })
 }
 
+/* every number in a text, normalised ("2M" → "2m", "1,200" → "1200", "2.1x" → "2.1x") */
+function numberSet (text) {
+  const set = new Set()
+  ;(String(text || '').match(/(?<![A-Za-z0-9])\d[\d,.]*\s*(%|x\b|k\b|m\b|\+)?/gi) || []).forEach(function (n) {
+    const t = n.replace(/[\s,]/g, '').replace(/\.$/, '').toLowerCase()
+    set.add(t)
+    set.add(t.replace(/[^0-9.]/g, ''))
+  })
+  return set
+}
+
 /* Numbers and technical-looking words: the facts a rewrite must not change. */
 function factTokens (text) {
   const out = []
@@ -996,10 +1007,10 @@ function checkRewrite (original, rewritten, entryContext) {
   // more than a couple of new content words means a new claim ("… through low-power design")
   const added = newWords(rewritten, ctx)
   if (added.length > 2) bad.push('adds: ' + added.slice(0, 4).join(' '))
+  const nums = numberSet(original)
   factTokens(rewritten).forEach(function (t) {
     if (/^\d/.test(t)) {
-      const digits = t.replace(/[^0-9.]/g, '')
-      if (String(original).replace(/,/g, '').indexOf(digits) === -1) bad.push(t)
+      if (!nums.has(t) && !nums.has(t.replace(/[^0-9.]/g, ''))) bad.push(t)
     } else if (!supported(t, ctx)) bad.push(t)
   })
   // a rewrite that grew a lot is adding claims
@@ -1154,6 +1165,105 @@ function parseTailorReply (text, bank, job, parseObject) {
     rewrite: rewrite,
     undone: undone
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * Cover letters: short, honest, only from the bank
+ * ------------------------------------------------------------------ */
+
+function coverLetterMessages (bank, job) {
+  const system = [
+    'You write a short cover letter for ONE job, using only facts from the person\'s career bank.',
+    'Rules:',
+    '- 3 short paragraphs, 170-230 words in all. Plain, specific, no clichés ("I am thrilled", "passionate", "synergy").',
+    '- Paragraph 1: the role and the one or two strongest reasons the person fits it.',
+    '- Paragraph 2: two concrete things from the bank that match the job\'s main requirements (what they did and the result).',
+    '- Paragraph 3: availability or location if the bank says so, and a one-line close.',
+    '- Every skill, tool, number, employer and result must be in the bank. Do not invent anything, and do not claim',
+    '  experience with what the bank does not show.',
+    '- No address block, no date, no greeting and no sign-off: Iris adds those.',
+    'Reply with the three paragraphs only, separated by blank lines.'
+  ].join('\n')
+  const user = [
+    'JOB: ' + [job.title, job.company].filter(Boolean).join(' at '),
+    'WHAT THE POSTING ASKS FOR:',
+    String(job.requirements || '(not given: judge from the title)').slice(0, 4000),
+    '',
+    'CAREER BANK:',
+    bankText(bank, 20000)
+  ].join('\n')
+  return [{ role: 'system', content: system }, { role: 'user', content: user }]
+}
+
+/* capitalised words a letter needs that are not facts about the person */
+const LETTER_WORDS = /^(i|i'm|i've|i'd|i'll|my|the|this|your|thank|thanks|please|team|role|company|dear|hiring)$/
+
+/**
+ * The model's letter → paragraphs. A sentence that brings in a number, a tool or a name the bank
+ * does not have is taken out (listed in `removed`); the job's own company and title are allowed.
+ */
+function parseCoverLetter (text, bank, job) {
+  const places = [bank.basics.location].concat(bank.experience.map(function (e) { return e.location }), bank.education.map(function (e) { return e.location + ' ' + e.school })).join(' ')
+  const all = bankText(bank) + ' ' + places + ' ' + (job && job.company || '') + ' ' + (job && job.title || '')
+  const ctx = all.toLowerCase()
+  const nums = numberSet(all)
+  const removed = []
+  const paras = String(text || '').replace(/\r/g, '').split(/\n\s*\n/).map(function (p) { return p.replace(/\s+/g, ' ').trim() })
+    .filter(function (p) { return p && !/^(dear|hi |hello|sincerely|best regards|regards|kind regards)/i.test(p) })
+    .map(function (p) {
+      const sentences = p.match(/[^.!?]+[.!?]+["')]*\s*|[^.!?]+$/g) || [p]
+      return sentences.filter(function (sent) {
+        const bad = factTokens(sent).filter(function (t) {
+          if (/^\d/.test(t)) return !nums.has(t) && !nums.has(t.replace(/[^0-9.]/g, ''))
+          return !LETTER_WORDS.test(t) && !supported(t, ctx)
+        })
+        if (bad.length) { removed.push({ sentence: sent.trim(), why: bad.slice(0, 3).join(', ') }); return false }
+        return true
+      }).join('').trim()
+    }).filter(Boolean)
+  return { paragraphs: paras.slice(0, 4), removed: removed }
+}
+
+const COVER_TEMPLATE = String.raw`\documentclass[11pt,letterpaper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[hidelinks]{hyperref}
+\usepackage{parskip}
+\input{glyphtounicode}
+\pdfgentounicode=1
+\pagestyle{empty}
+\begin{document}
+{\Large \textbf{<<name>>}}\\
+\small <<contact>>
+
+\normalsize
+\vspace{14pt}
+<<date>>
+
+\vspace{6pt}
+<<company>>\\
+Re: <<title>>
+
+\vspace{6pt}
+Dear Hiring Team,
+
+%%IRIS:each paragraphs
+<<text>>
+
+%%IRIS:end paragraphs
+Sincerely,\\
+<<name>>
+\end{document}
+`
+
+function coverLetterTex (bank, job, paragraphs, date) {
+  return renderTemplate(COVER_TEMPLATE, {
+    name: bank.basics.name || '',
+    contact: contactLine(bank.basics),
+    date: date || '',
+    company: job.company || '',
+    title: job.title || '',
+    paragraphs: paragraphs.map(function (t) { return { text: t } })
+  }, { probe: false })
 }
 
 /* ------------------------------------------------------------------ *
@@ -1332,6 +1442,9 @@ module.exports = {
   classifySection,
   tailorMessages,
   parseTailorReply,
+  coverLetterMessages,
+  parseCoverLetter,
+  coverLetterTex,
   keywordPick,
   checkRewrite,
   factTokens,

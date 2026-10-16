@@ -166,3 +166,14 @@ test('a rewrite may change words, but not add a claim', () => {
   assert.deepStrictEqual(career.checkRewrite(o, 'Developed STM32 firmware in C using FreeRTOS for a battery-monitoring board, reducing brown-out resets by 90%', ''), [])
   assert.ok(career.checkRewrite(o, 'Developed STM32 firmware in C using FreeRTOS, reducing brown-out resets by 90% through low-power design optimizations', '').some(b => /^adds:/.test(b)))
 })
+
+test('a cover letter keeps only sentences the profile supports', () => {
+  const bank = career.normalizeBank(SAMPLE)
+  const r = career.parseCoverLetter('Dear Hiring Team,\n\nI am applying for the Embedded Firmware Engineer role at Northbridge. I wrote STM32 firmware on FreeRTOS at Northwind Robotics.\n\nI cut brown-out resets by 90%. I also led a team of 12 engineers using Rust.\n\nI am based in Toronto. Thank you for your time.\n\nSincerely, Jordan', bank, { company: 'Northbridge', title: 'Embedded Firmware Engineer' })
+  assert.strictEqual(r.paragraphs.length, 3)
+  assert.ok(r.removed.some(x => /team of 12/.test(x.sentence)), 'an invented team size goes')
+  assert.match(r.paragraphs[2], /based in Toronto/, 'the profile\'s own location stays')
+  const tex = career.coverLetterTex(bank, { company: 'Northbridge', title: 'Embedded Firmware Engineer' }, r.paragraphs, 'October 16, 2026')
+  assert.match(tex, /Dear Hiring Team/)
+  assert.match(tex, /brown-out resets by 90\\%/)
+})

@@ -1161,6 +1161,21 @@ IrisComputer.prototype.act = async function (action) {
       broadcastEvent({ type: 'resume', ok: true, file: r.file, fit: r.fit, focus: r.focus, why: r.why, missing: r.missing, below: r.below, title: job.title, company: job.company, ms: r.ms, undone: (r.undone || []).length, sessionId: this.sessionId })
       return { ok: true }
     }
+    case 'cover_letter': {
+      const job = { title: action.title, company: action.company || (this.lastJob && this.lastJob.company) || '', requirements: action.requirements || '' }
+      broadcastEvent({ type: 'resume:start', title: job.title, company: job.company, letter: true, sessionId: this.sessionId })
+      let r
+      try { r = await irisWriteCoverLetter(job) } catch (e) { r = { ok: false, error: e.message } }
+      if (!r.ok) {
+        this.notes = (this.notes || []).concat('Could not write the cover letter: ' + r.error)
+        return { ok: true }
+      }
+      this.lastCover = r.file
+      this.notes = (this.notes || []).concat('Wrote a cover letter (' + r.words + ' words' + (r.removed.length ? ', ' + r.removed.length + ' sentence(s) with facts not in the profile taken out' : '') + '): ' + path.basename(r.file) +
+        '. Upload it with {"type":"upload","file":"cover letter"}.')
+      broadcastEvent({ type: 'letter', ok: true, file: r.file, words: r.words, removed: r.removed.length, title: job.title, company: job.company, sessionId: this.sessionId })
+      return { ok: true }
+    }
     case 'log_application': {
       const job = this.lastJob || {}
       const rec = {
@@ -1180,6 +1195,7 @@ IrisComputer.prototype.act = async function (action) {
       if (rec.status === 'needs_you') irisNotify('A job application needs you', (rec.title || 'A job') + (rec.company ? ' at ' + rec.company : '') + (rec.note ? ': ' + rec.note : ''))
       broadcastEvent({ type: 'application', item: item, sessionId: this.sessionId })
       this.lastResume = null
+      this.lastCover = null
       this.lastJob = null
       return { ok: true }
     }
@@ -1200,6 +1216,7 @@ IrisComputer.prototype.act = async function (action) {
       const wanted = String(action.file || '').trim()
       let file = null
       if (this.lastResume && fs.existsSync(this.lastResume) && (/^(the |my |tailored )*(resume|cv|résumé)( pdf| file)?$/i.test(wanted) || path.basename(wanted) === path.basename(this.lastResume))) file = this.lastResume
+      if (!file && this.lastCover && fs.existsSync(this.lastCover) && (/^(the |my )*cover( letter)?( pdf| file)?$/i.test(wanted) || path.basename(wanted) === path.basename(this.lastCover))) file = this.lastCover
       if (!file) file = irisFindFile(action.file)
       if (!file) return { ok: false, error: 'no file named "' + action.file + '" in Downloads, Desktop or Documents' }
       try {

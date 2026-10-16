@@ -180,6 +180,7 @@ test('validateAction covers every declared action type', () => {
     bookmarks: { query: 'news' },
     lookup: { query: 'best ski boots', kind: 'web' },
     tailor_resume: { title: 'Android Developer', company: 'ShopFast', requirements: 'Kotlin, Compose' },
+    cover_letter: { title: 'Android Developer', company: 'ShopFast' },
     log_application: { status: 'applied', company: 'ShopFast', title: 'Android Developer' },
     done: {},
     fail: {}

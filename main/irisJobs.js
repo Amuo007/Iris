@@ -192,10 +192,7 @@ async function irisTailorResume (job, hooks) {
   const fitted = await irisCareerLib.fitToPage({ bank: bank, pick: pick, template: template, compile: function (tex) { return irisCompileTex(tex, engine) } })
   if (!fitted.ok) return { ok: false, error: 'LaTeX could not build the resume: ' + fitted.error, log: fitted.log }
 
-  const day = new Date()
-  const stamp = day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0')
-  const folder = path.join(irisResumeDir(), irisSafeName(stamp + ' ' + (job.company || 'Company') + ' - ' + (job.title || 'Job'), 90))
-  fs.mkdirSync(folder, { recursive: true })
+  const folder = irisJobFolder(job)
   // recruiters see the file name: the person's name, not "resume (3).pdf"
   const fileName = irisSafeName((bank.basics.name ? bank.basics.name + ' ' : '') + 'Resume', 60) + '.pdf'
   const file = path.join(folder, fileName)
@@ -223,6 +220,44 @@ async function irisTailorResume (job, hooks) {
     modelError: modelError,
     ms: Date.now() - started
   }
+}
+
+/* ---------- cover letters ---------- */
+
+/* the folder for this job's papers (the resume's folder, same name) */
+function irisJobFolder (job) {
+  const day = new Date()
+  const stamp = day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0')
+  const folder = path.join(irisResumeDir(), irisSafeName(stamp + ' ' + (job.company || 'Company') + ' - ' + (job.title || 'Job'), 90))
+  fs.mkdirSync(folder, { recursive: true })
+  return folder
+}
+
+/** A short cover letter PDF for one job: { ok, file, removed, words, ms, error } */
+async function irisWriteCoverLetter (job) {
+  const started = Date.now()
+  const bank = irisCareerLoad()
+  if (irisCareerLib.bankIsEmpty(bank)) return { ok: false, error: 'The career profile is empty.' }
+  const cfg = irisSettings()
+  let text = ''
+  try {
+    const model = irisLockedModel(irisModelClient.createModelClient({ baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0.3, thinking: 'off', timeoutMs: cfg.modelTimeoutMs }), cfg.baseUrl)
+    const reply = await model.next({ messages: irisCareerLib.coverLetterMessages(bank, job), thinking: 'off' })
+    text = typeof reply === 'string' ? reply : (reply && reply.content) || ''
+    if (reply && reply.usage) irisUsageRecord('request', Object.assign({ ms: reply.ms }, reply.usage))
+  } catch (err) {
+    return { ok: false, error: 'the model did not answer: ' + err.message }
+  }
+  const letter = irisCareerLib.parseCoverLetter(text, bank, job)
+  if (!letter.paragraphs.length) return { ok: false, error: 'nothing usable came back' }
+  const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+  const r = await irisCompileTex(irisCareerLib.coverLetterTex(bank, job, letter.paragraphs, date), 'pdflatex')
+  if (!r.ok) return { ok: false, error: 'LaTeX could not build the letter: ' + r.error }
+  const folder = irisJobFolder(job)
+  const file = path.join(folder, irisSafeName((bank.basics.name ? bank.basics.name + ' ' : '') + 'Cover Letter', 60) + '.pdf')
+  fs.copyFileSync(r.pdf, file)
+  fs.writeFileSync(path.join(folder, 'cover-letter.txt'), letter.paragraphs.join('\n\n') + '\n')
+  return { ok: true, file: file, removed: letter.removed, words: letter.paragraphs.join(' ').split(/\s+/).length, ms: Date.now() - started }
 }
 
 /* ---------- applications ---------- */
@@ -324,7 +359,9 @@ function irisJobsPrompt (task, mode) {
       : '   A required question you cannot answer from them, a CAPTCHA that stays, or a login you cannot do: ask_user.',
     '   Optional fields with no saved answer: leave them empty (no need to scroll back to them). Voluntary',
     '   self-identification (gender, race, veteran, disability): leave empty unless required; then "Decline to self-identify".',
-    '   Cover letter optional: skip it; required: write a short honest one from the profile.',
+    '   Cover letter optional: skip it. Required as a file: cover_letter {"company":str,"title":str,"requirements":str} makes',
+    '   a one-page PDF from the profile; upload it with {"type":"upload","file":"cover letter"}. Required as a text box: type',
+    '   three short honest paragraphs from the profile.',
     p.autoSubmit ? '6. Check the form once, then submit it.' : '6. Fill everything, then click Submit: Iris pauses so the user can check it first.',
     '7. log_application {"status":"applied"|"needs_you"|"failed","company":str,"title":str,"url":str,"note":str}',
     '   right after: applied once the site confirms it; needs_you when only the user can finish (a CAPTCHA, a login,',

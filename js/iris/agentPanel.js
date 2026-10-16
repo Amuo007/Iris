@@ -78,6 +78,7 @@ const ACTION_LABELS = {
   bookmark: 'Bookmark',
   bookmarks: 'Bookmarks',
   tailor_resume: 'Resume',
+  cover_letter: 'Cover letter',
   log_application: 'Logged',
   update_plan: 'Update plan',
   judge: 'Judge',
@@ -772,7 +773,8 @@ function actionDetail (action, description) {
     case 'bookmark': return action.remove ? 'remove' : (action.url || '')
     case 'dialog': return action.accept ? 'OK' : 'Cancel'
     case 'upload': return action.file
-    case 'tailor_resume': return action.title + (action.company ? ' · ' + action.company : '')
+    case 'tailor_resume':
+    case 'cover_letter': return action.title + (action.company ? ' · ' + action.company : '')
     case 'log_application': return ({ applied: 'applied', skipped: 'skipped', needs_you: 'needs you', failed: 'failed' })[action.status] + (action.title ? ' · ' + action.title : '')
     case 'ask_user': return ''
     case 'new_tab': return action.url || ''
@@ -1067,7 +1069,10 @@ function handleEvent (payload) {
       setStatus('paused', 'Iris has a few questions before planning')
       break
     case 'resume:start':
-      setStatus(keep, 'Tailoring the resume for ' + (payload.title || 'this job') + '…')
+      setStatus(keep, (payload.letter ? 'Writing a cover letter for ' : 'Tailoring the resume for ') + (payload.title || 'this job') + '…')
+      break
+    case 'letter':
+      addNote('Wrote a cover letter for ' + (payload.title || 'the job') + ' (' + payload.words + ' words' + (payload.removed ? ', ' + payload.removed + ' unsupported sentence(s) taken out' : '') + ')', 'memo')
       break
     case 'resume':
       addResumeCard(payload)

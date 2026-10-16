@@ -14,7 +14,7 @@
 const COORD_TYPES = new Set(['click', 'double_click', 'right_click', 'drag', 'scroll'])
 
 /* Actions after which the page (or the tab) is different, so a batch must stop there. */
-const PAGE_CHANGING = new Set(['navigate', 'back', 'switch_tab', 'new_tab', 'close_tab', 'zoom', 'find', 'dialog', 'upload', 'ask_user', 'recall', 'bookmarks', 'lookup', 'tailor_resume'])
+const PAGE_CHANGING = new Set(['navigate', 'back', 'switch_tab', 'new_tab', 'close_tab', 'zoom', 'find', 'dialog', 'upload', 'ask_user', 'recall', 'bookmarks', 'lookup', 'tailor_resume', 'cover_letter'])
 
 const MAX_BATCH = 6
 
@@ -53,6 +53,7 @@ const SPEC = {
   bookmark: { required: [], optional: ['title', 'url', 'remove'] },
   bookmarks: { required: [], optional: ['query'] },
   tailor_resume: { required: ['title'], optional: ['company', 'requirements', 'url'] },
+  cover_letter: { required: ['title'], optional: ['company', 'requirements'] },
   log_application: { required: ['status'], optional: ['company', 'title', 'url', 'note'] },
   move: { required: ['x', 'y'], optional: [] },
   done: { required: [], optional: ['answer'] },
@@ -116,6 +117,8 @@ const TYPE_ALIASES = {
   make_resume: 'tailor_resume',
   tailor_cv: 'tailor_resume',
   log_job: 'log_application',
+  write_cover_letter: 'cover_letter',
+  coverletter: 'cover_letter',
   record_application: 'log_application',
   web_search: 'lookup',
   quick_search: 'lookup',
@@ -727,6 +730,7 @@ function describeAction (action) {
     case 'lookup': return 'Look up (' + (action.kind || 'web') + ') "' + action.query + '"'
     case 'bookmarks': return action.query ? `Look up bookmarks for "${action.query}"` : 'List bookmarks'
     case 'tailor_resume': return 'Tailor the resume for ' + action.title + (action.company ? ' at ' + action.company : '')
+    case 'cover_letter': return 'Write a cover letter for ' + action.title + (action.company ? ' at ' + action.company : '')
     case 'log_application': return ({ applied: 'Applied', skipped: 'Skipped', needs_you: 'Needs you', failed: 'Could not apply' })[action.status] + (action.title ? ': ' + action.title : '') + (action.company ? ' at ' + action.company : '')
     case 'done': return action.answer ? `Done \u2014 ${action.answer}` : 'Done'
     case 'fail': return action.reason ? `Stopped \u2014 ${action.reason}` : 'Stopped'
