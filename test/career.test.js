@@ -303,3 +303,11 @@ test('a learned answer gets a short label', () => {
   assert.strictEqual(career.answerLabel('Question: Are you willing to travel 25% of the time?'), 'Are you willing to travel 25% of the time?')
   assert.strictEqual(career.answerLabel('Do you need visa sponsorship? The form requires an answer.'), 'Do you need visa sponsorship?')
 })
+
+test('job title and company from a posting link and its page title', () => {
+  assert.deepStrictEqual(career.jobFromPage('https://job-boards.greenhouse.io/anthropic/jobs/5390799008', 'Job Application for Applied AI Engineer at Anthropic'), { title: 'Applied AI Engineer', company: 'Anthropic' })
+  assert.deepStrictEqual(career.jobFromPage('https://jobs.lever.co/palantir/10dfc8bc', 'Palantir Technologies - Backend Software Engineer - Application Development'), { title: 'Backend Software Engineer', company: 'Palantir Technologies' })
+  assert.deepStrictEqual(career.jobFromPage('https://jobs.ashbyhq.com/ramp/34413f8d', 'Security Engineer, Cloud'), { title: 'Security Engineer, Cloud', company: 'Ramp' })
+  assert.deepStrictEqual(career.jobFromPage('https://careers.example.test/jobs/42', 'Firmware Engineer | Northwind'), { title: 'Firmware Engineer', company: 'Northwind' })
+  assert.deepStrictEqual(career.jobFromPage('http://localhost:8765/gh/emb.html', 'Job Application for Embedded Software Engineer at Lumen Labs'), { title: 'Embedded Software Engineer', company: 'Lumen Labs' })
+})

@@ -1693,6 +1693,29 @@ function answerLabel (question) {
   return label
 }
 
+/*
+ * Job title and company from a posting's link and page title, as each board writes them:
+ * Greenhouse "Job Application for <title> at <company>", Lever "<company> - <title> - <team>",
+ * Ashby (the API gives the title; the company is in the link), anything else "<title> - <company>".
+ */
+function jobFromPage (url, pageTitle) {
+  const t = String(pageTitle || '').replace(/\s+/g, ' ').trim().replace(/^(job application for|apply for|application for|careers?\s*[-–|:])\s*/i, '')
+  let path = []
+  let host = ''
+  try { const u = new URL(url); host = u.hostname.toLowerCase(); path = u.pathname.split('/').filter(Boolean) } catch (e) { /* not a link */ }
+  const nice = function (slug) { return String(slug || '').replace(/[-_]+/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase() }) }
+  if (/(^|\.)lever\.co$/.test(host)) {
+    const parts = t.split(/ [-–] /)
+    if (parts.length >= 2) return { title: parts[1].trim(), company: parts[0].trim() }
+    return { title: t, company: nice(path[0]) }
+  }
+  if (/(^|\.)ashbyhq\.com$/.test(host)) return { title: t.split(/ [-–@|] /)[0].trim(), company: nice(path[0]) }
+  const at = / at ([^|–-]+)$/.exec(t)
+  if (at) return { title: t.slice(0, at.index).trim(), company: at[1].trim() }
+  const parts = t.split(/ [-–|@] /)
+  return { title: parts[0].trim(), company: parts.length > 1 ? parts[parts.length - 1].trim() : (/greenhouse\.io$/.test(host) ? nice(path[0]) : '') }
+}
+
 /** Read a pdfLaTeX log: page count and how full the last page is. */
 function readLatexLog (log) {
   const text = String(log || '')
@@ -1708,6 +1731,7 @@ function readLatexLog (log) {
 module.exports = {
   SECTION_KINDS,
   isJobTask,
+  jobFromPage,
   answerLabel,
   yearsAsked,
   yearsWorked,

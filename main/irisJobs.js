@@ -508,10 +508,9 @@ async function irisResumePreview (args) {
     if (!r.ok) return { ok: false, error: 'Could not read that posting: ' + r.text.replace(/^Lookup \(page\) "[^"]*" failed: /, '') }
     const page = (r.items && r.items[0]) || {}
     job.requirements = String(page.text || r.text).slice(0, 5000)
-    const title = String(page.title || '').replace(/^(job application for|apply for|application for|careers?\s*[-–|:])\s*/i, '')
-    if (!job.title) job.title = title.split(/ [-–|@] | at /)[0].trim().slice(0, 100) || 'Job'
-    const at = / at ([^|–-]+)/.exec(title) || / [-–|] ([^|–-]+)$/.exec(title)
-    if (job.company === 'Preview' && at) job.company = at[1].trim().slice(0, 60)
+    const named = irisCareerLib.jobFromPage(page.url || job.url, page.title)
+    if (!job.title) job.title = named.title.slice(0, 100) || 'Job'
+    if (job.company === 'Preview' && named.company) job.company = named.company.slice(0, 60)
   }
   if (!job.title) job.title = 'Software Engineer'
   const r = await irisTailorResume(job, { alwaysBuild: true, preview: true })
