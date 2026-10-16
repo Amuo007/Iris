@@ -9,7 +9,9 @@
  * then turn on Settings → Iris AI → Coding agents in Iris.
  *
  * Your agent sees the page in Iris as a screenshot and uses the mouse and keyboard there, like a
- * person. Iris's own model does not run. x/y are pixels in the latest screenshot.
+ * person, and can use Iris's other tools: look-ups, bookmarks, My info (secrets stay placeholders),
+ * saved accounts, downloads and the Jobs tools (career profile, one-page resumes, applications log).
+ * Iris's own model does not run. x/y are pixels in the latest screenshot.
  */
 
 const fs = require('fs')
@@ -70,8 +72,37 @@ const TOOLS = [
   { name: 'iris_switch_tab', description: 'Switch to tab N from iris_tabs.', inputSchema: { type: 'object', properties: Object.assign({ tab: { type: 'integer' } }, LOOK), required: ['tab'] } },
   { name: 'iris_close_tab', description: 'Close tab N (default: the current one).', inputSchema: { type: 'object', properties: Object.assign({ tab: { type: 'integer' } }, LOOK) } },
   { name: 'iris_find', description: 'Find text on the page like Cmd+F; it scrolls to and highlights the match.', inputSchema: { type: 'object', properties: Object.assign({ text: { type: 'string' } }, LOOK), required: ['text'] } },
-  { name: 'iris_wait', description: 'Wait while the page is loading or animating.', inputSchema: { type: 'object', properties: Object.assign({ ms: { type: 'integer' } }, LOOK) } }
+  { name: 'iris_wait', description: 'Wait while the page is loading or animating.', inputSchema: { type: 'object', properties: Object.assign({ ms: { type: 'integer' } }, LOOK) } },
+  { name: 'iris_zoom', description: 'A 2x close-up around a point of the latest screenshot, to read small text. Keep using full-screenshot pixels for clicks.', inputSchema: { type: 'object', properties: XY, required: ['x', 'y'] } },
+  { name: 'iris_dialog', description: 'Answer a browser alert/confirm/prompt that Iris reports (accept true = OK).', inputSchema: { type: 'object', properties: Object.assign({ accept: { type: 'boolean' }, text: { type: 'string' } }, LOOK), required: ['accept'] } },
+  { name: 'iris_upload', description: 'Choose a file in an open file picker (click the page\'s upload button first). A name from Downloads/Desktop/Documents, a full path, or "resume" for the last PDF made with iris_resume.', inputSchema: { type: 'object', properties: Object.assign({ file: { type: 'string' } }, LOOK), required: ['file'] } },
+  { name: 'iris_lookup', description: 'A quick text look-up outside the browser (no cookies or logins): web = search results, papers = papers with abstracts, arxiv = newest preprints, wiki = encyclopedia summary, page = text of one public page (query = URL).', inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: ['web', 'papers', 'arxiv', 'wiki', 'page'] }, query: { type: 'string' } }, required: ['query'] } },
+  { name: 'iris_bookmarks', description: 'Search the user\'s bookmarks (empty query lists them).', inputSchema: { type: 'object', properties: { query: { type: 'string' } } } },
+  { name: 'iris_bookmark', description: 'Add a bookmark to the bookmarks bar, or remove one (remove: true).', inputSchema: { type: 'object', properties: { url: { type: 'string' }, title: { type: 'string' }, remove: { type: 'boolean' } }, required: ['url'] } },
+  { name: 'iris_my_info', description: 'The user\'s saved details for forms. Secrets come back as placeholders like {{Password}}: type the placeholder with iris_type and Iris fills in the real value.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'iris_accounts', description: 'Accounts Iris made for the user (site, username, link, purpose). The password is a placeholder like {{account:site.com}} for iris_type.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'iris_save_account', description: 'Record an account you just created (password: the placeholder you typed, e.g. {{Password}}).', inputSchema: { type: 'object', properties: { site: { type: 'string' }, username: { type: 'string' }, password: { type: 'string' }, url: { type: 'string' }, purpose: { type: 'string' } }, required: ['site', 'username'] } },
+  { name: 'iris_downloads', description: 'The newest files in Iris\'s download folder.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'iris_career', description: 'The user\'s career profile with IDs (E1, E1.2, P3, X1…), job preferences and saved application answers.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'iris_resume', description: 'Build a one-page PDF resume for a job from the career profile, no model in Iris. picks = {"summary":str,"skills":[{"group","items":[]}],"experience":[{"id":"E1","bullets":["E1.3"]}],"projects":[{"id":"P2","bullets":["P2.1"]}],"extras":["X1"],"rewrite":{"E1.3":"…"}} using IDs from iris_career (best first; Iris trims to one page and undoes rewrites that add facts). Without picks it ranks by shared words.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, company: { type: 'string' }, requirements: { type: 'string' }, picks: { type: 'object' } }, required: ['title'] } },
+  { name: 'iris_applications', description: 'Jobs already applied to, skipped or left for the user.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'iris_log_application', description: 'Record a job application: status applied | skipped | needs_you | failed.', inputSchema: { type: 'object', properties: { status: { type: 'string', enum: ['applied', 'skipped', 'needs_you', 'failed'] }, company: { type: 'string' }, title: { type: 'string' }, url: { type: 'string' }, note: { type: 'string' } }, required: ['status'] } }
 ]
+
+/* tools that answer with data, not with an action on the page */
+const DATA_TOOLS = {
+  iris_lookup: 'lookup',
+  iris_bookmarks: 'bookmarks',
+  iris_bookmark: 'bookmark',
+  iris_my_info: 'my_info',
+  iris_accounts: 'accounts',
+  iris_save_account: 'save_account',
+  iris_downloads: 'downloads',
+  iris_career: 'career',
+  iris_resume: 'resume',
+  iris_applications: 'applications',
+  iris_log_application: 'log_application'
+}
 
 /* MCP tool → an Iris action */
 function toAction (name, a) {
@@ -89,6 +120,8 @@ function toAction (name, a) {
     case 'iris_close_tab': return { type: 'close_tab', tab: a.tab }
     case 'iris_find': return { type: 'find', text: a.text }
     case 'iris_wait': return { type: 'wait', ms: a.ms || 1000 }
+    case 'iris_dialog': return { type: 'dialog', accept: a.accept, text: a.text }
+    case 'iris_upload': return { type: 'upload', file: a.file }
   }
   return null
 }
@@ -103,6 +136,16 @@ function shotContent (s) {
 async function runTool (name, args) {
   const a = args || {}
   if (name === 'iris_screenshot') return shotContent(await call('screenshot'))
+  if (name === 'iris_zoom') {
+    const z = await call('zoom', { x: a.x, y: a.y })
+    return [{ type: 'image', data: z.image, mimeType: z.mimeType }, { type: 'text', text: z.note }]
+  }
+  if (DATA_TOOLS[name]) {
+    const r = await call(DATA_TOOLS[name], a)
+    if (name === 'iris_lookup') return [{ type: 'text', text: r.text || 'Nothing found.' }]
+    if (name === 'iris_career') return [{ type: 'text', text: r.profile + '\n\nPREFERENCES: ' + JSON.stringify(r.prefs) + '\nANSWERS: ' + r.answers.map(function (x) { return x.label + ': ' + x.value }).join('; ') }]
+    return [{ type: 'text', text: JSON.stringify(r, null, 1) }]
+  }
   if (name === 'iris_tabs') {
     const t = await call('tabs')
     return [{ type: 'text', text: t.tabs.map(function (x) { return '[' + x.tab + '] ' + x.title + ' — ' + x.url + (x.current ? ' (current)' : '') }).join('\n') || 'No tabs.' }]
@@ -120,7 +163,7 @@ function send (msg) { process.stdout.write(JSON.stringify(msg) + '\n') }
 
 async function handle (msg) {
   if (msg.method === 'initialize') {
-    return send({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: (msg.params && msg.params.protocolVersion) || '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'iris', version: '0.2.0' } } })
+    return send({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: (msg.params && msg.params.protocolVersion) || '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'iris', version: '0.3.0' } } })
   }
   if (msg.method === 'tools/list') return send({ jsonrpc: '2.0', id: msg.id, result: { tools: TOOLS } })
   if (msg.method === 'tools/call') {

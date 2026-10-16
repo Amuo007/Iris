@@ -172,9 +172,10 @@ async function irisTailorResume (job, hooks) {
   if (irisCareerLib.bankIsEmpty(bank)) return { ok: false, error: 'The career profile is empty. Fill it in Settings → Jobs (skills, jobs, projects) first.' }
   const cfg = irisSettings()
   const tailorThinking = settings.get('irisTailorThinking') || 'off'
-  let text = ''
+  // a coding agent may send its own picks (the same JSON the model would write): then no model runs
+  let text = hooks && hooks.picks ? JSON.stringify(hooks.picks) : ''
   let modelError = null
-  if (!(process.env.IRIS_FAKE_MODEL || cfg.useFakeModel)) {
+  if (!text && !(hooks && hooks.noModel) && !(process.env.IRIS_FAKE_MODEL || cfg.useFakeModel)) {
     try {
       const model = irisModelClient.createModelClient({ baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0.2, thinking: tailorThinking, timeoutMs: cfg.modelTimeoutMs })
       const reply = await model.next({ messages: irisCareerLib.tailorMessages(bank, job), thinking: tailorThinking, signal: hooks && hooks.signal })

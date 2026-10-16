@@ -164,6 +164,13 @@ function irisFillSecrets (text) {
   if (!text || text.indexOf('{{') === -1) return text
   const profile = irisProfileLoad()
   return text.replace(/\{\{\s*([^}]+?)\s*\}\}/g, function (all, name) {
+    // {{account:site.com}} — the password of an account Iris made there
+    const acct = /^account:\s*(.+)$/i.exec(name)
+    if (acct) {
+      const a = irisAccountsLoad().find(function (x) { return x.site.toLowerCase() === acct[1].trim().toLowerCase().replace(/^www\./, '') })
+      const pw = a ? irisAccountPassword(a.site, a.username) : ''
+      return pw || all
+    }
     const key = name.toLowerCase()
     const hit = profile.find(function (f) { return f.label.toLowerCase() === key })
     return hit && hit.value ? hit.value : all

@@ -2,9 +2,10 @@
  * main/irisBridge.js — let a coding agent use Iris's eyes and hands, without Iris's own model.
  *
  * A developer's coding agent (Claude Code, OpenCode, Codex, …) can attach bin/iris-mcp.js as an
- * MCP server and then see the page it is building and click, type and scroll in it, exactly the
- * way Iris does: screenshots in, real mouse and keyboard events out. No model runs in Iris; the
- * coding agent is the brain.
+ * MCP server and then use Iris's tools: see the page and click, type and scroll in it exactly the
+ * way Iris does (screenshots in, real mouse and keyboard events out), look things up, use
+ * bookmarks, My info (secrets stay placeholders), saved accounts, downloads, and the Jobs tools.
+ * No model runs in Iris; the coding agent is the brain.
  *
  * Guarded like a developer tool:
  *   • off until the user turns it on in Settings → Iris AI → Coding agents
@@ -110,17 +111,78 @@ async function irisBridgeAct (raw) {
   return { ok: true, did: irisActionSchema.describeAction(action), notes: notes }
 }
 
+/* A close-up of part of the latest screenshot (to read small text); clicks still use full-screenshot pixels. */
+async function irisBridgeZoom (args) {
+  const computer = irisBridgeTarget()
+  if (!irisBridgeShot) await irisBridgeScreenshot()
+  const shot = irisBridgeShot
+  const sx = shot.viewWidth / shot.width
+  const sy = shot.viewHeight / shot.height
+  computer.pendingZoom = { x: Math.round(Number(args.x) * sx), y: Math.round(Number(args.y) * sy) }
+  const obs = await computer.screenshot()
+  const m = /^data:image\/(\w+);base64,(.*)$/.exec(obs.dataUrl || '')
+  return { image: m ? m[2] : '', mimeType: m ? 'image/' + m[1] : 'image/jpeg', width: obs.width, height: obs.height, url: obs.url || '', title: obs.title || '', note: 'Close-up only: use pixels of the full screenshot for clicks.' }
+}
+
+/* Tools that only read Iris's own data may run while Iris works; the page is Iris's then. */
+const IRIS_BRIDGE_READ_ONLY = ['tabs', 'lookup', 'bookmarks', 'my_info', 'accounts', 'downloads', 'career', 'applications']
+
 async function irisBridgeHandle (tool, args) {
-  if (irisIsBusy()) throw new Error('Iris is running a task of its own; try again when it has finished')
+  args = args || {}
+  if (irisIsBusy() && IRIS_BRIDGE_READ_ONLY.indexOf(tool) === -1) throw new Error('Iris is running a task of its own; try again when it has finished')
   irisBridgeLastUse = Date.now()
   broadcast('iris-bridge-activity', { tool: tool, at: irisBridgeLastUse })
   switch (tool) {
     case 'screenshot':
       return irisBridgeScreenshot()
+    case 'zoom':
+      return irisBridgeZoom(args)
     case 'tabs':
       return { tabs: irisTabList().map(function (t, i) { return { tab: i + 1, title: t.title, url: t.url, current: t.active } }) }
     case 'act':
-      return irisBridgeAct(args || {})
+      return irisBridgeAct(args)
+    // quick look-ups outside the browser (no cookies, never LinkedIn & co.)
+    case 'lookup': {
+      const r = await irisLookup().lookup({ kind: args.kind || 'web', query: String(args.query || '') })
+      irisUsageRecord('lookup')
+      return { ok: r.ok, text: r.text, count: r.count }
+    }
+    case 'bookmarks': {
+      const found = await irisAskBookmarks(String(args.query || ''))
+      return { bookmarks: found.bookmarks, total: found.total }
+    }
+    case 'bookmark': {
+      if (!args.url) throw new Error('url is required')
+      broadcast('iris-agent-bookmark', { url: irisResolveUrl(args.url), title: args.title || args.url, remove: !!args.remove })
+      return { ok: true }
+    }
+    // the user's details: plain values, secrets only as placeholders that iris_type fills in
+    case 'my_info':
+      return { fields: irisProfileForPrompt().map(function (f) { return f.secret ? { label: f.label, placeholder: '{{' + f.label + '}}' } : { label: f.label, value: f.value } }) }
+    case 'accounts':
+      return { accounts: irisAccountsForPage().map(function (a) { return { site: a.site, username: a.username, url: a.url, purpose: a.purpose, password: '{{account:' + a.site + '}}' } }) }
+    case 'save_account':
+      if (!args.site || !args.username) throw new Error('site and username are required')
+      irisAccountSave({ site: args.site, username: args.username, password: args.password || '', url: args.url || '', title: args.title || '', purpose: args.purpose || 'made by a coding agent' })
+      return { ok: true }
+    case 'downloads':
+      return { folder: irisDownloadDir(), files: irisRecentDownloads(30) }
+    // Jobs: the career profile with IDs, a resume built from picks (no model), the applications log
+    case 'career':
+      return { profile: irisCareerLib.bankText(irisCareerLoad()), prefs: irisCareerLoad().prefs, answers: irisCareerLoad().answers.filter(function (a) { return a.value }) }
+    case 'resume': {
+      const job = { title: String(args.title || 'Job'), company: String(args.company || ''), requirements: String(args.requirements || '') }
+      const r = await irisTailorResume(job, { picks: args.picks || null, noModel: true })
+      if (r.ok) irisBridgeTarget().lastResume = r.file
+      return r.ok ? { ok: true, file: r.file, pages: r.pages, fill: r.fill, undone: r.undone } : { ok: false, error: r.error }
+    }
+    case 'applications':
+      return { items: irisApplicationsLoad().slice(-100), today: irisAppliedToday() }
+    case 'log_application': {
+      if (['applied', 'skipped', 'needs_you', 'failed'].indexOf(args.status) === -1) throw new Error('status must be applied, skipped, needs_you or failed')
+      const item = irisApplicationAdd({ status: args.status, company: args.company || '', title: args.title || '', url: args.url || '', note: args.note || '', resume: (irisBridgeComputer && irisBridgeComputer.lastResume) || '' })
+      return { ok: true, item: item }
+    }
     default:
       throw new Error('unknown tool: ' + tool)
   }
