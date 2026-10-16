@@ -223,8 +223,9 @@ function createModelClient (config) {
         if (why === 'stopped') throw new Error('stopped')
         throw new Error('the model did not answer within ' + Math.round(cfg.timeoutMs / 1000) + ' s')
       }
-      if (err && /fetch failed|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH/i.test(err.message + (err.cause ? ' ' + err.cause.code : ''))) {
-        throw new Error('cannot reach the model server at ' + cfg.baseUrl)
+      if (err && /fetch failed|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|ECONNRESET|ETIMEDOUT|UND_ERR/i.test(err.message + (err.cause ? ' ' + err.cause.code : ''))) {
+        // keep the low-level reason (refused, reset, timed out): it tells a network blip from a server restart
+        throw new Error('cannot reach the model server at ' + cfg.baseUrl + (err.cause && err.cause.code ? ' (' + err.cause.code + ')' : ''))
       }
       throw err
     } finally {
