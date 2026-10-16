@@ -29,6 +29,8 @@ Updated 2026-10-16 (evening).
   Greenhouse- and Lever-style applications at 1024.
 - **Result:** the same 35 steps and 10 / 10 passed; model call median 9.0 → 7.8 s, mean 10.1 → 8.2 s;
   fresh tokens per call 1,413 → 994. Both applications at 1024: every field right (tick boxes too).
+  Research (the 5-hour task, first 12 minutes, fresh profile): call median 10.1 → 8.6 s; 55 steps,
+  20 kept, 15 PDFs (at 1280: 52 steps, 15 kept, 11 PDFs) — titles, IDs and abstracts still read fine.
 - **Now:** 1024 px is the default. A stored 1280 (the old default) moves to 1024 once; a size you choose
   later in Settings → AI is kept.
 
