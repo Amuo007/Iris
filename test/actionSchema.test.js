@@ -307,3 +307,12 @@ test('a key that lost its opening quote, or a y written without its key, still p
   assert.ok(b.ok)
   assert.deepStrictEqual([b.action.x, b.action.y], [141, 896])
 })
+
+test('a list whose items are each wrapped as {"action":{…}} is read', () => {
+  // seen live: refused as "unknown or missing action type"
+  const r = parseAction('{"thought":"look things up","actions":[{"action":{"type":"lookup","kind":"arxiv","query":"agent harness"}},{"action":{"type":"lookup","kind":"arxiv","query":"MCP agents"}}]}', LIMITS)
+  assert.ok(r.ok, r.error)
+  assert.strictEqual(r.action.query, 'agent harness') // a look-up ends the step: its results come first
+  const f = parseAction('{"thought":"fill","actions":[{"action":{"type":"type","x":10,"y":20,"text":"Jordan"}},{"action":{"type":"type","x":10,"y":60,"text":"Lee"}}]}', LIMITS)
+  assert.deepStrictEqual(f.actions.map(a => a.text), ['Jordan', 'Lee'])
+})

@@ -698,7 +698,9 @@ function parseAction (rawText, limits) {
       let bad = null
       let noted = remember
       let learned = learn
-      for (const item of batch.slice(0, MAX_BATCH + 2)) {
+      for (let item of batch.slice(0, MAX_BATCH + 2)) {
+        // [{"action":{"type":"lookup",…}}, …]: each item wrapped one level too deep
+        if (isPlainObject(item) && item.type === undefined && isPlainObject(item.action)) item = item.action
         // "remember"/"learn" written as if they were actions: keep the text, it is not an action
         const kind = isPlainObject(item) && typeof item.type === 'string' ? item.type.trim().toLowerCase() : ''
         if (kind === 'remember' || kind === 'note' || kind === 'memory' || kind === 'learn') {
