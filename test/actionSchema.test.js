@@ -261,3 +261,17 @@ test('a list of actions nested inside "action" is still a batch, and remember in
   assert.strictEqual(b.ok, true)
   assert.strictEqual(b.actions.length, 1)
 })
+
+test('"remember" written as an action inside a list becomes the note, the rest still runs', () => {
+  const r = parseAction('{"thought":"keep it","actions":[{"type":"judge","item":"Paper A","keep":true,"why":"fits"},{"type":"click","x":5,"y":6},{"type":"remember","text":"KEPT: Paper A"}]}', LIMITS)
+  assert.strictEqual(r.ok, true)
+  assert.deepStrictEqual(r.actions.map(a => a.type), ['judge', 'click'])
+  assert.strictEqual(r.remember, 'KEPT: Paper A')
+})
+
+test('an equals sign instead of a colon is repaired', () => {
+  const r = parseAction('{"thought":"fill","actions":[{"type":"type","x":392,"y="329,"text":"11122026"},{"type":"click","x":210,"y":"390"}]}', LIMITS)
+  assert.strictEqual(r.ok, true)
+  assert.strictEqual(r.actions[0].y, 329)
+  assert.strictEqual(r.actions[1].y, 390)
+})

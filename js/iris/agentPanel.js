@@ -22,7 +22,8 @@ const MAX_ITEMS_SHOWN = 400
 
 const SUGGESTIONS = [
   'What is the weather in Chicago today?',
-  'Search Wikipedia for the Eiffel Tower and tell me how tall it is',
+  'Find 3 good recent papers on web agents, judge each by its abstract and download the PDFs',
+  'Find the cheapest one-way flight from Chicago to Denver next Friday',
   'Summarize this page in three bullet points'
 ]
 
@@ -278,7 +279,7 @@ function buildPanel () {
   planToggle = el('button', 'iris-plan-toggle')
   planToggle.type = 'button'
   planToggle.innerHTML = '<span class="iris-switch" aria-hidden="true"></span><span>Smart</span>'
-  planToggle.title = 'Smart: Iris thinks before it starts. It asks a few quick questions if your request is open, makes a plan, and reads every result before keeping it. Best for research and loose requests.'
+  planToggle.title = 'Smart: Iris thinks before it starts. It asks a few quick questions if your request is open, looks things up, makes a plan, and reads every result before keeping it. Best for research, shopping and loose requests.'
   planToggle.addEventListener('click', function () {
     const on = !planToggle.classList.contains('is-on')
     planToggle.classList.toggle('is-on', on)

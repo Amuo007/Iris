@@ -67,6 +67,18 @@ Draft, updated through the night. The final version is at the end of the night.
   descriptions aligned with headings, narrow My info fields, long skill URLs running out of the card,
   underlined history rows, the heavy content-blocking box. Checked in dark and light mode.
 
+## Ideas taken from coding harnesses (Claude Code, Codex, OpenCode, Manus)
+
+| Harness idea | What Iris does now |
+| --- | --- |
+| **Skills** that load only when relevant (progressive disclosure) | Site tips appear only on that site; "plans that worked" and "your skills" only when the task matches. Nothing else enters the prompt. |
+| **MCP** tools | Iris *is* an MCP server for coding agents (screenshots + mouse/keyboard). Iris itself keeps a fixed tool set so the prompt cache stays warm. |
+| **Todo list recited at the end of the context** (Manus) | The plan's Goal and Done-when lines are repeated on every step; check-ins every 15–20 steps. |
+| **Compaction** | Old steps fold into a one-line-per-step digest in chunks (cache-friendly); the plan, the newest follow-ups, notes, decisions and files survive. With a 262K window Iris never comes close: a step is ~4–10K tokens. |
+| **Memory outside the context** | Notes, a permanent research log (keep/skip), downloads, projects, `recall` search. Duplicate checks are done by code (IDs, URLs, file size), not by the model. |
+| **Restorable compression** (keep URLs, drop content) | The digest and the "sites tried" list keep URLs, so Iris can go back if it needs to. |
+| **Sub-agents / planner** | Smart mode's planner is a separate, screenshot-free call with its own look-ups; the final-answer check is another small call. |
+
 ## Tests
 
 - Unit tests: 151 → 178, all passing.

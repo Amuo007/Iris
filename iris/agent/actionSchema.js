@@ -203,6 +203,9 @@ function repairJson (s) {
   // smart quotes used as string delimiters
   t = t.replace(/[\u2018\u2019\u201A]/g, "'")
 
+  // "y="329 or "y"=329: an equals sign where the colon belongs
+  t = t.replace(/"([A-Za-z_]+)"?\s*=\s*"?(-?\d+(?:\.\d+)?)(?=\s*[,}])/g, '"$1":$2')
+
   return t
 }
 
@@ -639,15 +642,29 @@ function parseAction (rawText, limits) {
     if (batch) {
       const actions = []
       let bad = null
-      for (const item of batch.slice(0, MAX_BATCH)) {
+      let noted = remember
+      let learned = learn
+      for (const item of batch.slice(0, MAX_BATCH + 2)) {
+        // "remember"/"learn" written as if they were actions: keep the text, it is not an action
+        const kind = isPlainObject(item) && typeof item.type === 'string' ? item.type.trim().toLowerCase() : ''
+        if (kind === 'remember' || kind === 'note' || kind === 'memory' || kind === 'learn') {
+          const t = toStringValue(item.text ?? item.note ?? item.value ?? item.remember ?? item.learn)
+          if (t && kind === 'learn') learned = learned || t
+          else if (t) noted = noted ? noted + '\n' + t : t
+          continue
+        }
+        if (actions.length >= MAX_BATCH) break
         const res = validateAction(item, limits)
         if (!res.ok) { bad = res.error; break }
         actions.push(res.action)
         // nothing after a page change or a terminal action can be planned from this screenshot
         if (PAGE_CHANGING.has(res.action.type) || TERMINAL.has(res.action.type)) break
       }
-      if (bad || !actions.length) { errors.push(bad || 'empty actions list'); continue }
-      return { ok: true, action: actions[0], actions, thought, remember: remember || null, learn: learn || null }
+      if (bad) { errors.push(bad); continue }
+      // only notes and no real action: look again (a short wait) rather than reject the reply
+      if (!actions.length && (noted || learned)) actions.push({ type: 'wait', ms: 300 })
+      if (!actions.length) { errors.push('empty actions list'); continue }
+      return { ok: true, action: actions[0], actions, thought, remember: noted || null, learn: learned || null }
     }
 
     if (!actionObj) { errors.push('no "action" field'); continue }
