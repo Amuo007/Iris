@@ -56,6 +56,13 @@ Updated 2026-10-16.
   without it 160 would hit; with it **229 hit**, 0 checkbox slips, 1 wrong target (a toolbar with
   4 px gaps). Small "×" buttons: 12/42 → 42/42.
 
+### 4b. A red ✕ where a click did nothing (new today)
+- **What:** if a click changed nothing on the page, the next screenshot has a small red ✕ drawn
+  exactly where the click landed, with a note saying so.
+- **Why:** the model then *sees* how far off it was and corrects in one go, instead of guessing
+  again. Research calls this closed-loop grounding (e.g. "LookAgain", 2026); doing it with a drawn
+  mark costs no extra model call. Not drawn on zoomed close-ups.
+
 ### 5. Dropdowns in one step (new today)
 - **What:** a "Select…" dropdown is filled by typing its option, not by opening it.
 - **Before:** click to open the list (1 step), look, click the option (another step). Lists that
@@ -66,6 +73,15 @@ Updated 2026-10-16.
 - **A lesson:** the first wording let the model type its *own* answer ("Canadian citizen") —
   nothing matched and it took 27 steps. Saying "the option's own words, not yours" fixed it.
 - **Result:** one job application: 21 steps / 5:43 → **11 steps / 2:45**.
+
+### 5b. Enter never sends a form early (fixed today)
+- **Found in a live test:** after the dropdown rule, the model also typed `1` into the "years of
+  experience" box **with Enter** — and Enter in a text box sends the whole form. The application
+  went out without the "Ask me first" pause.
+- **Now:** the rule says Enter only picks a dropdown option or runs a search, never in a form's
+  text box. And with "Ask me first", Enter in a form pauses too, unless the step says it is a
+  search or a dropdown pick (dropdown picks are typed with `clear:false`).
+- **Retest:** the form was filled completely and Iris stopped at "Submit Application" — nothing sent.
 
 ### 6. "Did my last action do anything?"
 - **What:** after each action, a 32×20 grey thumbnail of the page is compared with the last one.
@@ -216,6 +232,23 @@ Updated 2026-10-16.
   content into the profile. **Check:** each section, refilled with its own content, must read the
   same as before; any section that does not is left exactly as you wrote it.
 - **Result:** a Jake-style resume: Education, Experience, Projects and Skills all mapped.
+
+### 20b. Paste anything into the profile (new today)
+- **What:** Settings → Career profile → "Add from text": paste an old resume, notes or an export;
+  the model sorts it into skills, jobs, projects, education, extras and contact details.
+- **Check:** the model is told to copy your words; code then drops any bullet whose content words
+  are not ≥70 % in the pasted text, any number that is not in it, and any skill not in it.
+- **Test:** a messy pasted resume → 2 jobs with their exact bullets, 2 projects, education,
+  a certification and 2 languages; nothing invented.
+
+### 20c. Cover letters (new today)
+- **What:** `cover_letter` writes three short paragraphs (170–230 words) for one job from the
+  profile, and builds a PDF next to the tailored resume; Iris uploads it when a form requires one.
+- **Check:** every sentence that brings in a number, a tool or a name the profile does not have is
+  taken out (the job's own company and title are allowed). Availability and location come only from
+  your saved answers. "99.6 %" is not mistaken for the end of a sentence.
+- **Test:** a job requiring a cover letter file: resume + letter made and uploaded, the site received
+  both PDFs.
 
 ### 21. Applying
 - Read the posting → `tailor_resume` → skip if below your cutoff (default 60) → fill from My info
