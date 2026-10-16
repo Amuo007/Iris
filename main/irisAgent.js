@@ -1236,7 +1236,8 @@ IrisComputer.prototype.act = async function (action) {
       note += r.below
         ? ' The fit is below the user\'s cutoff (' + r.cutoff + '): do not apply. log_application {"status":"skipped","note":"fit ' + r.fit + '"} and find the next job.'
         : (r.fit !== null && r.cutoff > 0 ? ' That is at or above the user\'s cutoff (' + r.cutoff + '): apply.' : '') +
-          ' When the form asks for a resume, click its upload button, then {"type":"upload","file":"resume"} picks this PDF.'
+          ' When the form asks for a resume, click its upload button, then {"type":"upload","file":"resume"} picks this PDF —' +
+          ' also when a resume is already attached (a site that remembers you shows the last one, under the same name): replace it.'
       this.notes = (this.notes || []).concat(note)
       broadcastEvent({ type: 'resume', ok: true, file: r.file, fit: r.fit, focus: r.focus, why: r.why, missing: r.missing, below: r.below, title: job.title, company: job.company, ms: r.ms, undone: (r.undone || []).length, sessionId: this.sessionId })
       return { ok: true }
@@ -1288,6 +1289,9 @@ IrisComputer.prototype.act = async function (action) {
         fit: job && job.fit !== undefined ? job.fit : null,
         sessionId: this.sessionId || ''
       }
+      if (rec.status === 'applied' && job && job.resume && !job.uploaded) {
+        rec.note = (rec.note ? rec.note + ' ' : '') + '(The tailored resume was not uploaded in this run — the site may have kept an older one.)'
+      }
       const item = irisApplicationAdd(rec)
       const label = { applied: 'Applied', skipped: 'Skipped', needs_you: 'Waiting for the user', failed: 'Could not apply' }[rec.status]
       this.notes = (this.notes || []).concat('Logged in Settings → Jobs → Applications: ' + label + ' — ' + (rec.title || 'job') + (rec.company ? ' at ' + rec.company : '') + '.' +
@@ -1333,6 +1337,7 @@ IrisComputer.prototype.act = async function (action) {
         return { ok: false, error: 'could not choose the file: ' + e.message }
       }
       this.pendingChooser = null
+      if (this.lastJob && file === this.lastResume) this.lastJob.uploaded = true
       this.notes = (this.notes || []).concat('Chose the file "' + path.basename(file) + '" in the file picker.')
       return { ok: true, pageChanged: true }
     }
@@ -2169,7 +2174,8 @@ function startAgent (task, options) {
             const these = mine.filter(function (a) { return a.status === g[0] })
             if (!these.length) return ''
             return g[1] + ' (' + these.length + '): ' + these.map(function (a) {
-              return (a.title || 'job') + (a.company ? ' at ' + a.company : '') + (g[0] !== 'applied' && a.note ? ' — ' + String(a.note).slice(0, 90) : '')
+              const note = g[0] !== 'applied' ? a.note : (/not uploaded/.test(a.note || '') ? 'the tailored resume was not uploaded' : '')
+              return (a.title || 'job') + (a.company ? ' at ' + a.company : '') + (note ? ' — ' + String(note).slice(0, 90) : '')
             }).join('; ')
           }).filter(Boolean)
           payload = Object.assign({}, payload, { answer: (payload.answer || '') + '\n\nFrom the Applications list (this run):\n' + groups.join('\n') })
