@@ -408,6 +408,7 @@ function irisRenderTemplate (data) {
     : 'A clean one-page layout. Or use your own LaTeX resume: Iris keeps its look and refills it.'
   document.getElementById('iris-template-import').textContent = custom ? 'Use another LaTeX file…' : 'Use my LaTeX resume…'
   document.getElementById('iris-template-builtin').hidden = !custom
+  document.getElementById('iris-template-show').hidden = !custom
   var report = document.getElementById('iris-template-report')
   report.innerHTML = ''
   report.hidden = !custom || !t.report
@@ -417,7 +418,7 @@ function irisRenderTemplate (data) {
     row.appendChild(irisEl('span', 'iris-template-section', r.title))
     row.appendChild(irisEl('span', 'iris-list-sub', r.status === 'mapped'
       ? 'Filled in for each job (' + r.kind + ')'
-      : (r.kind === 'other' ? 'Kept as you wrote it' : (r.note || 'Kept as you wrote it'))))
+      : (r.kind === 'other' ? 'Kept as you wrote it' : (r.note || 'Kept as you wrote it') + ' — add markers to the template file to fill it (see docs/RESUME-TEMPLATES.md)')))
     report.appendChild(row)
   })
   var tex = data.tex || {}
@@ -440,6 +441,7 @@ document.getElementById('iris-career-paste-run').addEventListener('click', funct
 document.getElementById('iris-template-import').addEventListener('click', function () { irisAction('templateImport') })
 document.getElementById('iris-career-from-tex').addEventListener('click', function () { irisAction('templateImport') })
 document.getElementById('iris-template-builtin').addEventListener('click', function () { irisAction('templateBuiltin') })
+document.getElementById('iris-template-show').addEventListener('click', function () { irisAction('templateShow') })
 document.getElementById('iris-resume-dir-change').addEventListener('click', function () { irisAction('resumeDirChoose') })
 document.getElementById('iris-tailor-thinking').addEventListener('change', function () { settings.set('irisTailorThinking', this.value) })
 
