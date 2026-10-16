@@ -19,6 +19,7 @@
  */
 
 const KINDS = ['web', 'papers', 'arxiv', 'wiki', 'page']
+const ARXIV_STOP = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this', 'about', 'into', 'using', 'based', 'via', 'of', 'in', 'on', 'to', 'a', 'an', 'new', 'recent', 'latest', 'paper', 'papers', '2024', '2025', '2026', 'or'])
 
 /* Never contacted directly (search results that merely mention them are fine). */
 const NEVER = ['linkedin.com', 'facebook.com', 'instagram.com', 'x.com', 'twitter.com', 'tiktok.com', 'threads.net', 'snapchat.com', 'pinterest.com']
@@ -259,12 +260,22 @@ function createLookup (opts) {
     return { source: 'OpenAlex', items: parseOpenAlex(JSON.parse(r.body), cfg.maxResults) }
   }
 
+  /* arXiv needs every word to match: use the key words, and fewer of them if nothing comes back */
   async function arxiv (query) {
-    const q = String(query).trim().split(/\s+/).map(function (w) { return 'all:' + w.replace(/[^\w.-]/g, '') }).filter(function (w) { return w !== 'all:' }).join('+AND+')
-    const url = 'https://export.arxiv.org/api/query?search_query=' + q + '&max_results=' + cfg.maxResults + '&sortBy=relevance'
-    const r = await get(url, 'application/atom+xml')
-    if (r.status !== 200) throw new Error('arXiv answered ' + r.status)
-    return { source: 'arXiv', items: parseArxiv(r.body, cfg.maxResults) }
+    const words = String(query).toLowerCase().split(/\s+/).map(function (w) { return w.replace(/[^\w.-]/g, '') })
+      .filter(function (w) { return w.length > 1 && !ARXIV_STOP.has(w) })
+    let items = []
+    for (const n of [5, 3, 2]) {
+      const use = words.slice(0, n)
+      if (!use.length) break
+      const url = 'https://export.arxiv.org/api/query?search_query=' + use.map(function (w) { return 'all:' + w }).join('+AND+') +
+        '&max_results=' + cfg.maxResults + '&sortBy=relevance'
+      const r = await get(url, 'application/atom+xml')
+      if (r.status !== 200) throw new Error('arXiv answered ' + r.status)
+      items = parseArxiv(r.body, cfg.maxResults)
+      if (items.length || words.length <= n) break
+    }
+    return { source: 'arXiv', items }
   }
 
   async function wiki (query) {

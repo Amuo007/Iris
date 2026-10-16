@@ -123,3 +123,15 @@ test('requests to the same site are spaced out', async () => {
   await lk.lookup({ kind: 'web', query: 'two' })
   assert.deepStrictEqual(waits, [1500])
 })
+
+test('arXiv: long queries fall back to fewer key words when nothing matches', async () => {
+  const log = []
+  const entry = '<feed><entry><id>http://arxiv.org/abs/2605.18747v1</id><published>2026-05-01</published><title>Code as Agent Harness</title><summary>x</summary></entry></feed>'
+  const lk = createLookup(Object.assign({
+    fetch: async (url) => { log.push(url); const hits = (url.match(/all:/g) || []).length <= 3; return { status: 200, url, text: async () => hits ? entry : '<feed></feed>', headers: { get: () => 'application/atom+xml' } } }
+  }, instant))
+  const r = await lk.lookup({ kind: 'arxiv', query: 'browser agent LLM visual perception desktop 2026 papers' })
+  assert.strictEqual(r.count, 1)
+  assert.strictEqual(log.length, 2)
+  assert.ok(!/all:2026|all:papers/.test(log[0]), 'years and filler words are not search terms')
+})
