@@ -692,7 +692,8 @@ var IRIS_AI_DEFAULTS = {
   temperature: 0.2,
   modelTimeoutMs: 180000,
   keepImages: 1,
-  screenshotMaxDimension: 1280,
+  screenshotMaxDimension: 1024,
+  screenshotSizeV2: true, // the one-time move from the old 1280 default is done (see main/irisAgent.js)
   screenshotQuality: 82,
   markerEnabled: true,
   autoPauseOnUserInput: true,

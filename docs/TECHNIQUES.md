@@ -14,17 +14,28 @@ Updated 2026-10-16 (evening).
 ### 1. Seeing and acting like a person
 - **What:** each step, Iris takes a screenshot of the tab, sends it to the model, and carries out
   the model's answer with real mouse and keyboard events.
-- **How:** `webContents.capturePage()` makes the screenshot (JPEG, longest side 1280 px). The
+- **How:** `webContents.capturePage()` makes the screenshot (JPEG, longest side 1024 px — 1280 until
+  Oct 16, see 1b). The
   answer is a small JSON (`{"action":{"type":"click","x":412,"y":388}}`). Iris turns it into real
   input events (`sendInputEvent`) — the same events a mouse and keyboard produce. It never runs
   code inside the page.
 - **Why it matters:** sites see trusted input, not script. Nothing in the page can tell the
   difference from a person using the browser.
 
+### 1b. A smaller screenshot (changed today)
+- **Why:** each step's model call is mostly the server reading the prompt and the new screenshot; the
+  screenshot is the biggest fresh part.
+- **Test:** the 10-task regression suite at 1280 and at 1024 px (server to itself), plus the
+  Greenhouse- and Lever-style applications at 1024.
+- **Result:** the same 35 steps and 10 / 10 passed; model call median 9.0 → 7.8 s, mean 10.1 → 8.2 s;
+  fresh tokens per call 1,413 → 994. Both applications at 1024: every field right (tick boxes too).
+- **Now:** 1024 px is the default. A stored 1280 (the old default) moves to 1024 once; a size you choose
+  later in Settings → AI is kept.
+
 ### 2. Screenshot pixels → page pixels
 - **What:** the model answers in pixels of the screenshot; the page uses CSS pixels.
 - **How:** Iris keeps the screenshot size, the page size and the screen's pixel ratio, and converts
-  every coordinate (`coordinateMapper.js`). On a Retina screen 1280 screenshot px ≈ 1000 CSS px.
+  every coordinate (`coordinateMapper.js`). On a Retina screen 1024 screenshot px ≈ 1000 CSS px.
 
 ### 3. Several actions in one step
 - **What:** the model can send a list (`"actions":[…]`, up to 6) when it can see everything it
