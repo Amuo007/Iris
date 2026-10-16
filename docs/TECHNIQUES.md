@@ -176,14 +176,19 @@ Updated 2026-10-16 (evening).
 - **Why:** dropping one step per step would change the start of the prompt every time and defeat
   the cache (technique 9). The task, the plan and your messages are never dropped.
 
-### 11b. Auto thinking (new today, experimental)
+### 11b. Auto thinking (new today, experimental — measured: no gain)
 - **What:** Settings → Thinking → *Auto*. Iris thinks (Balanced) on the first look, on a new page,
   after a miss, an error or an unusable reply, and when it has a note about the page; on routine steps
   on the same page (scrolling on, filling the rest of a form, after an upload) it answers straight away
   (Fast) — at most 4 quick steps in a row.
 - **Why:** thinking costs most of each step's time but routine steps don't need it; Fast for every step
   made more mistakes (night test).
-- **Result:** A/B test pending (after the 5-hour run frees the server).
+- **Result (A/B, the same application twice each, server to itself):** Balanced 11 steps 2:54 and
+  12 steps 2:52; Auto 11 steps 3:04 and 11 steps 2:51 — **no gain**. The reason is in the calls: at
+  Balanced this model writes only 70–100 tokens a step (it hardly thinks), and a call's 8–9 s go to
+  reading the prompt and the screenshot. There is nothing for Auto to cut, so Balanced stays the
+  default. Where time can still be won: the part of the prompt that is read fresh each step (75 % of
+  it was cached in these runs; the new screenshot is most of the rest).
 
 ### 12. Tailoring without "thinking"
 - **What:** picking what goes on a resume runs with the model's thinking off.
