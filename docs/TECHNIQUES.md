@@ -295,6 +295,24 @@ Updated 2026-10-16.
   account confirmed. (I did not sign in to your real Gmail; with Gmail signed in inside Iris, it
   works the same way.)
 
+### 21c. Workday-style applications (tested today)
+- The hardest common flow: **create an account → confirm it by email → sign in → 4 pages**
+  (My Information, My Experience with the resume upload, Application Questions with four required
+  dropdowns, Voluntary Disclosures with a required "I certify…" checkbox) → Review → Submit.
+- **First try:** account, email confirmation and sign-in worked (12 steps); then dropdowns cost 2–3
+  steps each (the option list opened *upwards*, over the questions above it, and clicks seemed not to
+  take), a question the profile already answers ("relocate to Toronto?" — the profile lives in Toronto)
+  was asked, and the wait for that answer used up the 20-minute budget.
+- **Fixes:** waiting for you no longer counts against Iris's time; an open option list is picked by
+  typing the option and Enter (it always goes to the open box, wherever the list is drawn); what follows
+  from the profile ("I already live there", years from job dates) is answered, not asked.
+- **Second try:** signed in with the account it had made, kept the saved pages, answered all four
+  questions, ticked the declaration, reviewed, submitted — **14 steps**, every field correct.
+
+### 21d. Waiting for you is not Iris's time (fixed today)
+- A question, an approval or a takeover pauses the run; that time is now added back to the task's
+  time budget, so a 20-minute task is 20 minutes of Iris working, however long you take to answer.
+
 ## Safety
 
 ### 22. Pauses that cannot be talked around
