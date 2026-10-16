@@ -260,12 +260,15 @@ function irisRenderAnswers () {
   box.innerHTML = ''
   irisCareer.answers.forEach(function (a, i) {
     var row = irisEl('div', 'iris-row')
-    var label = document.createElement('input')
-    label.type = 'text'
-    label.className = 'iris-row-label'
+    // long questions wrap instead of hiding
+    var label = document.createElement('textarea')
+    label.rows = 1
+    label.className = 'iris-row-label iris-answer-q'
     label.value = a.label
     label.placeholder = 'Question'
-    label.addEventListener('input', function () { a.label = label.value; irisCareerScheduleSave() })
+    label.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault() })
+    label.addEventListener('input', function () { a.label = label.value.replace(/\n/g, ' '); irisGrow(label); irisCareerScheduleSave() })
+    setTimeout(function () { irisGrow(label) }, 0)
     var value = document.createElement('input')
     value.type = 'text'
     value.className = 'iris-row-value'
@@ -561,3 +564,32 @@ irisAction('careerGet')
 irisAction('applicationsList')
 // applications change while Iris works: keep the list current while this page is open
 setInterval(function () { if (!document.hidden) irisAction('applicationsList') }, 15000)
+
+/* ---------- every day: a scheduled job hunt (Settings → Schedule shows it too) ---------- */
+
+var IRIS_DAILY_ID = 'jobs-daily'
+var IRIS_DAILY_TASK = 'Find new jobs that match my career profile and apply to them one by one, with a resume tailored to each. Skip jobs already handled. Stop when there are no new ones today.'
+var irisDailyBox = document.getElementById('checkbox-iris-jobs-daily')
+var irisDailyTime = document.getElementById('iris-jobs-daily-time')
+
+settings.get('irisSchedules', function (list) {
+  var s = (Array.isArray(list) ? list : []).find(function (x) { return x.id === IRIS_DAILY_ID })
+  irisDailyBox.checked = !!(s && s.enabled !== false)
+  if (s && s.at) irisDailyTime.value = s.at
+})
+
+function irisSaveDaily () {
+  settings.get('irisSchedules', function (list) {
+    list = (Array.isArray(list) ? list : []).filter(function (x) { return x.id !== IRIS_DAILY_ID })
+    if (irisDailyBox.checked) {
+      // lastRun = now: the first run is at the chosen time, not right away
+      list.push({ id: IRIS_DAILY_ID, task: IRIS_DAILY_TASK, at: irisDailyTime.value || '09:00', everyMinutes: 0, mode: 'continuous', enabled: true, lastRun: Date.now() })
+    }
+    settings.set('irisSchedules', list)
+  })
+}
+irisDailyBox.addEventListener('change', function () {
+  if (irisDailyBox.checked && irisCareerEmpty()) { irisDailyBox.checked = false; document.getElementById('iris-jobs-start-help').textContent = 'Fill in your career profile first.'; return }
+  irisSaveDaily()
+})
+irisDailyTime.addEventListener('change', function () { if (irisDailyBox.checked) irisSaveDaily() })

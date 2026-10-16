@@ -672,6 +672,7 @@ function tick () {
   } else if (runStartedAt) {
     const parts = []
     if (tally.applied) parts.push(tally.applied + ' applied')
+    if (tally.needsYou) parts.push(tally.needsYou + ' need you')
     if (tally.kept) parts.push(tally.kept + ' kept')
     if (tally.files) parts.push(tally.files + (tally.files === 1 ? ' file' : ' files'))
     statusTime.textContent = (parts.length ? parts.join(' · ') + ' · ' : '') + formatElapsed(Date.now() - runStartedAt)
@@ -1084,6 +1085,7 @@ function handleEvent (payload) {
       addNote((APPLICATION_TEXT[a.status] || a.status) + ': ' + (a.title || 'job') + (a.company ? ' — ' + a.company : '') + (a.note && a.status !== 'applied' ? ' (' + a.note + ')' : ''),
         a.status === 'applied' ? 'keep' : (a.status === 'needs_you' || a.status === 'failed' ? 'warn' : 'skip'))
       if (a.status === 'applied') tally.applied = (tally.applied || 0) + 1
+      if (a.status === 'needs_you') tally.needsYou = (tally.needsYou || 0) + 1
       break
     }
     case 'verdict':

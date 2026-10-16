@@ -1259,3 +1259,26 @@ body.dark-mode .iris-status-needs_you {
 .iris-career-paste[open] summary {
   margin-bottom: 8px;
 }
+.iris-daily-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+#iris-apply-container input[type="time"] {
+  width: auto;
+}
+#iris-career-answers .iris-row {
+  align-items: flex-start;
+}
+.iris-settings textarea.iris-answer-q {
+  flex: 0 0 40% !important;
+  min-height: 32px;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.45;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+#iris-career-answers .iris-row-delete {
+  padding-top: 5px;
+}
