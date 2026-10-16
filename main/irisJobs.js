@@ -450,7 +450,19 @@ var irisLastPreview = null
 
 /* Preview: the profile tailored to a sample job, or (with no job) everything that fits, then opened. */
 async function irisResumePreview (args) {
-  const job = { title: (args && args.title) || 'Software Engineer', company: (args && args.company) || 'Preview', requirements: (args && args.requirements) || '' }
+  const job = { title: (args && args.title) || '', company: (args && args.company) || 'Preview', requirements: (args && args.requirements) || '', url: (args && args.url) || '' }
+  // a job link: read the public posting (a look-up outside the browser, no cookies)
+  if (job.url && !job.requirements) {
+    const r = await irisLookup().lookup({ kind: 'page', query: job.url })
+    if (!r.ok) return { ok: false, error: 'Could not read that posting: ' + r.text.replace(/^Lookup \(page\) "[^"]*" failed: /, '') }
+    const page = (r.items && r.items[0]) || {}
+    job.requirements = String(page.text || r.text).slice(0, 5000)
+    const title = String(page.title || '').replace(/^(job application for|apply for|application for|careers?\s*[-–|:])\s*/i, '')
+    if (!job.title) job.title = title.split(/ [-–|@] | at /)[0].trim().slice(0, 100) || 'Job'
+    const at = / at ([^|–-]+)/.exec(title) || / [-–|] ([^|–-]+)$/.exec(title)
+    if (job.company === 'Preview' && at) job.company = at[1].trim().slice(0, 60)
+  }
+  if (!job.title) job.title = 'Software Engineer'
   const r = await irisTailorResume(job, { alwaysBuild: true })
   if (r.ok) irisLastPreview = r.file
   return r

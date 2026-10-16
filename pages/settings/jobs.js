@@ -449,8 +449,8 @@ document.getElementById('iris-preview-run').addEventListener('click', function (
   var status = document.getElementById('iris-preview-status')
   if (irisCareerEmpty()) { status.textContent = 'Fill in your career profile first.'; return }
   this.disabled = true
-  status.textContent = 'Picking what fits and building the PDF…'
-  irisAction('resumePreview', { title: document.getElementById('iris-preview-title').value.trim(), requirements: document.getElementById('iris-preview-req').value.trim() })
+  status.textContent = document.getElementById('iris-preview-url').value.trim() ? 'Reading the posting, picking what fits, building the PDF…' : 'Picking what fits and building the PDF…'
+  irisAction('resumePreview', { url: document.getElementById('iris-preview-url').value.trim(), title: document.getElementById('iris-preview-title').value.trim(), requirements: document.getElementById('iris-preview-req').value.trim() })
 })
 
 document.getElementById('iris-preview-open').addEventListener('click', function () { irisAction('previewOpen') })
