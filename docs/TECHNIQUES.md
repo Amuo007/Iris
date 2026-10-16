@@ -374,7 +374,10 @@ Updated 2026-10-16 (evening).
   years of work — while listing the years as missing. Now code reads the most years a posting asks
   for ("3+ years", "at least 5 years", "2-4 years", "3 years of experience"; "around for 10 years" is
   not a requirement), adds up the person's years from the job dates (overlaps once, internships
-  included), and caps the fit: 65 when a year or more short, 50 when two or more. The prompt says so too.
+  included), and caps the fit: 65 when a year or more short, 50 when two or more. (A prompt rule
+  "missing years keep it at 60 or below" was tried first and dropped: the model then gave 60 for a
+  0.1-year gap, and with a cutoff of 60 Iris talked itself into skipping. The resume note now also says
+  plainly when a fit is at or above the cutoff.)
 - **When Jobs mode is on (fixed today):** only for job hunting. Before, any task with "apply" or
   "resume" in it switched it on — "apply the coupon at checkout" or "resume the download" would
   have got the job instructions and the pause before submitting. Now it needs job words around them
