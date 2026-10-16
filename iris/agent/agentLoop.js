@@ -605,11 +605,19 @@ function createAgent (opts) {
     // short tasks answer from the screen in front of them; long ones are where details get invented
     if (!cfg.answerCheck || !answer || answer.length < 60 || !/\d/.test(answer) || state.step < 5) return answer
     try {
-      const evidence = history.transcript().filter(function (e) { return e.thought || e.kind === 'note' || e.kind === 'followup' })
+      const entries = history.transcript()
+      const evidence = entries.filter(function (e) { return e.thought || e.kind === 'note' || e.kind === 'followup' })
         .map(function (e) { return '- ' + (e.thought || e.text) }).join('\n')
+      // what Iris itself typed into the page (a name, an email on a form) is known, not invented
+      const typed = []
+      entries.forEach(function (e) {
+        if (e.kind !== 'assistant' || !/"type"\s*:\s*"type"/.test(e.raw || '')) return
+        const p = parseAction(e.raw, { imageWidth: 100000, imageHeight: 100000 })
+        ;((p.ok && p.actions) || []).forEach(function (a) { if (a.type === 'type' && a.text && !/\{\{/.test(a.text)) typed.push('- typed into the page: ' + a.text.slice(0, 200)) })
+      })
       const notes = history.notes().map(function (n) { return '- note: ' + n }).join('\n')
       const digest = history.digest().join('\n')
-      const text = [digest, notes, evidence].filter(Boolean).join('\n').slice(-9000)
+      const text = [digest, notes, typed.slice(-40).join('\n'), evidence].filter(Boolean).join('\n').slice(-9000)
       emit('model:start', { step: state.step, checking: true })
       const reply = await model.next({
         messages: prompts.answerCheckMessages(state.task, answer, text, obs && obs.dataUrl),

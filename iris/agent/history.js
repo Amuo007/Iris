@@ -332,6 +332,7 @@ function createHistory (options) {
         text: e.thought || e.text,
         thought: e.thought || null,
         action: e.action || null,
+        raw: e.kind === 'assistant' ? e.text : null,
         hasImage: !!e.dataUrl,
         url: e.url || null
       }))

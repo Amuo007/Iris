@@ -758,6 +758,18 @@ test('the final answer is checked: details Iris never saw are taken out', async 
   assert.deepStrictEqual(ev(h.events, 'answer:checked')[0].removed, ['08:00 to 16:30'])
 })
 
+test('the answer checker knows what Iris typed into the page', async () => {
+  const scroll = () => json('s', { type: 'scroll', direction: 'down' })
+  const h = harness([
+    json('fill', { type: 'type', x: 100, y: 100, text: 'jordan.lee@example.com' }),
+    scroll(), scroll(), scroll(),
+    json('ok', { type: 'done', answer: 'Applied as Jordan Lee (jordan.lee@example.com, 555-010-2234); the site confirmed it.' }),
+    (ctx) => { h.checkCtx = ctx; return JSON.stringify({ unsupported: [] }) }
+  ])
+  await h.agent.run('apply for the job')
+  assert.match(JSON.stringify(h.checkCtx.messages), /typed into the page: jordan\.lee@example\.com/)
+})
+
 test('a checker reply that throws most of the answer away is ignored', async () => {
   const answer = 'The cheapest flight is Frontier at 6:30 AM for $183; next are American, United and Southwest at $317.'
   const scroll = () => json('s', { type: 'scroll', direction: 'down' })
