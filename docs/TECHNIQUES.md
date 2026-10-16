@@ -402,6 +402,9 @@ Updated 2026-10-16 (evening).
   now read "skipped". Now each job Iris makes a resume for is remembered with its own link, fit and PDF;
   a log by title gets that job's details; a job with no resume gets none; and any job with a resume but
   no log is pointed out on the next resume and after each log.
+- **The answer ends with the records (new today):** a jobs run's final answer gets "From the
+  Applications list (this run): Applied (2): …; Needs you (1): … — <reason>; Skipped (1): …" built by
+  code from the log, because the model's own summary once gave the wrong reason for a *needs you* job.
 - **Boards you name are the only ones (new today):** after finishing the two boards in the task, Iris
   went on to another board it had learned about. When the task names boards or links, it now finishes
   there.
