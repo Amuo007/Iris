@@ -2167,7 +2167,9 @@ function startAgent (task, options) {
     if (mode === 'repeat' && result.status !== 'stopped') irisScheduleRepeat(task, options)
     // "keep going until I stop you": a non-stop run that thinks it is finished looks for more
     const original = session.items.find(function (it) { return it.kind === 'user' }) || { text: task }
-    if (mode === 'continuous' && result.status === 'done' && irisPrompts.isOpenEnded(original.text) && (session.autoResumes || 0) < 200) {
+    // a job run that reached the day's limit rests until the next day's run (Settings → Applying → Every day)
+    const jobsLimitReached = computer.jobsMode && irisCareerLoad().prefs.dailyLimit > 0 && irisAppliedToday() >= irisCareerLoad().prefs.dailyLimit
+    if (mode === 'continuous' && result.status === 'done' && irisPrompts.isOpenEnded(original.text) && !jobsLimitReached && (session.autoResumes || 0) < 200) {
       session.autoResumes = (session.autoResumes || 0) + 1
       broadcastEvent({ type: 'repeat:scheduled', at: Date.now() + 20000, minutes: 1 / 3, sessionId: session.id, resume: true })
       irisRepeatTimer = setTimeout(function () {
