@@ -77,6 +77,8 @@ const ACTION_LABELS = {
   lookup: 'Look up',
   bookmark: 'Bookmark',
   bookmarks: 'Bookmarks',
+  tailor_resume: 'Resume',
+  log_application: 'Logged',
   update_plan: 'Update plan',
   judge: 'Judge',
   dialog: 'Answer dialog',
@@ -666,6 +668,7 @@ function tick () {
     statusTime.textContent = 'in ' + formatElapsed(repeatAt - Date.now())
   } else if (runStartedAt) {
     const parts = []
+    if (tally.applied) parts.push(tally.applied + ' applied')
     if (tally.kept) parts.push(tally.kept + ' kept')
     if (tally.files) parts.push(tally.files + (tally.files === 1 ? ' file' : ' files'))
     statusTime.textContent = (parts.length ? parts.join(' · ') + ' · ' : '') + formatElapsed(Date.now() - runStartedAt)
@@ -769,6 +772,8 @@ function actionDetail (action, description) {
     case 'bookmark': return action.remove ? 'remove' : (action.url || '')
     case 'dialog': return action.accept ? 'OK' : 'Cancel'
     case 'upload': return action.file
+    case 'tailor_resume': return action.title + (action.company ? ' · ' + action.company : '')
+    case 'log_application': return ({ applied: 'applied', skipped: 'skipped', needs_you: 'needs you', failed: 'failed' })[action.status] + (action.title ? ' · ' + action.title : '')
     case 'ask_user': return ''
     case 'new_tab': return action.url || ''
     case 'switch_tab':
@@ -923,6 +928,41 @@ function addVerdict (v) {
   addNote((v.keep ? '✓ Kept: ' : '✗ Skipped: ') + v.item + (v.why ? ' — ' + v.why : ''), v.keep ? 'keep' : 'skip')
 }
 
+/* A resume made for one job: what it fits, and a way to look at it. */
+function addResumeCard (p) {
+  removeEmpty()
+  const card = el('div', 'iris-resume' + (p.ok ? (p.below ? ' is-below' : '') : ' is-failed'))
+  const head = el('div', 'iris-resume-head')
+  head.appendChild(el('span', 'iris-resume-title', 'Resume · ' + (p.title || 'job') + (p.company ? ' · ' + p.company : '')))
+  if (p.ok && p.fit !== null && p.fit !== undefined) head.appendChild(el('span', 'iris-resume-fit', 'fit ' + p.fit))
+  card.appendChild(head)
+  if (!p.ok) {
+    card.appendChild(el('div', 'iris-resume-meta', p.error || 'Could not make it'))
+  } else {
+    const bits = []
+    if (p.focus) bits.push(p.focus)
+    if (p.below) bits.push('below your cutoff, not applying')
+    if (p.missing && p.missing.length) bits.push('not in your profile: ' + p.missing.slice(0, 3).join(', '))
+    if (p.undone) bits.push(p.undone + (p.undone === 1 ? ' rewrite' : ' rewrites') + ' undone (added facts)')
+    if (bits.length) card.appendChild(el('div', 'iris-resume-meta', bits.join(' · ')))
+    const tools = el('div', 'iris-resume-tools')
+    const open = el('button', 'iris-btn-quiet', 'Open PDF')
+    open.type = 'button'
+    open.addEventListener('click', function () { ipc.send('iris-resume-open', { file: p.file }) })
+    const show = el('button', 'iris-btn-quiet', 'Show in Finder')
+    show.type = 'button'
+    show.addEventListener('click', function () { ipc.send('iris-resume-open', { file: p.file, reveal: true }) })
+    tools.appendChild(open)
+    tools.appendChild(show)
+    card.appendChild(tools)
+  }
+  streamEl.appendChild(card)
+  trimStream()
+  scrollToEnd()
+}
+
+const APPLICATION_TEXT = { applied: '✓ Applied', skipped: '✗ Skipped', needs_you: '! Needs you', failed: '✗ Could not apply' }
+
 function addNote (text, kind) {
   removeEmpty()
   const note = el('div', 'iris-note' + (kind ? ' iris-note-' + kind : ''), text)
@@ -1025,6 +1065,19 @@ function handleEvent (payload) {
       addQuestions(payload.questions)
       setStatus('paused', 'Iris has a few questions before planning')
       break
+    case 'resume:start':
+      setStatus(keep, 'Tailoring the resume for ' + (payload.title || 'this job') + '…')
+      break
+    case 'resume':
+      addResumeCard(payload)
+      break
+    case 'application': {
+      const a = payload.item || {}
+      addNote((APPLICATION_TEXT[a.status] || a.status) + ': ' + (a.title || 'job') + (a.company ? ' — ' + a.company : '') + (a.note && a.status !== 'applied' ? ' (' + a.note + ')' : ''),
+        a.status === 'applied' ? 'keep' : (a.status === 'needs_you' || a.status === 'failed' ? 'warn' : 'skip'))
+      if (a.status === 'applied') tally.applied = (tally.applied || 0) + 1
+      break
+    }
     case 'verdict':
       addVerdict(payload)
       if (payload.keep) tally.kept++

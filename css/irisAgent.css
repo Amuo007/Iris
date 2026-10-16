@@ -949,3 +949,54 @@
 .iris-composer-meta .iris-select {
   flex: none;
 }
+
+/* --- a resume made for one job ------------------------------------------- */
+
+.iris-resume {
+  margin: 4px 0 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--iris-border-strong);
+  border-radius: var(--iris-r-md);
+  color: var(--iris-text);
+  font-size: 12.5px !important;
+}
+.iris-resume.is-below,
+.iris-resume.is-failed {
+  border-style: dashed;
+}
+.iris-resume-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.iris-resume-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.iris-resume-fit {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--iris-border-strong);
+  font-size: 11.5px !important;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.iris-resume.is-below .iris-resume-fit {
+  color: var(--iris-text-3);
+}
+.iris-resume-meta {
+  margin-top: 4px;
+  color: var(--iris-text-2);
+  line-height: 1.45;
+}
+.iris-resume-tools {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}

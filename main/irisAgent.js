@@ -1550,6 +1550,10 @@ function irisRecord (session, type, p) {
     stepItem(p.step).error = p.error
   } else if (type === 'remember') {
     items.push({ kind: 'note', text: p.note })
+  } else if (type === 'resume' && p.ok) {
+    items.push({ kind: 'note', text: 'Made a resume for ' + p.title + (p.company ? ' at ' + p.company : '') + (p.fit !== null && p.fit !== undefined ? ' (fit ' + p.fit + ')' : '') + ': ' + path.basename(path.dirname(p.file)) })
+  } else if (type === 'application' && p.item) {
+    items.push({ kind: 'note', text: ({ applied: 'Applied', skipped: 'Skipped', needs_you: 'Needs you', failed: 'Could not apply' }[p.item.status] || p.item.status) + ': ' + (p.item.title || 'job') + (p.item.company ? ' — ' + p.item.company : '') })
   } else if (type === 'plan') {
     items.push({ kind: 'plan', text: p.text })
   } else if (type === 'verdict') {
@@ -1737,7 +1741,7 @@ function irisSystemExtra (mode, task, projectId, sessionId) {
   if (userSkills) parts.push(userSkills)
   const prior = irisPriorJudged(task, sessionId)
   if (prior) parts.push(prior)
-  if (irisJobsActive(task)) parts.push(irisJobsPrompt(task))
+  if (irisJobsActive(task)) parts.push(irisJobsPrompt(task, mode))
   if ((playbook || userSkills) && irisSkillsLogged !== task) {
     irisSkillsLogged = task
     DBUG('prompt extras: playbook=' + !!playbook + ' userSkills=' + (userSkills ? userSkills.split('\n').length - 1 : 0))

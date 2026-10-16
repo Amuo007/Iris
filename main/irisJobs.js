@@ -300,7 +300,8 @@ function irisJobsActive (task) {
   return IRIS_JOB_TASK.some(function (re) { return re.test(t) }) && !irisCareerLib.bankIsEmpty(irisCareerLoad())
 }
 
-function irisJobsPrompt (task) {
+function irisJobsPrompt (task, mode) {
+  const nonStop = mode === 'continuous'
   const bank = irisCareerLoad()
   const p = bank.prefs
   const lines = ['JOBS — the user keeps a career profile in Iris (Settings → Jobs). Applying for one job:',
@@ -314,7 +315,10 @@ function irisJobsPrompt (task) {
     '4. If Iris says the fit is below the cutoff: log_application {"status":"skipped",…} and go to the next job.',
     '5. Otherwise apply: fill the form from My info and the answers below. When it asks for a resume, upload the PDF',
     '   tailor_resume made. Answer every question truthfully from the profile and the answers; never claim a skill or',
-    '   experience the profile does not show. A required question you cannot answer from them: ask_user.',
+    '   experience the profile does not show.',
+    nonStop
+      ? '   Only the user can finish it (a CAPTCHA that stays, a login you have no account for, a required question or file the profile does not have): log_application {"status":"needs_you","note":"<what is missing>"} — Iris tells the user — and go on to the next job. Do not wait.'
+      : '   A required question you cannot answer from them, a CAPTCHA that stays, or a login you cannot do: ask_user.',
     '   Optional fields with no saved answer: leave them empty (no need to scroll back to them). Voluntary',
     '   self-identification (gender, race, veteran, disability): leave empty unless required; then "Decline to self-identify".',
     '   Cover letter optional: skip it; required: write a short honest one from the profile.',
@@ -430,3 +434,12 @@ function irisJobsSettingsAction (action, args) {
   }
   return null
 }
+
+/* the panel's "Open PDF" / "Show in Finder" on a resume card: only files Iris made */
+ipc.on('iris-resume-open', function (event, data) {
+  const file = path.resolve(String((data && data.file) || ''))
+  const root = path.resolve(irisResumeDir())
+  if (file.indexOf(root + path.sep) !== 0 || !/\.pdf$/i.test(file) || !fs.existsSync(file)) return
+  if (data.reveal) shell.showItemInFolder(file)
+  else shell.openPath(file)
+})
