@@ -852,6 +852,8 @@ window.addEventListener('message', function (e) {
       document.getElementById('iris-clear-status').textContent = r.error ? 'Could not clear: ' + r.error : 'Cleared.'
       irisLoadHistory()
       irisAction('cookiesList')
+    } else if (d.action === 'downloadsList' || d.action === 'downloadShow') {
+      irisRenderDownloads(r)
     } else if (d.action === 'historyList') {
       irisRenderHistory(r.items || [], r.total || 0)
     } else if (d.action === 'cookiesList' || d.action === 'cookiesRemove') {
@@ -1504,3 +1506,46 @@ settings.listen('irisUserSkills', function (value) {
   irisUserSkills = Array.isArray(value) ? value.map(function (s) { return Object.assign({}, s) }) : []
   irisRenderUserSkills()
 })
+
+/* --- Downloads ------------------------------------------------------------ */
+
+function irisBytes (n) {
+  if (n >= 1024 * 1024 * 1024) return (n / 1024 / 1024 / 1024).toFixed(1) + ' GB'
+  if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB'
+  return Math.max(1, Math.round(n / 1024)) + ' KB'
+}
+
+function irisRenderDownloads (r) {
+  var list = document.getElementById('iris-downloads-list')
+  document.getElementById('iris-downloads-dir').textContent = (r.dir || 'your download folder').replace(/^\/Users\/[^/]+/, '~')
+  list.innerHTML = ''
+  var files = r.files || []
+  if (!files.length) {
+    list.appendChild(irisEmptyLine('Nothing downloaded yet.'))
+    return
+  }
+  files.forEach(function (f) {
+    var row = document.createElement('div')
+    row.className = 'iris-list-row'
+    var main = document.createElement('div')
+    main.className = 'iris-list-main'
+    var t = document.createElement('span')
+    t.className = 'iris-list-title'
+    t.textContent = f.name
+    var sub = document.createElement('span')
+    sub.className = 'iris-list-sub'
+    sub.textContent = irisBytes(f.bytes) + ' · ' + new Date(f.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    main.appendChild(t)
+    main.appendChild(sub)
+    var show = document.createElement('button')
+    show.type = 'button'
+    show.className = 'iris-button'
+    show.textContent = 'Show in Finder'
+    show.addEventListener('click', function () { irisAction('downloadShow', { name: f.name }) })
+    row.appendChild(main)
+    row.appendChild(show)
+    list.appendChild(row)
+  })
+}
+
+irisAction('downloadsList')

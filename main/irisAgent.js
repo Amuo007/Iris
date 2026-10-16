@@ -2020,6 +2020,19 @@ ipc.on('iris-agent-settings-changed', function () {
 })
 
 /* Settings page actions that need the main process */
+/* The newest files in the download folder, for Settings → Downloads. */
+function irisRecentDownloads (limit) {
+  const dir = irisDownloadDir()
+  let names = []
+  try { names = fs.readdirSync(dir) } catch (e) { return [] }
+  return names.filter(function (n) { return n[0] !== '.' }).map(function (n) {
+    try {
+      const st = fs.statSync(path.join(dir, n))
+      return st.isFile() ? { name: n, bytes: st.size, at: st.mtimeMs } : null
+    } catch (e) { return null }
+  }).filter(Boolean).sort(function (a, b) { return b.at - a.at }).slice(0, limit || 40)
+}
+
 /* Cookies grouped by site, most first, for Settings → Cookies & site data. */
 async function irisCookieSites () {
   const all = await session.fromPartition('persist:webcontent').cookies.get({})
@@ -2052,6 +2065,15 @@ ipc.on('iris-settings-action', async function (event, data) {
         return reply({ sites: await irisCookieSites() })
       case 'bridgeInfo':
         return reply(irisBridgeInfo())
+      case 'downloadsList':
+        return reply({ dir: irisDownloadDir(), files: irisRecentDownloads(40) })
+      case 'downloadShow': {
+        // only files inside the download folder, and only revealed in Finder (never opened)
+        const dir = irisDownloadDir()
+        const target = path.join(dir, path.basename(String((data.args && data.args.name) || '')))
+        if (fs.existsSync(target)) shell.showItemInFolder(target)
+        return reply({ dir: dir, files: irisRecentDownloads(40) })
+      }
       case 'cookiesRemove': {
         const ses = session.fromPartition('persist:webcontent')
         const domain = String((data.args && data.args.domain) || '').toLowerCase()
