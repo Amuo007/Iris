@@ -1169,6 +1169,12 @@ IrisComputer.prototype.act = async function (action) {
         return { ok: true }
       }
       broadcastEvent({ type: 'resume:start', title: job.title, company: job.company, sessionId: this.sessionId })
+      // the posting's own words next to Iris's summary of it, when its link can be read (see irisPostingText)
+      const posting = await irisPostingText(job)
+      if (posting) {
+        job.requirements = (job.requirements ? 'Summary while reading it: ' + job.requirements + '\n\n' : '') + 'The posting itself (read from its link):\n' + posting
+        DBUG('tailor: posting text ' + posting.length + ' chars from ' + job.url)
+      }
       let r
       try { r = await irisTailorResume(job) } catch (e) { r = { ok: false, error: e.message } }
       if (!r.ok) {

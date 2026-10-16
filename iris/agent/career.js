@@ -1007,7 +1007,7 @@ function tailorMessages (bank, job) {
   const user = [
     'JOB: ' + [job.title, job.company].filter(Boolean).join(' at ') + (job.url ? '\n' + job.url : ''),
     'WHAT THE POSTING ASKS FOR:',
-    String(job.requirements || '(not given: judge from the title)').slice(0, 5000),
+    String(job.requirements || '(not given: judge from the title)').slice(0, 9000),
     '',
     'CAREER BANK:',
     bankText(bank, 24000)

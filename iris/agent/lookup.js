@@ -375,13 +375,13 @@ function createLookup (opts) {
     return { source: board.company + ' on ' + board.ats + ', ' + all.length + ' open', items: items }
   }
 
-  async function page (url) {
+  async function page (url, chars) {
     if (!/^https?:\/\//i.test(url)) url = 'https://' + String(url).replace(/^\/+/, '')
     const r = await get(url)
     if (looksBlocked(r.status, r.body)) throw new Error(hostOf(url) + ' blocks quick reading; open it in the browser instead')
     if (r.status >= 400) throw new Error(hostOf(url) + ' answered ' + r.status)
     if (/pdf/i.test(r.type)) throw new Error('that is a PDF; open or download it in the browser')
-    const rt = readableText(r.body, cfg.pageChars)
+    const rt = readableText(r.body, chars || cfg.pageChars)
     if (rt.text.length < 200) throw new Error(hostOf(url) + ' shows almost no text without a browser (it needs JavaScript); open it in the browser instead')
     return { source: hostOf(r.url || url), items: [{ title: rt.title, url: r.url || url, text: rt.text }] }
   }
@@ -398,14 +398,16 @@ function createLookup (opts) {
     if (kind === 'page' && isNever(query, o.never)) {
       return { ok: false, text: 'Lookup skipped ' + hostOf(query) + ': that site bans accounts for automated reading. Open it in the browser if you need it.', count: 0 }
     }
-    const key = kind + ':' + query.toLowerCase()
+    // a longer read of one page (a job posting's requirements often come after a long intro)
+    const chars = kind === 'page' && req.chars > 0 ? Math.min(20000, Math.round(req.chars)) : 0
+    const key = kind + ':' + (chars ? chars + ':' : '') + query.toLowerCase()
     const hit = cache.get(key)
     let result
     if (hit && now() - hit.at < cfg.cacheMs) {
       result = hit.result
     } else {
       try {
-        result = await ({ web, papers, arxiv, wiki, page, jobs })[kind](query)
+        result = await ({ web, papers, arxiv, wiki, page, jobs })[kind](query, chars || undefined)
       } catch (e) {
         return { ok: false, text: 'Lookup (' + kind + ') "' + clip(query, 80) + '" failed: ' + (e && e.message ? e.message : e), count: 0 }
       }

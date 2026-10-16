@@ -256,6 +256,33 @@ async function irisTailorResume (job, hooks) {
   }
 }
 
+/*
+ * The posting's own words, when its public page can be read without the browser (a plain request in
+ * the empty look-up session; never LinkedIn and the like, never a site the user has an account on).
+ * Iris sees one screenshot at a time, so by the time it calls tailor_resume the must-haves may have
+ * scrolled away and its summary can miss or invent some. Pages that need JavaScript, or whose text does
+ * not name the job, give nothing and the summary is used alone.
+ */
+async function irisPostingText (job) {
+  if (!job || !job.url || !/^https?:/i.test(job.url)) return ''
+  try {
+    const r = await Promise.race([
+      irisLookup().lookup({ kind: 'page', query: job.url, chars: 8000 }),
+      new Promise(function (resolve) { setTimeout(function () { resolve(null) }, 9000) })
+    ])
+    if (!r || !r.ok) return ''
+    const text = String(((r.items && r.items[0]) || {}).text || '')
+    const lower = text.toLowerCase()
+    const words = (String(job.title || '').toLowerCase().match(/[a-z0-9+#]{3,}/g) || []).filter(function (w) { return !/^(and|the|for|with|senior|junior|staff|new|grad)$/.test(w) })
+    const named = words.filter(function (w) { return lower.indexOf(w) !== -1 }).length
+    if (text.length < 600 || !words.length || named < Math.min(2, words.length)) return ''
+    return text
+  } catch (e) {
+    DBUG('posting text: ' + e.message)
+    return ''
+  }
+}
+
 /* ---------- cover letters ---------- */
 
 /* the folder for this job's papers (the resume's folder, same name) */
@@ -389,9 +416,11 @@ function irisJobsPrompt (task, mode) {
     '   companies, search the web in the browser (navigate with words like "site:jobs.lever.co software engineer Toronto")',
     '   and open the results; never guess a company\'s board address. On a board with many openings, a jobs look-up',
     '   ({"kind":"jobs","query":"jobs.lever.co/<company> <role words> <place>"}) lists the matching ones at once.',
-    '2. Open the posting and read all of it (scroll). Remember its must-haves.',
+    '2. Open the posting and read all of it (scroll). Each screen you leave is gone (you see only the newest screenshot),',
+    '   so save its must-haves with "remember", in the posting\'s own words, in the same reply as the scroll.',
     '3. tailor_resume {"company":str,"title":str,"requirements":str}: requirements = what the POSTING asks for, in its',
-    '   own words (skills, tools, years, duties) — nothing about the user. Iris builds a one-page PDF from the profile',
+    '   own words (skills, tools, years, duties), from your notes and the screen — never what such jobs usually ask,',
+    '   nothing about the user. Iris builds a one-page PDF from the profile',
     '   and says how well it fits.',
     '   No need to judge the job yourself: the fit Iris reports is the decision.',
     '4. If Iris says the fit is below the cutoff: log_application {"status":"skipped",…} and go to the next job.',

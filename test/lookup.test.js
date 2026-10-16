@@ -180,3 +180,14 @@ test('job boards: the address picks the board, words pick the openings', async (
   assert.match(r.text.split('\n')[1], /Software Engineer, Backend/, 'the best match comes first')
   assert.ok(!/Account Executive/.test(r.text))
 })
+
+test('a job posting can be read further than a usual page, so its requirements are not cut off', async () => {
+  const intro = '<p>' + 'We build sensors that run for years on a coin cell. '.repeat(90) + '</p>'
+  const html = '<html><title>Embedded Software Engineer</title><body><h1>Embedded Software Engineer</h1>' + intro + '<h2>What you bring</h2><ul><li>2+ years writing embedded C</li></ul></body></html>'
+  const lk = createLookup(Object.assign({ fetch: fakeFetch([['jobs.test', html]]) }, instant))
+  const short = await lk.lookup({ kind: 'page', query: 'https://jobs.test/emb' })
+  assert.ok(short.ok)
+  assert.doesNotMatch(short.text, /2\+ years writing embedded C/)
+  const long = await lk.lookup({ kind: 'page', query: 'https://jobs.test/emb', chars: 8000 })
+  assert.match(long.text, /2\+ years writing embedded C/)
+})
