@@ -937,7 +937,7 @@ IrisComputer.prototype.screenshot = async function () {
 
   const size = image.getSize()
   DBUG('capture ok ' + JSON.stringify(size) + (crop ? ' crop ' + JSON.stringify(crop) : ' view ' + bounds.width + 'x' + bounds.height) + ' url ' + url)
-  if (crop) this.lastClick = null // a close-up has its own coordinates: no marks on it
+  if (crop) { this.lastClick = null; this.stepClicks = [] } // a close-up has its own coordinates: no marks on it
   const obs = this.finishCapture(image, size, crop || bounds, wc, sig)
   irisAttachEvents(this, obs)
   obs.skills = irisSkillsFor(obs.url)
@@ -1015,6 +1015,29 @@ function irisDrawMiss (image, x, y) {
   return nativeImage.createFromBitmap(buf, { width: size.width, height: size.height })
 }
 
+/* Small blue rings (white edge) where each click of the last step landed — BGRA bitmap, hollow so the page shows through. */
+function irisDrawRings (image, points) {
+  const size = image.getSize()
+  const buf = Buffer.from(image.toBitmap())
+  const put = function (px, py, r, g, b) {
+    if (px < 0 || py < 0 || px >= size.width || py >= size.height) return
+    const i = (py * size.width + px) * 4
+    buf[i] = b; buf[i + 1] = g; buf[i + 2] = r; buf[i + 3] = 255
+  }
+  const radius = Math.max(8, Math.round(size.width / 150))
+  points.forEach(function (pt) {
+    for (const pass of [[255, 255, 255, radius + 2, 1.2], [37, 99, 235, radius, 1.4]]) {
+      const R = pass[3]
+      for (let dx = -R - 2; dx <= R + 2; dx++) {
+        for (let dy = -R - 2; dy <= R + 2; dy++) {
+          if (Math.abs(Math.sqrt(dx * dx + dy * dy) - R) <= pass[4]) put(pt.x + dx, pt.y + dy, pass[0], pass[1], pass[2])
+        }
+      }
+    }
+  })
+  return nativeImage.createFromBitmap(buf, { width: size.width, height: size.height })
+}
+
 IrisComputer.prototype.finishCapture = function (image, size, bounds, wc, sig) {
   const fitted = irisMapper.fitDimensions(size.width, size.height, this.config.screenshotMaxDimension)
   let payload = image
@@ -1031,6 +1054,17 @@ IrisComputer.prototype.finishCapture = function (image, size, bounds, wc, sig) {
       payload = irisDrawMiss(payload, Math.round(click.x * k), Math.round(click.y * k))
       missNote = 'The red ✕ marks where your last click landed; nothing happened there. Aim at the centre of what you meant (zoom in if it is small).'
     } catch (e) { DBUG('miss mark: ' + e.message) }
+  }
+  // several clicks in one step (tick boxes, radio buttons): show where each landed, so a click that hit
+  // the row above or below is seen and fixed once, not guessed at again
+  const clicks = this.stepClicks || []
+  this.stepClicks = []
+  if (!missNote && clicks.length >= 2 && bounds.width) {
+    const k = fitted.width / bounds.width
+    try {
+      payload = irisDrawRings(payload, clicks.map(function (c) { return { x: Math.round(c.x * k), y: Math.round(c.y * k) } }))
+      missNote = 'Blue rings mark where the ' + clicks.length + ' clicks of your last step landed. Check each is on the option you meant; a tick box clicked twice is unticked again.'
+    } catch (e) { DBUG('click rings: ' + e.message) }
   }
   if (sig) this.lastFingerprint = sig.fingerprint
   return {
@@ -1168,6 +1202,12 @@ IrisComputer.prototype.act = async function (action) {
         this.notes = (this.notes || []).concat('The daily limit of ' + limit + ' applications is reached. Do not apply to more jobs today: finish with done and say how many were sent.')
         return { ok: true }
       }
+      // jobs that got a resume but no log_application yet: say so before moving on
+      const unlogged = (this.jobsTailored || []).filter(function (j) { return Date.now() - (j.at || 0) < 3 * 3600 * 1000 && !irisSameJob(j, job) && !irisApplicationFind(j) })
+      if (unlogged.length) {
+        this.notes = (this.notes || []).concat('Not logged yet (a resume was made for each): ' + unlogged.map(function (j) { return j.title + (j.company ? ' at ' + j.company : '') }).join('; ') +
+          ' — send log_application for each as well (applied, needs_you, skipped or failed).')
+      }
       broadcastEvent({ type: 'resume:start', title: job.title, company: job.company, sessionId: this.sessionId })
       // the posting's own words next to Iris's summary of it, when its link can be read (see irisPostingText)
       const posting = await irisPostingText(job)
@@ -1183,7 +1223,8 @@ IrisComputer.prototype.act = async function (action) {
         return { ok: true }
       }
       this.lastResume = r.file
-      this.lastJob = { title: job.title, company: job.company, url: job.url, fit: r.fit }
+      this.lastJob = { title: job.title, company: job.company, url: job.url, fit: r.fit, resume: r.file || '', at: Date.now() }
+      this.jobsTailored = (this.jobsTailored || []).filter(function (j) { return !irisSameJob(j, job) }).concat(this.lastJob)
       let note = (r.file ? 'Made a one-page resume for ' : 'Checked the fit for ') + job.title + (job.company ? ' at ' + job.company : '') + ' (' + (r.fit === null ? 'fit not rated' : 'fit ' + r.fit + '/100') +
         (r.focus ? ', focus: ' + r.focus : '') + ')' + (r.file ? ': ' + r.file : '') + '.' + (r.missing && r.missing.length ? ' The profile does not show: ' + r.missing.join(', ') + '.' : '')
       note += r.below
@@ -1210,15 +1251,25 @@ IrisComputer.prototype.act = async function (action) {
       return { ok: true }
     }
     case 'log_application': {
-      const job = this.lastJob || {}
+      // the job this log is about: one Iris made a resume for in this run (by its title), else the last one.
+      // A job ruled out from the list has no resume: it must not take another job's link, fit or resume,
+      // or that other job could never be logged and a later visit to it would read "skipped".
+      const norm = function (v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() }
+      const tailored = this.jobsTailored || []
+      let job = null
+      if (action.title) {
+        job = tailored.slice().reverse().find(function (j) {
+          return norm(j.title) === norm(action.title) && (!action.company || !j.company || norm(j.company) === norm(action.company))
+        }) || null
+      } else job = this.lastJob || null
       const rec = {
         status: action.status,
-        company: action.company || job.company || '',
-        title: action.title || job.title || '',
-        url: job.url || action.url || wc.getURL(),
+        company: action.company || (job && job.company) || '',
+        title: action.title || (job && job.title) || '',
+        url: (job && job.url) || action.url || (job || !tailored.length ? wc.getURL() : ''),
         note: action.note || '',
-        resume: this.lastResume || '',
-        fit: job.fit === undefined ? null : job.fit,
+        resume: (job && job.resume) || '',
+        fit: job && job.fit !== undefined ? job.fit : null,
         sessionId: this.sessionId || ''
       }
       const item = irisApplicationAdd(rec)
@@ -1227,9 +1278,17 @@ IrisComputer.prototype.act = async function (action) {
         (rec.status === 'applied' ? ' Applications sent today: ' + irisAppliedToday() + '.' : '') + ' Go on to the next job.')
       if (rec.status === 'needs_you') irisNotify('A job application needs you', (rec.title || 'A job') + (rec.company ? ' at ' + rec.company : '') + (rec.note ? ': ' + rec.note : ''))
       broadcastEvent({ type: 'application', item: item, sessionId: this.sessionId })
-      this.lastResume = null
-      this.lastCover = null
-      this.lastJob = null
+      if (job) this.jobsTailored = tailored.filter(function (j) { return j !== job })
+      // the job in progress keeps its resume when another job (one ruled out from the list) is logged
+      if (job && (job === this.lastJob || irisSameJob(job, this.lastJob || {}))) {
+        this.lastResume = null
+        this.lastCover = null
+        this.lastJob = null
+      }
+      const open = (this.jobsTailored || []).filter(function (j) { return Date.now() - (j.at || 0) < 3 * 3600 * 1000 && !irisApplicationFind(j) })
+      if (open.length) {
+        this.notes = this.notes.concat('Not logged yet (a resume was made for each): ' + open.map(function (j) { return j.title + (j.company ? ' at ' + j.company : '') }).join('; ') + ' — log_application for each as well (applied, needs_you, skipped or failed).')
+      }
       return { ok: true }
     }
     case 'dialog': {
@@ -1315,6 +1374,9 @@ IrisComputer.prototype.act = async function (action) {
   this.pointer = irisInputPlan.pointerAfter(action) || this.pointer
   // where this click landed, so the next look can show it if nothing happened
   this.lastClick = (action.type === 'click' || action.type === 'double_click') ? { x: action.x, y: action.y, fingerprint: this.lastFingerprint || null } : null
+  // the clicks of this step, for the rings on the next screenshot; anything that moves the page voids them
+  if (action.type === 'click') this.stepClicks = (this.stepClicks || []).concat({ x: action.x, y: action.y })
+  else if (action.type !== 'type' && action.type !== 'move' && action.type !== 'wait') this.stepClicks = []
   if (action.type === 'type') {
     // say exactly what went in, so a box that merely looks cut off is not "fixed" by mistake
     const secret = action.text.indexOf('{{') !== -1

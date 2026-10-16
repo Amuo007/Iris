@@ -415,6 +415,8 @@ function irisJobsPrompt (task, mode) {
     '   companies, search the web in the browser (navigate with words like "site:jobs.lever.co software engineer Toronto")',
     '   and open the results; never guess a company\'s board address. On a board with many openings, a jobs look-up',
     '   ({"kind":"jobs","query":"jobs.lever.co/<company> <role words> <place>"}) lists the matching ones at once.',
+    '   When the user names boards or job links, work only on those: once every opening there is handled, finish',
+    '   with done — do not go looking on other boards or sites you know.',
     '2. Open the posting and read all of it (scroll). Each screen you leave is gone (you see only the newest screenshot),',
     '   so save its must-haves with "remember", in the posting\'s own words, in the same reply as the scroll.',
     '3. tailor_resume {"company":str,"title":str,"requirements":str}: requirements = what the POSTING asks for, in its',
