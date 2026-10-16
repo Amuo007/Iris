@@ -2159,7 +2159,22 @@ function startAgent (task, options) {
     history: { keepImages: cfg.keepImages, maxMessages: unlimited ? 30 : 40 },
     log: DBUG,
     onEvent: function (type, payload) {
-      if (type === 'run:start') { irisUsageRecord('task'); session.runUrls = [] }
+      if (type === 'run:start') { irisUsageRecord('task'); session.runUrls = []; session.runStartedAt = Date.now() }
+      // a jobs run ends with the Applications list itself, so the summary cannot misremember a job or a reason
+      if (type === 'run:end' && payload.status === 'done' && computer.jobsMode) {
+        const since = session.runStartedAt || 0
+        const mine = irisApplicationsLoad().filter(function (a) { return a.sessionId === session.id && (a.updated || a.at) >= since })
+        if (mine.length) {
+          const groups = [['applied', 'Applied'], ['needs_you', 'Needs you'], ['failed', 'Could not apply'], ['skipped', 'Skipped']].map(function (g) {
+            const these = mine.filter(function (a) { return a.status === g[0] })
+            if (!these.length) return ''
+            return g[1] + ' (' + these.length + '): ' + these.map(function (a) {
+              return (a.title || 'job') + (a.company ? ' at ' + a.company : '') + (g[0] !== 'applied' && a.note ? ' — ' + String(a.note).slice(0, 90) : '')
+            }).join('; ')
+          }).filter(Boolean)
+          payload = Object.assign({}, payload, { answer: (payload.answer || '') + '\n\nFrom the Applications list (this run):\n' + groups.join('\n') })
+        }
+      }
       if (type === 'remember' && payload.note && !payload.automatic) {
         irisSessionMemory(session).add('note', payload.note)
         if (session.projectId) irisProjectMemoryAdd(session.projectId, 'note', payload.note)
