@@ -190,3 +190,10 @@ test('pasted text is sorted in without anything added', () => {
   assert.deepStrictEqual(r.bank.skills[0].items, ['Python', 'Go'])
   assert.strictEqual(r.dropped.length, 2)
 })
+
+test('a decimal is not the end of a sentence in a cover letter', () => {
+  const bank = career.normalizeBank(SAMPLE)
+  const r = career.parseCoverLetter('I fixed 30+ crash reports from Firebase Crashlytics, raising crash-free sessions to 99.6%. I used Kotlin.', bank, { company: 'X', title: 'Y' })
+  assert.match(r.paragraphs[0], /to 99\.6%\. I used Kotlin\./)
+  assert.strictEqual(r.removed.length, 0)
+})

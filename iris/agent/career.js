@@ -1245,7 +1245,8 @@ function coverLetterMessages (bank, job) {
     '- 3 short paragraphs, 170-230 words in all. Plain, specific, no clichés ("I am thrilled", "passionate", "synergy").',
     '- Paragraph 1: the role and the one or two strongest reasons the person fits it.',
     '- Paragraph 2: two concrete things from the bank that match the job\'s main requirements (what they did and the result).',
-    '- Paragraph 3: availability or location if the bank says so, and a one-line close.',
+    '- Paragraph 3: availability and location only as the ANSWERS below say (nothing about availability if they',
+    '  do not), and a one-line close.',
     '- Every skill, tool, number, employer and result must be in the bank. Do not invent anything, and do not claim',
     '  experience with what the bank does not show.',
     '- No address block, no date, no greeting and no sign-off: Iris adds those.',
@@ -1257,7 +1258,11 @@ function coverLetterMessages (bank, job) {
     String(job.requirements || '(not given: judge from the title)').slice(0, 4000),
     '',
     'CAREER BANK:',
-    bankText(bank, 20000)
+    bankText(bank, 20000),
+    '',
+    'ANSWERS (the person\'s own words):',
+    (bank.answers.filter(function (a) { return a.value }).map(function (a) { return '  ' + a.label + ': ' + a.value }).join('\n') || '  (none)') +
+      (bank.basics.location ? '\n  Location: ' + bank.basics.location : '')
   ].join('\n')
   return [{ role: 'system', content: system }, { role: 'user', content: user }]
 }
@@ -1270,7 +1275,8 @@ const LETTER_WORDS = /^(i|i'm|i've|i'd|i'll|my|the|this|your|thank|thanks|please
  * does not have is taken out (listed in `removed`); the job's own company and title are allowed.
  */
 function parseCoverLetter (text, bank, job) {
-  const places = [bank.basics.location].concat(bank.experience.map(function (e) { return e.location }), bank.education.map(function (e) { return e.location + ' ' + e.school })).join(' ')
+  const places = [bank.basics.location].concat(bank.experience.map(function (e) { return e.location }), bank.education.map(function (e) { return e.location + ' ' + e.school }),
+    bank.answers.map(function (a) { return a.value })).join(' ')
   const all = bankText(bank) + ' ' + places + ' ' + (job && job.company || '') + ' ' + (job && job.title || '')
   const ctx = all.toLowerCase()
   const nums = numberSet(all)
@@ -1278,7 +1284,9 @@ function parseCoverLetter (text, bank, job) {
   const paras = String(text || '').replace(/\r/g, '').split(/\n\s*\n/).map(function (p) { return p.replace(/\s+/g, ' ').trim() })
     .filter(function (p) { return p && !/^(dear|hi |hello|sincerely|best regards|regards|kind regards)/i.test(p) })
     .map(function (p) {
-      const sentences = p.match(/[^.!?]+[.!?]+["')]*\s*|[^.!?]+$/g) || [p]
+      // "99.6%" and "v2.1" are not sentence ends
+      const safe = p.replace(/(\d)\.(\d)/g, '$1\u0002$2')
+      const sentences = (safe.match(/[^.!?]+[.!?]+["')]*\s*|[^.!?]+$/g) || [safe]).map(function (x) { return x.replace(/\u0002/g, '.') })
       return sentences.filter(function (sent) {
         const bad = factTokens(sent).filter(function (t) {
           if (/^\d/.test(t)) return !nums.has(t) && !nums.has(t.replace(/[^0-9.]/g, ''))
