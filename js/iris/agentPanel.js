@@ -24,11 +24,12 @@ const SUGGESTIONS = [
   'What is the weather in Chicago today?',
   'Find 3 good recent papers on web agents, judge each by its abstract and download the PDFs',
   'Find the cheapest one-way flight from Chicago to Denver next Friday',
+  'Find jobs that fit my career profile and apply with a resume tailored to each',
   'Summarize this page in three bullet points'
 ]
 
 const THINKING_LABELS = { off: 'Fast', auto: 'Auto', low: 'Balanced', medium: 'Careful', full: 'Deep' }
-const THINKING_HELP = 'How long Iris thinks before each action. Fast is quickest; Deep is slowest but most careful.'
+const THINKING_HELP = 'How long Iris thinks before each action. Fast is quickest; Auto thinks only on new pages and after a miss; Deep is slowest but most careful.'
 
 const RUN_MODES = [
   { value: 'once', label: 'Once' },
