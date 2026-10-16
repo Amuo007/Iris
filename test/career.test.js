@@ -203,3 +203,15 @@ test('"C/C++" is checked as C and C++', () => {
   const r = career.parseTailorReply(JSON.stringify({ summary: 'Engineer with embedded C/C++ work on STM32 and ESP32.', experience: [{ id: 'E1', bullets: ['E1.3'] }] }), bank, {}, parseObjectLoose)
   assert.strictEqual(r.summary, 'Engineer with embedded C/C++ work on STM32 and ESP32.')
 })
+
+test('Awesome-CV and moderncv resumes are read too', () => {
+  const awesome = career.templatize(fs.readFileSync(path.join(__dirname, 'fixtures', 'resume-awesome.tex'), 'utf8'))
+  assert.deepStrictEqual(awesome.report.map(r => r.kind + ':' + r.status), ['experience:mapped', 'education:mapped', 'skills:mapped'])
+  assert.deepStrictEqual(awesome.bank.experience[0], { title: 'Backend Engineer', company: 'Harbor Logistics', location: 'Vancouver, BC', dates: 'Jun. 2023 - Present', bullets: ['Built a shipment tracking API in Go serving 3M requests per day', 'Moved batch jobs to Kubernetes CronJobs and cut costs by 28%', 'Led the migration from MySQL 5.7 to PostgreSQL 15'] })
+  assert.deepStrictEqual(awesome.bank.skills[1], { group: 'Infrastructure', items: ['Kubernetes', 'Docker', 'Terraform', 'AWS'] })
+  const mcv = career.templatize(fs.readFileSync(path.join(__dirname, 'fixtures', 'resume-moderncv.tex'), 'utf8'))
+  assert.deepStrictEqual(mcv.report.map(r => r.status), ['mapped', 'mapped', 'mapped'])
+  assert.strictEqual(mcv.bank.experience[0].bullets.length, 2)
+  assert.strictEqual(mcv.bank.experience[0].location, 'Ottawa', 'a lone city is still the place, not frozen into the template')
+  assert.match(mcv.template, /\\cventry\{<<dates>>\}\{<<title>>\}\{<<company>>\}\{<<location>>\}/)
+})

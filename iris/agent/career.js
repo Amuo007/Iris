@@ -496,7 +496,12 @@ function lineCalls (text) {
     for (;;) {
       // arguments may sit on the following lines (\resumeSubheading⏎ {Title}{Dates}⏎ {Company}{City})
       let j = i
-      while (j < text.length && /\s/.test(text[j]) && !(text[j] === '\n' && text[j + 1] === '\n')) j++
+      for (;;) {
+        while (j < text.length && /\s/.test(text[j]) && !(text[j] === '\n' && text[j + 1] === '\n')) j++
+        // a comment between arguments ("{Backend Engineer} % Job title")
+        if (text[j] === '%') { const nl = text.indexOf('\n', j); if (nl === -1) break; j = nl + 1; continue }
+        break
+      }
       if (text[j] === '[') { const close = text.indexOf(']', j); if (close === -1) break; j = close + 1; while (/\s/.test(text[j] || '')) j++ }
       if (text[j] !== '{') break
       const g = readGroup(text, j)
@@ -552,7 +557,15 @@ function findBullets (entryText, bulletMacro, skipFirst) {
       const textStart = m.index + m[0].length
       let lineEnd = entryText.indexOf('\n', textStart)
       if (lineEnd === -1) lineEnd = entryText.length
-      out.push({ lineStart: lineStart, lineEnd: lineEnd, arg: { start: textStart - 1, end: lineEnd + 1, content: entryText.slice(textStart, lineEnd) }, plainLine: true })
+      // "\item {text}" keeps its braces in the template; "\item text}" (last item inside an argument) keeps the brace after it
+      const line = entryText.slice(textStart, lineEnd)
+      if (line[0] === '{') {
+        const g = readGroup(entryText, textStart)
+        if (g && g.end <= lineEnd) { out.push({ lineStart: lineStart, lineEnd: lineEnd, arg: g, call: { braced: true } }); continue }
+      }
+      const tail = /(\}+\s*)$/.exec(line)
+      const textEnd = tail && !/\{/.test(line) ? lineEnd - tail[1].length : lineEnd
+      out.push({ lineStart: lineStart, lineEnd: lineEnd, arg: { start: textStart - 1, end: textEnd + 1, content: entryText.slice(textStart, textEnd) }, plainLine: true, tail: entryText.slice(textEnd, lineEnd) })
     }
   }
   return out
@@ -587,6 +600,13 @@ function mapColumns (kind, entries) {
   } else if (kind === 'projects') {
     if (rest.length) pick('name', rest[0])
     if (rest.length > 1) pick('tech', rest[1])
+  }
+  // a short text column left over ("Ottawa") is the place, when no column was recognised as one
+  if (!taken.has('location') && kind !== 'projects') {
+    for (let j = 0; j < n; j++) {
+      const vals = col(j).filter(Boolean)
+      if (!fields[j] && vals.length && vals.every(function (v) { return v.split(/\s+/).length <= 4 && !/\d/.test(v) && !/\*\*|\\/.test(v) })) { pick('location', j); break }
+    }
   }
   return fields
 }
@@ -649,7 +669,14 @@ function templatizeEntries (kind, body) {
   })
   const bulletMacro = inner.length ? mostCommon(inner) : null
 
-  const fields = mapColumns(kind, entries)
+  // bullets may live inside one of the heading's own arguments (Awesome-CV, moderncv)
+  const bulletArg = entries[0].args.findIndex(function (a, j) {
+    return entries.some(function (e) { return e.args[j] && /\\item\b/.test(e.args[j].content) })
+  })
+  if (bulletArg !== -1) entries.forEach(function (e) { e.argsForFields = e.args.map(function (a, j) { return j === bulletArg ? { content: '' } : a }) })
+  const fields = mapColumns(kind, entries.map(function (e) { return { args: e.argsForFields || e.args } }))
+  if (bulletArg !== -1) fields[bulletArg] = null
+  const bulletsFrom = function (e) { return bulletArg !== -1 && e.args[bulletArg] ? e.args[bulletArg].start - e.start : e.head.end - e.start }
   const values = entries.map(function (e) {
     const v = {}
     e.args.forEach(function (a, j) {
@@ -659,16 +686,14 @@ function templatizeEntries (kind, body) {
       }
       if (fields[j]) v[fields[j]] = latexToPlain(a.content).replace(/^\*\*(.*)\*\*$/, '$1')
     })
-    const headEnd = e.head.end - e.start
-    v.bullets = findBullets(e.text, bulletMacro, headEnd).map(function (b) { return latexToPlain(b.arg.content) }).filter(Boolean)
+    v.bullets = findBullets(e.text, bulletArg !== -1 ? null : bulletMacro, bulletsFrom(e)).map(function (b) { return latexToPlain(b.arg.content) }).filter(Boolean)
     return v
   })
 
   // the entry with bullets (if any) is the model for every entry
   const modelIndex = Math.max(0, values.findIndex(function (v) { return v.bullets.length > 0 }))
   const model = entries[modelIndex]
-  const headEnd = model.head.end - model.start
-  const bullets = findBullets(model.text, bulletMacro, headEnd)
+  const bullets = findBullets(model.text, bulletArg !== -1 ? null : bulletMacro, bulletsFrom(model))
   const ranges = []
   model.args.forEach(function (a, j) {
     const s = a.start - model.start + 1
@@ -688,6 +713,8 @@ function templatizeEntries (kind, body) {
     const argE = first.plainLine ? lineTpl.length : first.arg.end - first.lineStart - 1
     lineTpl = lineTpl.slice(0, argS) + '<<text>>' + lineTpl.slice(argE)
     if (first.plainLine) lineTpl = model.text.slice(first.lineStart, first.arg.start + 1) + '<<text>>'
+    // the last item may carry the argument's closing brace: it belongs after the list, not on every item
+    const lastTail = lastB.tail || ''
     // the list's own opening and closing lines are kept only when there are bullets
     const before = model.text.slice(0, first.lineStart)
     const opener = lastLine(before)
@@ -703,7 +730,7 @@ function templatizeEntries (kind, body) {
         blockEnd = nl === -1 ? model.text.length : nl
       }
     }
-    const inside = model.text.slice(blockStart, first.lineStart) + '%%IRIS:each ' + listName + '\n' + lineTpl + '\n%%IRIS:end ' + listName + model.text.slice(lastB.lineEnd, blockEnd)
+    const inside = model.text.slice(blockStart, first.lineStart) + '%%IRIS:each ' + listName + '\n' + lineTpl + '\n%%IRIS:end ' + listName + (lastTail ? '\n' + lastTail.trim() : '') + model.text.slice(lastB.lineEnd, blockEnd)
     ranges.push({ start: blockStart, end: blockEnd, text: '%%IRIS:if ' + listName + '\n' + inside + '\n%%IRIS:endif ' + listName })
   }
   let entryTpl = replaceRanges(model.text, ranges)
@@ -746,7 +773,22 @@ function templatizeSkills (body) {
     const groupTpl = /:\s*$/.test(g.content) ? '<<group>>:' : '<<group>>'
     rows.push({ lineStart: lineStart, lineEnd: lineEnd, group: group, items: splitItems(latexToPlain(itemsText).replace(/\*\*/g, '')), tpl: body.slice(lineStart, g.start + 1) + groupTpl + '}' + itemsTpl })
   }
-  if (!rows.length) return null
+  if (!rows.length) {
+    // \cvskill{Languages}{Go, Python} (Awesome-CV), \cvitem{Tools}{Docker, dbt} (moderncv): one per group
+    const calls = lineCalls(body).filter(function (c) { return c.args.length === 2 && !NOT_HEADINGS.has(c.name) })
+    const name = calls.length ? mostCommon(calls.map(function (c) { return c.name })) : null
+    const groupCalls = calls.filter(function (c) { return c.name === name })
+    if (!groupCalls.length) return null
+    const f = groupCalls[0]
+    const l = groupCalls[groupCalls.length - 1]
+    const a0 = f.args[0]
+    const a1 = f.args[1]
+    const tpl = body.slice(f.lineStart, a0.start + 1) + '<<group>>' + body.slice(a0.end - 1, a1.start + 1) + '<<items>>' + body.slice(a1.end - 1, f.lineEnd)
+    return {
+      template: body.slice(0, f.lineStart) + '%%IRIS:each skills\n' + tpl + '\n%%IRIS:end skills' + body.slice(l.lineEnd),
+      items: groupCalls.map(function (c) { return { group: latexToPlain(c.args[0].content).replace(/\*\*/g, ''), items: splitItems(latexToPlain(c.args[1].content).replace(/\*\*/g, '')) } })
+    }
+  }
   const first = rows[0]
   const lastR = rows[rows.length - 1]
   const template = body.slice(0, first.lineStart) + '%%IRIS:each skills join=\\\\\n' + first.tpl + '\n%%IRIS:end skills' + body.slice(lastR.lineEnd)
@@ -807,7 +849,8 @@ function templatize (tex) {
   if (begin === -1 || finish === -1) return { ok: false, error: 'This does not look like a complete LaTeX document (no \\begin{document} … \\end{document}).' }
   const body = src.slice(begin, finish)
   const heads = []
-  const re = /\\section\*?\s*\{/g
+  // \section (most templates), \cvsection (Awesome-CV), \resumeSection / \sectionTitle (others)
+  const re = /\\(?:section|cvsection|cvSection|resumeSection|resumesection|sectionTitle|sectiontitle)\*?\s*\{/g
   let m
   while ((m = re.exec(body)) !== null) {
     const g = readGroup(body, m.index + m[0].length - 1)

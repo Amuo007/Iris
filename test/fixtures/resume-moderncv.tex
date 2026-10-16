@@ -1,0 +1,29 @@
+\documentclass[11pt,a4paper,sans]{moderncv}
+\moderncvstyle{classic}
+\moderncvcolor{blue}
+\usepackage[scale=0.8]{geometry}
+\name{Riley}{Chen}
+\title{Resume}
+\email{riley@example.com}
+\begin{document}
+\makecvtitle
+
+\section{Experience}
+\cventry{2024--Present}{Data Engineer}{Rideau Analytics}{Ottawa}{}{%
+\begin{itemize}%
+\item Built Airflow pipelines moving 3 TB per day into Snowflake
+\item Wrote dbt models that cut month-end close from 5 days to 2
+\end{itemize}}
+\cventry{2022--2023}{Research Assistant}{uOttawa NLP Lab}{Ottawa}{}{%
+\begin{itemize}%
+\item Fine-tuned BERT for French legal text classification
+\end{itemize}}
+
+\section{Education}
+\cventry{2019--2023}{BSc Computer Science}{University of Ottawa}{Ottawa}{\textit{cum laude}}{}
+
+\section{Skills}
+\cvitem{Languages}{Python, SQL, Go}
+\cvitem{Tools}{Airflow, dbt, Snowflake, Spark, Docker}
+
+\end{document}

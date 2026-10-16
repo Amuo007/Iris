@@ -1,0 +1,62 @@
+%!TEX TS-program = xelatex
+\documentclass[11pt, a4paper]{awesome-cv}
+\geometry{left=1.4cm, top=.8cm, right=1.4cm, bottom=1.8cm, footskip=.5cm}
+\colorlet{awesome}{awesome-red}
+\name{Alex}{Morgan}
+\position{Software Engineer}
+\email{alex@example.com}
+\begin{document}
+\makecvheader
+
+\cvsection{Experience}
+\begin{cventries}
+  \cventry
+    {Backend Engineer} % Job title
+    {Harbor Logistics} % Organization
+    {Vancouver, BC} % Location
+    {Jun. 2023 - Present} % Date(s)
+    {
+      \begin{cvitems} % Description(s) of tasks/responsibilities
+        \item {Built a shipment tracking API in Go serving 3M requests per day}
+        \item {Moved batch jobs to Kubernetes CronJobs and cut costs by 28\%}
+        \item {Led the migration from MySQL 5.7 to PostgreSQL 15}
+      \end{cvitems}
+    }
+  \cventry
+    {Software Developer Intern} % Job title
+    {Northern Lights Games} % Organization
+    {Montreal, QC} % Location
+    {May 2022 - Aug. 2022} % Date(s)
+    {
+      \begin{cvitems} % Description(s) of tasks/responsibilities
+        \item {Wrote gameplay tools in C\# for Unity}
+        \item {Reduced build times by 40\% with caching in Jenkins}
+      \end{cvitems}
+    }
+\end{cventries}
+
+\cvsection{Education}
+\begin{cventries}
+  \cventry
+    {B.Sc. in Computer Science} % Degree
+    {University of British Columbia} % Institution
+    {Vancouver, BC} % Location
+    {Sep. 2019 - May 2023} % Date(s)
+    {
+      \begin{cvitems} % Description(s) bullet points
+        \item {Dean's Honour List}
+      \end{cvitems}
+    }
+\end{cventries}
+
+\cvsection{Skills}
+\begin{cvskills}
+  \cvskill
+    {Languages} % Category
+    {Go, Python, C\#, SQL} % Skills
+  \cvskill
+    {Infrastructure} % Category
+    {Kubernetes, Docker, Terraform, AWS} % Skills
+\end{cvskills}
+
+\end{document}
