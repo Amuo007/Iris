@@ -1479,7 +1479,8 @@ IrisComputer.prototype.act = async function (action) {
   this.boxClick = null
   if (action.type === 'type' && action.x !== undefined && opened && Math.abs(opened.x - action.x) <= 30 && Math.abs(opened.y - action.y) <= 20) {
     sameBox = true
-    real = Object.assign({}, real)
+    // still replace what is in it (a search that found nothing would otherwise get the new words added to it)
+    real = Object.assign({}, real, action.clear === false ? {} : { clear: true })
     delete real.x
     delete real.y
   }
@@ -2064,6 +2065,9 @@ function irisSessionList () {
   return list.slice(0, 300)
 }
 
+/* thoughts in a row that say a field "still has an error" (see irisRecord) */
+var irisStaleErrors = 0
+
 /* Keep a compact, replayable record of what the panel showed. */
 function irisRecord (session, type, p) {
   if (!session) return
@@ -2083,6 +2087,15 @@ function irisRecord (session, type, p) {
     it.title = p.title
   } else if (type === 'thought') {
     stepItem(p.step).thought = p.thought
+    // "shows X but still has an error" two steps running: the value is set, the red text stays until Submit
+    // (real run: a Greenhouse Degree box re-picked six times, once ending on the wrong degree)
+    if (/\bstill (has|shows|showing|flag(ged|s)?)\b([^.]{0,40}\b(error|red|required))?|lingering (error|red)|error (is )?still/i.test(p.thought || '')) {
+      irisStaleErrors++
+      if (irisStaleErrors >= 2 && irisComputer) {
+        irisComputer.notes = (irisComputer.notes || []).concat('Stop re-picking fields that already show the right value: on this kind of form a red message stays until the form is submitted again. Fill the fields that are still EMPTY, then press Submit; after that, fix only what is still red.')
+        irisStaleErrors = 0
+      }
+    } else irisStaleErrors = 0
   } else if (type === 'action' && !p.automatic) {
     // where it pointed too (screenshot pixels), so a review of a real run can tell which click or typing missed
     stepItem(p.step).actions.push({ type: p.action.type, text: p.action.type === 'type' ? p.action.text : undefined, url: p.action.url, x: p.action.x, y: p.action.y, description: p.description })
