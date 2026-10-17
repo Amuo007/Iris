@@ -237,10 +237,11 @@ function planInputEvents (action, opts) {
       // Typing replaces what is in the field (the usual intent), unless clear:false says append.
       const replace = action.clear !== false
       if (action.x !== undefined && action.y !== undefined) {
-        // focus the field first
+        // focus the field first; a dropdown that opens a long list on that click (250 countries with flags)
+        // dropped the first letters when typing began 120 ms later ("ed States" on a real Greenhouse form)
         add(mouseMove(action.x, action.y))
         add(mouseDown(action.x, action.y, 'left', 1), 20)
-        add(mouseUp(action.x, action.y, 'left', 1), 120)
+        add(mouseUp(action.x, action.y, 'left', 1), 350)
       }
       if (replace && (action.x !== undefined || action.clear === true)) {
         // Edit ▸ Select All, then the typed text replaces the selection
