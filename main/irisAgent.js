@@ -1390,7 +1390,7 @@ IrisComputer.prototype.act = async function (action) {
     case 'dialog': {
       if (!this.pendingDialog) return { ok: false, error: 'no dialog is open' }
       try {
-        await wc.debugger.sendCommand('Page.handleJavaScriptDialog', { accept: !!action.accept, promptText: action.text || '' })
+        await wc.debugger.sendCommand('Page.handleJavaScriptDialog', { accept: !!action.accept, promptText: action.text || '' }, this.pendingDialog.sessionId)
       } catch (e) {
         return { ok: false, error: 'could not answer the dialog: ' + e.message }
       }
@@ -1409,7 +1409,7 @@ IrisComputer.prototype.act = async function (action) {
       if (!file) file = irisFindFile(action.file)
       if (!file) return { ok: false, error: 'no file named "' + action.file + '" in Downloads, Desktop or Documents' }
       try {
-        await wc.debugger.sendCommand('DOM.setFileInputFiles', { files: [file], backendNodeId: chooser.backendNodeId })
+        await wc.debugger.sendCommand('DOM.setFileInputFiles', { files: [file], backendNodeId: chooser.backendNodeId }, chooser.sessionId)
       } catch (e) {
         return { ok: false, error: 'could not choose the file: ' + e.message }
       }
@@ -1460,7 +1460,7 @@ IrisComputer.prototype.act = async function (action) {
   // real forms embedded from another site — so leave it out and say so.
   let notTextBox = false
   if (action.type === 'type' && action.x !== undefined && action.clear !== false && this.cursorSeen && this.cursorType !== null) {
-    wc.sendInputEvent({ type: 'mouseMove', x: Math.round(action.x), y: Math.round(action.y), movementX: 0, movementY: 0 })
+    await irisSendInput(wc, { type: 'mouseMove', x: Math.round(action.x), y: Math.round(action.y), movementX: 0, movementY: 0 })
     await sleep(30)
     const shape = this.cursorType
     if (shape === 'default' || shape === 'pointer' || shape === 'hand') {
@@ -1475,7 +1475,7 @@ IrisComputer.prototype.act = async function (action) {
   try {
     for (const step of plan) {
       if (step.command) wc[step.command]() // Edit-menu command: selectAll / copy / paste / cut / undo / redo
-      else wc.sendInputEvent(step.event)
+      else await irisSendInput(wc, step.event)
       if (step.delayMs) await sleep(step.delayMs)
     }
   } finally {
@@ -1507,11 +1507,104 @@ IrisComputer.prototype.act = async function (action) {
 const IRIS_SNAP_RINGS = [3, 6, 10]
 /* controls that show the plain arrow on purpose: aiming at one must never slide onto a link beside it */
 const IRIS_ARROW_CONTROLS = /check ?box|tick|radio|toggle|switch|dropdown|drop-down|select (box|menu)|slider|option|captcha|canvas|map|image|picture|photo|calendar|date picker/i
+/*
+ * Mouse input goes in through the browser's own input path (the DevTools Input domain) when it can.
+ * webContents.sendInputEvent hands a mouse event straight to the top page, so a click on a form
+ * embedded from another site (Greenhouse inside careerpuck.com, abnormal.ai, mongodb.com — seen on a
+ * real run) never reached the form: the field was not focused and the typing went nowhere. The Input
+ * domain hit-tests like a real mouse and reaches embedded frames. Same events, same coordinates; no
+ * script runs in the page. Without the DevTools channel it falls back to sendInputEvent.
+ */
+const IRIS_CDP_MOUSE = { mouseMove: 'mouseMoved', mouseDown: 'mousePressed', mouseUp: 'mouseReleased', mouseWheel: 'mouseWheel' }
+const irisMouseHeld = new WeakMap()
+
+function irisCdpModifiers (mods) {
+  let m = 0
+  ;(mods || []).forEach(function (k) {
+    k = String(k).toLowerCase()
+    if (k === 'alt' || k === 'option') m |= 1
+    else if (k === 'control' || k === 'ctrl') m |= 2
+    else if (k === 'meta' || k === 'command' || k === 'cmd') m |= 4
+    else if (k === 'shift') m |= 8
+  })
+  return m
+}
+
+/* Keys by the names inputPlan uses: [key, code, Windows virtual key code] for the Input domain */
+const IRIS_CDP_KEYS = {
+  Return: ['Enter', 'Enter', 13], Tab: ['Tab', 'Tab', 9], Backspace: ['Backspace', 'Backspace', 8], Delete: ['Delete', 'Delete', 46],
+  Escape: ['Escape', 'Escape', 27], Insert: ['Insert', 'Insert', 45], Space: [' ', 'Space', 32],
+  Up: ['ArrowUp', 'ArrowUp', 38], Down: ['ArrowDown', 'ArrowDown', 40], Left: ['ArrowLeft', 'ArrowLeft', 37], Right: ['ArrowRight', 'ArrowRight', 39],
+  PageUp: ['PageUp', 'PageUp', 33], PageDown: ['PageDown', 'PageDown', 34], Home: ['Home', 'Home', 36], End: ['End', 'End', 35],
+  Comma: [',', 'Comma', 188], Period: ['.', 'Period', 190], Slash: ['/', 'Slash', 191], Semicolon: [';', 'Semicolon', 186]
+}
+
+function irisCdpKey (name) {
+  if (IRIS_CDP_KEYS[name]) return IRIS_CDP_KEYS[name]
+  if (/^F([1-9]|1[0-9]|2[0-4])$/.test(name)) return [name, name, 111 + Number(name.slice(1))]
+  if (/^[A-Z]$/.test(name)) return [name.toLowerCase(), 'Key' + name, name.charCodeAt(0)]
+  if (/^[0-9]$/.test(name)) return [name, 'Digit' + name, name.charCodeAt(0)]
+  return null
+}
+
+/* The same keyboard event for the Input domain: it goes to the focused frame, embedded or not. */
+function irisCdpKeyEvent (ev) {
+  const modifiers = irisCdpModifiers(ev.modifiers)
+  if (ev.type === 'char') {
+    const text = ev.text || ev.keyCode
+    return { type: 'char', text: text, unmodifiedText: ev.unmodifiedText || text, modifiers: modifiers }
+  }
+  const k = irisCdpKey(ev.keyCode)
+  if (!k) return null
+  return { type: ev.type === 'keyDown' ? 'rawKeyDown' : 'keyUp', key: k[0], code: k[1], windowsVirtualKeyCode: k[2], nativeVirtualKeyCode: k[2], modifiers: modifiers }
+}
+
+async function irisSendInput (wc, ev) {
+  const kind = IRIS_CDP_MOUSE[ev.type]
+  if (!wc.debugger.isAttached()) return wc.sendInputEvent(ev)
+  if (!kind) {
+    // keyboard: sendInputEvent hands keys to the top page as well, so typing never reached a field in an
+    // embedded form even once it was focused
+    const key = irisCdpKeyEvent(ev)
+    if (!key) return wc.sendInputEvent(ev)
+    try {
+      await Promise.race([wc.debugger.sendCommand('Input.dispatchKeyEvent', key), sleep(1500)])
+    } catch (e) {
+      DBUG('Input.dispatchKeyEvent failed (' + e.message + '); sendInputEvent instead')
+      wc.sendInputEvent(ev)
+    }
+    return
+  }
+  const p = { type: kind, x: Math.round(ev.x), y: Math.round(ev.y), modifiers: irisCdpModifiers(ev.modifiers), pointerType: 'mouse' }
+  if (ev.type === 'mouseWheel') {
+    // sendInputEvent's deltas point the way the content moves; the Input domain's the way the wheel turns
+    p.deltaX = -(ev.deltaX || 0)
+    p.deltaY = -(ev.deltaY || 0)
+  } else if (ev.type === 'mouseMove') {
+    const held = irisMouseHeld.get(wc)
+    p.button = held || 'none'
+    p.buttons = held === 'left' ? 1 : held === 'right' ? 2 : held === 'middle' ? 4 : 0
+  } else {
+    p.button = ev.button || 'left'
+    p.clickCount = ev.clickCount || 1
+    p.buttons = ev.type === 'mouseDown' ? (p.button === 'left' ? 1 : p.button === 'right' ? 2 : 4) : 0
+    if (ev.type === 'mouseDown') irisMouseHeld.set(wc, p.button)
+    else irisMouseHeld.delete(wc)
+  }
+  // a click that opens a JavaScript dialog holds the page: do not wait on it for more than a moment
+  try {
+    await Promise.race([wc.debugger.sendCommand('Input.dispatchMouseEvent', p), sleep(1500)])
+  } catch (e) {
+    DBUG('Input.dispatchMouseEvent failed (' + e.message + '); sendInputEvent instead')
+    wc.sendInputEvent(ev)
+  }
+}
+
 IrisComputer.prototype.snapToTarget = async function (wc, action) {
   if (IRIS_ARROW_CONTROLS.test(action.intent || '')) return null
   const want = action.type === 'type' ? ['text', 'hand'] : ['hand', 'text']
   const look = async function (self, x, y) {
-    wc.sendInputEvent({ type: 'mouseMove', x: Math.round(x), y: Math.round(y), movementX: 0, movementY: 0 })
+    await irisSendInput(wc, { type: 'mouseMove', x: Math.round(x), y: Math.round(y), movementX: 0, movementY: 0 })
     await sleep(30)
     return self.cursorType
   }
@@ -1665,15 +1758,25 @@ IrisComputer.prototype.watch = function (wc) {
   const onCursor = function (event, type) { self.cursorType = type }
   self.cursorType = null
   wc.on('cursor-changed', onCursor)
-  const onMessage = function (event, method, params) {
+  // sessionId: set when the event comes from a form embedded from another site (its own DevTools session),
+  // so the answer (the file, OK/Cancel) goes back to that frame
+  const onMessage = function (event, method, params, sessionId) {
     if (method === 'Page.javascriptDialogOpening') {
-      self.pendingDialog = params
+      self.pendingDialog = Object.assign({}, params, { sessionId: sessionId || undefined })
     } else if (method === 'Page.javascriptDialogClosed') {
       self.pendingDialog = null
     } else if (method === 'Page.fileChooserOpened') {
-      self.pendingChooser = params
-    } else if (method === 'Page.frameNavigated' && params.frame && !params.frame.parentId) {
+      self.pendingChooser = Object.assign({}, params, { sessionId: sessionId || undefined })
+    } else if (method === 'Page.frameNavigated' && params.frame && !params.frame.parentId && !sessionId) {
       self.pendingChooser = null
+    } else if (method === 'Target.attachedToTarget' && params.targetInfo && params.targetInfo.type === 'iframe') {
+      // an embedded form from another site: its file picker must not open the real Finder dialog either
+      const sid = params.sessionId
+      wc.debugger.sendCommand('Page.enable', {}, sid).then(function () {
+        return wc.debugger.sendCommand('Page.setInterceptFileChooserDialog', { enabled: true }, sid)
+      }).then(function () {
+        return wc.debugger.sendCommand('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, sid)
+      }).catch(function (e) { DBUG('embedded frame setup failed: ' + e.message) })
     }
   }
   try {
@@ -1682,6 +1785,8 @@ IrisComputer.prototype.watch = function (wc) {
     wc.debugger.on('message', onMessage)
     wc.debugger.sendCommand('Page.enable').then(function () {
       return wc.debugger.sendCommand('Page.setInterceptFileChooserDialog', { enabled: true })
+    }).then(function () {
+      return wc.debugger.sendCommand('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true })
     }).catch(function (e) { DBUG('debugger setup failed: ' + e.message) })
   } catch (e) {
     this.attachedDebugger = false
