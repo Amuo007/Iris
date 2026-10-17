@@ -292,7 +292,33 @@ function irisRenderPrefs () {
   var p = irisCareer.prefs
   IRIS_PREF_FIELDS.forEach(function (f) { document.getElementById(f[0]).value = p[f[1]] === undefined ? '' : p[f[1]] })
   document.getElementById('iris-pref-submit').value = p.autoSubmit === false ? 'ask' : 'auto'
+  irisRenderTailor()
 }
+
+/* Tailoring on, or the user's own PDF as it is (then no fit check, so the cutoff does nothing) */
+function irisRenderTailor () {
+  var p = irisCareer.prefs
+  var tailor = p.tailor !== false
+  document.getElementById('checkbox-iris-pref-tailor').checked = tailor
+  document.getElementById('iris-own-resume-row').hidden = tailor
+  var cutoff = document.getElementById('iris-pref-cutoff')
+  cutoff.disabled = !tailor
+  cutoff.title = tailor ? '' : 'Only used when Iris tailors your resume (it rates the fit then)'
+  var file = p.resumeFile || ''
+  var help = document.getElementById('iris-own-resume-help')
+  help.textContent = file ? file.replace(/^\/Users\/[^/]+/, '~') : 'No file chosen yet. Choose the PDF Iris should upload to every application.'
+  document.getElementById('iris-own-resume-choose').textContent = file ? 'Choose another…' : 'Choose PDF…'
+  document.getElementById('iris-own-resume-show').hidden = !file
+}
+
+document.getElementById('checkbox-iris-pref-tailor').addEventListener('change', function () {
+  if (!irisCareer) return
+  irisCareer.prefs.tailor = this.checked
+  irisRenderTailor()
+  irisCareerScheduleSave()
+})
+document.getElementById('iris-own-resume-choose').addEventListener('click', function () { irisAction('ownResumeChoose') })
+document.getElementById('iris-own-resume-show').addEventListener('click', function () { irisAction('ownResumeShow') })
 
 IRIS_PREF_FIELDS.forEach(function (f) {
   var el = document.getElementById(f[0])
@@ -518,6 +544,15 @@ window.addEventListener('message', function (e) {
       (so.dropped && so.dropped.length ? ' Left out ' + so.dropped.length + ' line(s) that were not in your text: ' + so.dropped.slice(0, 3).join(' · ') : '')
     return
   }
+  if (d.action === 'ownResumeChoose') {
+    if (r.picked && irisCareer) {
+      irisCareer.prefs.resumeFile = r.picked
+      irisRenderTailor()
+      irisCareerScheduleSave()
+    }
+    return
+  }
+  if (d.action === 'ownResumeShow') return
   if (d.action === 'careerBackup') { irisCareerStatus.textContent = r.backedUp ? 'Saved a copy: ' + r.backedUp + ' (in your download folder)' : 'Could not save a copy.'; return }
   if (d.action === 'careerRestore') {
     if (r.error) { irisCareerStatus.textContent = r.error; return }

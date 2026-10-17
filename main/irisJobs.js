@@ -405,10 +405,23 @@ function irisJobsActive (task) {
   return irisCareerLib.isJobTask(task) && !irisCareerLib.bankIsEmpty(irisCareerLoad())
 }
 
+/*
+ * The user's own resume PDF when tailoring is off (Settings → Jobs → Applying): its path, '' when tailoring
+ * is off but no usable file is chosen, null when Iris tailors a resume for each job.
+ */
+function irisOwnResume (bank) {
+  const p = (bank || irisCareerLoad()).prefs
+  if (p.tailor) return null
+  return p.resumeFile && fs.existsSync(p.resumeFile) ? p.resumeFile : ''
+}
+
 function irisJobsPrompt (task, mode) {
   const nonStop = mode === 'continuous'
   const bank = irisCareerLoad()
   const p = bank.prefs
+  const own = irisOwnResume(bank)
+  const tailoring = own === null
+  const ownName = own ? path.basename(own) : ''
   const lines = ['JOBS — the user keeps a career profile in Iris (Settings → Jobs). Applying for one job:',
     '1. Find postings that match' + (p.roles ? ': ' + p.roles : ' the profile') + (p.locations ? '; places: ' + p.locations : '') + (p.workplace !== 'any' ? '; ' + p.workplace + ' only' : '') + '.',
     '   Company boards that need no account (boards.greenhouse.io, jobs.lever.co, jobs.ashbyhq.com) are quickest; Workday',
@@ -418,6 +431,7 @@ function irisJobsPrompt (task, mode) {
     '   ({"kind":"jobs","query":"jobs.lever.co/<company> <role words> <place>"}) lists the matching ones at once.',
     '   When the user names boards or job links, work only on those: once every opening there is handled, finish',
     '   with done — do not go looking on other boards or sites you know.',
+  ].concat(tailoring ? [
     '2. Open the posting and read all of it (scroll). Each screen you leave is gone (you see only the newest screenshot),',
     '   so save its must-haves with "remember", in the posting\'s own words, in the same reply as the scroll.',
     '3. tailor_resume {"company":str,"title":str,"requirements":str}: requirements = what the POSTING asks for, in its',
@@ -430,7 +444,21 @@ function irisJobsPrompt (task, mode) {
     '   reason, right away — several log_application in one "actions" list, in the same step as you decide.',
     '5. Otherwise apply: fill the form from My info and the answers below. When it asks for a resume, upload the PDF',
     '   tailor_resume made — even when one is already attached (sites that remember you show your last one, with the',
-    '   same name): remove or replace it. Answer every question truthfully from the profile and the answers; never claim a skill or',
+    '   same name): remove or replace it.'
+  ] : [
+    '2. Open the posting and go straight to its application form (below the posting, or behind an "Apply" button).',
+    '3. No tailor_resume and no fit check: the user turned tailoring off, and their own resume goes out as it is.',
+    '4. Jobs you rule out from a list without opening them (wrong place, role or level): log each as skipped with the',
+    '   reason, right away — several log_application in one "actions" list, in the same step as you decide.',
+    '5. Apply: fill the form from My info and the answers below. When it asks for a resume, ' + (own
+      ? 'upload the user\'s own PDF with {"type":"upload","file":"resume"} (' + ownName + ')'
+      : 'upload the user\'s resume PDF (no file is chosen in Settings → Jobs: pick the one with the user\'s name from the file picker\'s recent files; none there → needs_you)') +
+      ' — even when one is already attached (sites that remember you show your last one, with the same name): remove or replace it.'
+  ]).concat([
+    '   Fill the form on the page itself: never "Autofill with MyGreenhouse", "Apply with LinkedIn / Indeed / Google" or any',
+    '   other button that signs in. A file field\'s button is "Attach" / "Upload" / "Choose file" — never Dropbox, Google',
+    '   Drive or "Enter manually".',
+    '   Answer every question truthfully from the profile and the answers; never claim a skill or',
     '   experience the profile does not show. "Do you have X?" for a professional credential (a security clearance, a',
     '   certification, a degree) the profile does not show: the true answer is No. Personal facts the profile cannot',
     '   know (a driver\'s licence, a car, willingness to travel or relocate, notice period) come from the answers below;',
@@ -454,7 +482,7 @@ function irisJobsPrompt (task, mode) {
     '   a question); failed when the site broke. Then the next job.',
     '   log_application {"status":…} takes company, title and url of the job you were on. When that was the last job to',
     '   handle, send log_application and done in one "actions" list.'
-  ]
+  ])
   // what changes while Iris works goes in the live part (sent last, so the cached start stays the same)
   const live = []
   if (p.dailyLimit > 0) {
@@ -578,6 +606,24 @@ function irisJobsSettingsAction (action, args) {
         else shell.showItemInFolder(irisLastPreview)
       }
       return Promise.resolve({ ok: true })
+    case 'ownResumeChoose': {
+      // the page keeps the path in the profile it saves (so a save in flight cannot undo it)
+      const current = irisCareerLoad().prefs.resumeFile
+      // IRIS_RESUME_PICK (tests only): the file the dialog would return
+      return (process.env.IRIS_RESUME_PICK ? Promise.resolve({ canceled: false, filePaths: [process.env.IRIS_RESUME_PICK] }) : dialog.showOpenDialog(windows.getCurrent(), {
+        title: 'Choose your resume (PDF)',
+        properties: ['openFile'],
+        filters: [{ name: 'PDF', extensions: ['pdf'] }],
+        defaultPath: current && fs.existsSync(current) ? current : app.getPath('desktop')
+      })).then(function (pick) {
+        return { picked: !pick.canceled && pick.filePaths[0] ? pick.filePaths[0] : '' }
+      })
+    }
+    case 'ownResumeShow': {
+      const file = irisCareerLoad().prefs.resumeFile
+      if (file && fs.existsSync(file)) shell.showItemInFolder(file)
+      return Promise.resolve({ shown: !!(file && fs.existsSync(file)) })
+    }
     case 'resumeDirChoose':
       return dialog.showOpenDialog(windows.getCurrent(), { properties: ['openDirectory', 'createDirectory'], defaultPath: irisResumeDir() }).then(function (pick) {
         if (!pick.canceled && pick.filePaths[0]) settings.set('irisResumeDir', pick.filePaths[0])
@@ -587,7 +633,7 @@ function irisJobsSettingsAction (action, args) {
       if (irisIsBusy()) return Promise.resolve({ started: false, error: 'Iris is busy with another task. Stop it first.' })
       if (irisCareerLib.bankIsEmpty(irisCareerLoad())) return Promise.resolve({ started: false, error: 'Fill in your career profile first.' })
       // the browser UI opens a fresh tab and starts it there, like a scheduled task
-      broadcast('iris-agent-scheduled-run', { task: 'Find jobs that match my career profile and apply to them one by one, with a resume tailored to each. Keep going until I stop you.', mode: 'continuous' })
+      broadcast('iris-agent-scheduled-run', { task: 'Find jobs that match my career profile and apply to them one by one' + (irisOwnResume() === null ? ', with a resume tailored to each' : ', with my own resume') + '. Keep going until I stop you.', mode: 'continuous' })
       return Promise.resolve({ started: true })
     }
     case 'applicationsExport': {

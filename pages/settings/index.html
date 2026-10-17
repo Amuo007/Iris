@@ -375,6 +375,23 @@
           <input type="number" id="iris-pref-limit" min="0" max="500" />
         </div>
       </div>
+      <div class="iris-row-setting">
+        <div>
+          <div class="iris-row-title">Tailor my resume for each job</div>
+          <div class="iris-row-help">On: Iris builds a one-page resume for each posting and checks the fit first. Off: your own PDF goes out as it is, with no fit check.</div>
+        </div>
+        <label class="iris-daily-toggle"><input type="checkbox" id="checkbox-iris-pref-tailor" /> On</label>
+      </div>
+      <div class="iris-row-setting" id="iris-own-resume-row" hidden>
+        <div>
+          <div class="iris-row-title">My resume</div>
+          <div class="iris-row-help" id="iris-own-resume-help">No file chosen yet.</div>
+        </div>
+        <div class="iris-row-buttons">
+          <button class="iris-button" id="iris-own-resume-choose" type="button">Choose PDF…</button>
+          <button class="iris-button" id="iris-own-resume-show" type="button" hidden>Show in Finder</button>
+        </div>
+      </div>
       <div class="iris-row-title iris-subtitle">Answers for application forms</div>
       <div class="iris-row-help">Leave one empty and Iris asks you when a form needs it. Voluntary questions (gender, race, veteran, disability) left empty are declined.</div>
       <div id="iris-career-answers" class="iris-rows"></div>

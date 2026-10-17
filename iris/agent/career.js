@@ -61,7 +61,9 @@ const DEFAULT_PREFS = {
   fitCutoff: 60, // below this match score a job is skipped
   autoSubmit: true, // false: Iris asks before it submits each application
   dailyLimit: 0, // 0 = no limit
-  summary: true // write a short summary line at the top when the template has one
+  summary: true, // write a short summary line at the top when the template has one
+  tailor: true, // false: no new resume per job, no fit check; the user's own PDF goes out as it is
+  resumeFile: '' // that PDF (used when tailor is false)
 }
 
 function normalizeBank (raw) {
@@ -72,6 +74,8 @@ function normalizeBank (raw) {
   prefs.dailyLimit = Math.max(0, Math.round(Number(prefs.dailyLimit) || 0))
   prefs.autoSubmit = prefs.autoSubmit !== false
   prefs.summary = prefs.summary !== false
+  prefs.tailor = prefs.tailor !== false
+  prefs.resumeFile = typeof prefs.resumeFile === 'string' ? prefs.resumeFile.trim().slice(0, 1000) : ''
   if (['any', 'remote', 'hybrid', 'onsite'].indexOf(prefs.workplace) === -1) prefs.workplace = 'any'
   ;['roles', 'locations', 'salary'].forEach(function (k) { prefs[k] = str(prefs[k], 300) })
 
