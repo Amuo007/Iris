@@ -334,3 +334,8 @@ test('years with each skill come from the jobs that mention it', () => {
   assert.strictEqual(y.AWS, 0.3)
   assert.strictEqual(y.Zephyr, undefined, 'a skill no job mentions has no years')
 })
+
+test('a job form without the word apply is still a job task', () => {
+  assert.ok(career.isJobTask('Finish the Lyft Software Engineer application (job 2 of my list) that is half filled in tab 1'))
+  assert.ok(!career.isJobTask('The application crashed when I opened the settings'))
+})

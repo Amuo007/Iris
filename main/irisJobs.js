@@ -476,7 +476,9 @@ function irisJobsPrompt (task, mode) {
       ? '   Only the user can finish it (a CAPTCHA that stays, a login you have no account for, a required question or file the profile does not have): log_application {"status":"needs_you","note":"<what is missing>"} — Iris tells the user — and go on to the next job. Do not wait.'
       : '   A required question you cannot answer from them, a CAPTCHA that stays, or a login you cannot do: ask_user.',
     '   Optional fields with no saved answer: leave them empty (no need to scroll back to them). Voluntary',
-    '   self-identification (gender, race, veteran, disability): leave empty unless required; then "Decline to self-identify".',
+    '   self-identification (gender, race, Hispanic/Latino, veteran, disability): use the saved answer when there is one',
+    '   (a race answer that names no Hispanic or Latino origin is No to "Are you Hispanic/Latino?"); with none, leave it',
+    '   empty unless required, then "Decline to self-identify".',
     '   "How did you hear about us?": where you found the posting (the company\'s own site → Company Website; a job board →',
     '   that board, or Job Board); if none fits, Other.',
     '   Cover letter optional: skip it. Required as a file: cover_letter {"company":str,"title":str,"requirements":str} makes',

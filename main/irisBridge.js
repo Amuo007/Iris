@@ -126,7 +126,7 @@ async function irisBridgeZoom (args) {
 }
 
 /* Tools that only read Iris's own data may run while Iris works; the page is Iris's then. */
-const IRIS_BRIDGE_READ_ONLY = ['tabs', 'lookup', 'bookmarks', 'my_info', 'accounts', 'downloads', 'career', 'applications', 'agent_status', 'agent_stop']
+const IRIS_BRIDGE_READ_ONLY = ['tabs', 'lookup', 'bookmarks', 'my_info', 'accounts', 'downloads', 'career', 'applications', 'agent_status', 'agent_stop', 'agent_answer']
 
 /* Iris's own run, for a coding agent that hands Iris a task and checks on it: state, newest steps, this chat's applications. */
 function irisBridgeAgentStatus (last) {
@@ -221,6 +221,23 @@ async function irisBridgeHandle (tool, args) {
     }
     case 'agent_status':
       return irisBridgeAgentStatus(args.last)
+    case 'agent_answer': {
+      // Iris asked something and waits (the panel shows the question): the same as the user typing the answer
+      if (!irisIsBusy() || irisAgentState.status !== 'paused') throw new Error('Iris is not waiting for an answer')
+      const text = String(args.text || '').trim()
+      if (!text) throw new Error('text is required')
+      if (irisComputer && irisComputer.jobsMode && irisComputer.lastQuestion) {
+        try { irisJobsLearnAnswer(irisComputer.lastQuestion, text) } catch (e) { DBUG('learn answer: ' + e.message) }
+        irisComputer.lastQuestion = null
+      }
+      irisAgent.answer(text)
+      if (irisSession) {
+        irisSession.items.push({ kind: 'user', text: text, run: irisSession.run, answer: true })
+        irisSessionSave(irisSession)
+      }
+      broadcast('iris-agent-event', { type: 'answered', text: text })
+      return irisBridgeAgentStatus(1)
+    }
     case 'agent_stop':
       irisCancelRepeat()
       if (irisAgent && irisIsBusy()) irisAgent.stop(String(args.reason || 'Stopped by a coding agent'))

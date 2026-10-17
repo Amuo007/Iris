@@ -1699,6 +1699,8 @@ function isJobTask (text) {
   const t = String(text || '')
   // "apply" anywhere with a job word anywhere ("go through the openings … and apply to the ones that fit")
   if (/\b(apply|applying)\b/i.test(t) && JOB_STRONG.test(t)) return true
+  // "finish the Lyft Software Engineer application (job 2 of my list)" — a form for a job, without the word apply
+  if (/\b(applications?|application form)\b/i.test(t) && JOB_STRONG.test(t)) return true
   return JOB_TASK.some(function (re) { return re.test(t) })
 }
 
