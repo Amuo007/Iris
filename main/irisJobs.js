@@ -455,6 +455,10 @@ function irisJobsPrompt (task, mode) {
       : 'upload the user\'s resume PDF (no file is chosen in Settings → Jobs: pick the one with the user\'s name from the file picker\'s recent files; none there → needs_you)') +
       ' — even when one is already attached (sites that remember you show your last one, with the same name): remove or replace it.'
   ]).concat([
+    '   Enter (enter:true) only picks an option in a dropdown or search box — never press it in a plain text field of a',
+    '   form: it sends the form half-filled. Red messages under fields can be left over from such an early send (sites',
+    '   check again only on Submit): when a field shows the right value, move on; Submit at the end and fix what is',
+    '   still red then.',
     '   Fill the form on the page itself: never "Autofill with MyGreenhouse", "Apply with LinkedIn / Indeed / Google" or any',
     '   other button that signs in. A file field\'s button is "Attach" / "Upload" / "Choose file" — never Dropbox, Google',
     '   Drive or "Enter manually".',
