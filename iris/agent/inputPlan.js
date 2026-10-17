@@ -262,10 +262,11 @@ function planInputEvents (action, opts) {
         }
       }
       if (action.enter) {
-        // a pause before Enter, as a person waits for the list: typing into a dropdown (clear:false) filters
-        // or loads its options ("Loading…" while a school list is searched), and Enter picks the first
+        // a pause before Enter, as a person waits for the list: typing into a dropdown filters or loads its
+        // options ("Loading…" while a school list is searched), and Enter picks the first. Any field can be
+        // one (a real Greenhouse School box: 150 ms was too soon and Enter picked nothing), so always wait.
         const last = out[out.length - 1]
-        if (last) last.delayMs = Math.max(last.delayMs, action.clear === false ? 1200 : 150)
+        if (last) last.delayMs = Math.max(last.delayMs, 1200)
         enterEvents(add, 60)
       }
       break
