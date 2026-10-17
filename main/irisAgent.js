@@ -2094,7 +2094,9 @@ function irisRecord (session, type, p) {
     if (/\bstill (has|shows|showing|flag(ged|s)?)\b([^.]{0,40}\b(error|red|required))?|lingering (error|red)|error (is )?still/i.test(p.thought || '')) {
       irisStaleErrors++
       if (irisStaleErrors >= 2 && irisComputer) {
-        irisComputer.notes = (irisComputer.notes || []).concat('Stop re-picking fields that already show the right value: on this kind of form a red message stays until the form is submitted again. Fill the fields that are still EMPTY, then press Submit; after that, fix only what is still red.')
+        // re-opening a set dropdown again and again is how a wrong option gets picked (real run: Braze's visa
+        // sponsorship went from Yes to No); Submit makes the page check every field again
+        irisComputer.notes = (irisComputer.notes || []).concat('STOP re-opening fields that already show a value — that is how a wrong option gets picked. On this kind of form a red message stays until the form is submitted again. Fill any field that is still EMPTY (shows "Select..." or nothing), then press Submit right away; after that, fix only what is still red.')
         irisStaleErrors = 0
       }
     } else irisStaleErrors = 0
