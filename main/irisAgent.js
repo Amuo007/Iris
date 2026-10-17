@@ -1925,7 +1925,8 @@ function irisRecord (session, type, p) {
   } else if (type === 'thought') {
     stepItem(p.step).thought = p.thought
   } else if (type === 'action' && !p.automatic) {
-    stepItem(p.step).actions.push({ type: p.action.type, text: p.action.type === 'type' ? p.action.text : undefined, url: p.action.url, description: p.description })
+    // where it pointed too (screenshot pixels), so a review of a real run can tell which click or typing missed
+    stepItem(p.step).actions.push({ type: p.action.type, text: p.action.type === 'type' ? p.action.text : undefined, url: p.action.url, x: p.action.x, y: p.action.y, description: p.description })
   } else if (type === 'action:result' && !p.ok) {
     stepItem(p.step).error = p.error
   } else if (type === 'remember') {
