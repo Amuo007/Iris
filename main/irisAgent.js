@@ -1485,6 +1485,20 @@ IrisComputer.prototype.act = async function (action) {
     self.injectingUntil = Date.now() + 400
   }
   this.pointer = irisInputPlan.pointerAfter(action) || this.pointer
+  // the same box changed again and again (real run: a Greenhouse yes/no dropdown re-picked four times because a red
+  // "required" message stayed until Submit): say so once, with what to do instead
+  if ((action.type === 'click' || action.type === 'type') && action.x !== undefined) {
+    const page = String(wc.getURL()).split('#')[0]
+    const near = function (t) { return t.url === page && Math.abs(t.x - action.x) <= 30 && Math.abs(t.y - action.y) <= 20 }
+    this.touchTrail = (this.touchTrail || []).filter(function (t) { return t.url === page }).slice(-8)
+    const before = this.touchTrail.filter(near).length
+    this.touchTrail.push({ x: action.x, y: action.y, url: page })
+    if (before >= 3 && !(this.touchWarned && near(this.touchWarned))) {
+      this.touchWarned = { x: action.x, y: action.y, url: page }
+      this.notes = (this.notes || []).concat('You have now changed the field at (' + Math.round(action.x) + ', ' + Math.round(action.y) + ') ' + (before + 1) +
+        ' times. If it shows the value you want, leave it: a red message under it can stay until the form is submitted again. Go on with the next field and Submit at the end.')
+    }
+  }
   // down, up, down on one page: the model keeps jumping past what it wants to see — say so, with the cure
   if (action.type === 'scroll' && (action.direction === 'up' || action.direction === 'down')) {
     const here = String(wc.getURL()).split('#')[0]
