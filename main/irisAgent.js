@@ -1455,6 +1455,8 @@ IrisComputer.prototype.act = async function (action) {
     typed = typed.replace(/\{\{\s*new password\s*\}\}/gi, this.newPasswords[site])
   }
   let real = action.type === 'type' ? Object.assign({}, action, { text: irisFillSecrets(typed) }) : action
+  // a jump of more than about two screens skips whole parts of a form (real run: 15 down, 15 up, again and again)
+  if (action.type === 'scroll' && (action.amount || 3) > 12) real = Object.assign({}, real, { amount: 12 })
   // "select all" before typing is for the text already in a field. When the spot is not a text box (the
   // pointer does not turn into a text cursor there), it would select the whole page instead — seen on
   // real forms embedded from another site — so leave it out and say so.
@@ -1483,6 +1485,20 @@ IrisComputer.prototype.act = async function (action) {
     self.injectingUntil = Date.now() + 400
   }
   this.pointer = irisInputPlan.pointerAfter(action) || this.pointer
+  // down, up, down on one page: the model keeps jumping past what it wants to see — say so, with the cure
+  if (action.type === 'scroll' && (action.direction === 'up' || action.direction === 'down')) {
+    const here = String(wc.getURL()).split('#')[0]
+    this.scrollTrail = (this.scrollTrail || []).filter(function (t) { return t.url === here }).concat({ dir: action.direction, amount: real.amount || 3, url: here }).slice(-4)
+    const t = this.scrollTrail
+    const flips = t.slice(1).filter(function (x, i) { return x.dir !== t[i].dir }).length
+    if (t.length >= 3 && flips >= 2) {
+      this.notes = (this.notes || []).concat('You have scrolled back and forth on this page (' + t.map(function (x) { return x.dir + ' ' + x.amount }).join(', ') +
+        '): each jump goes past what you want. Scroll 3 at a time in one direction and look after each, or use find with words of the label you need.')
+      this.scrollTrail = []
+    }
+  } else if (action.type !== 'scroll' && action.type !== 'wait') {
+    this.scrollTrail = []
+  }
   // where this click landed, so the next look can show it if nothing happened
   this.lastClick = (action.type === 'click' || action.type === 'double_click') ? { x: action.x, y: action.y, fingerprint: this.lastFingerprint || null } : null
   // the clicks of this step, for the rings on the next screenshot; anything that moves the page voids them
