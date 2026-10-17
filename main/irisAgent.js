@@ -1454,7 +1454,20 @@ IrisComputer.prototype.act = async function (action) {
     if (!this.newPasswords[site]) this.newPasswords[site] = irisNewPassword()
     typed = typed.replace(/\{\{\s*new password\s*\}\}/gi, this.newPasswords[site])
   }
-  const real = action.type === 'type' ? Object.assign({}, action, { text: irisFillSecrets(typed) }) : action
+  let real = action.type === 'type' ? Object.assign({}, action, { text: irisFillSecrets(typed) }) : action
+  // "select all" before typing is for the text already in a field. When the spot is not a text box (the
+  // pointer does not turn into a text cursor there), it would select the whole page instead — seen on
+  // real forms embedded from another site — so leave it out and say so.
+  let notTextBox = false
+  if (action.type === 'type' && action.x !== undefined && action.clear !== false && this.cursorSeen && this.cursorType !== null) {
+    wc.sendInputEvent({ type: 'mouseMove', x: Math.round(action.x), y: Math.round(action.y), movementX: 0, movementY: 0 })
+    await sleep(30)
+    const shape = this.cursorType
+    if (shape === 'default' || shape === 'pointer' || shape === 'hand') {
+      notTextBox = true
+      real = Object.assign({}, real, { clear: false })
+    }
+  }
   const plan = irisInputPlan.planInputEvents(real, { from: this.pointer })
 
   // Mark "we are driving" so genuine human input can be told apart from our own events.
@@ -1479,7 +1492,8 @@ IrisComputer.prototype.act = async function (action) {
     // say exactly what went in, so a box that merely looks cut off is not "fixed" by mistake
     const secret = action.text.indexOf('{{') !== -1
     this.notes = (this.notes || []).concat('Typed ' + (secret ? action.text + ' (' + real.text.length + ' characters, filled in from My info)' : '"' + action.text + '"') +
-      (action.clear === false ? ' (added to the existing text).' : ' (replacing what was in the field).'))
+      (notTextBox ? ' at (' + action.x + ', ' + action.y + '), but the pointer did not turn into a text cursor there: it may not be a text box, so nothing was selected first. Check that the text went into the right field.'
+        : action.clear === false ? ' (added to the existing text).' : ' (replacing what was in the field).'))
   }
   return { ok: true, events: plan.length }
 }
