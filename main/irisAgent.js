@@ -2506,6 +2506,17 @@ function startAgent (task, options) {
       }
       if (session.projectId && type === 'plan' && payload.text) irisProjectUpdate(session.projectId, { plan: payload.text })
       if (type === 'plan' && payload.text) session.lastPlan = payload.text
+      // with <userData>/iris-shots/RECORD present, the image the model gets is kept per step (for reviewing a run's
+      // decisions against what it saw); written in the background so the run never waits on it
+      if (type === 'observation' && payload.dataUrl && fs.existsSync(path.join(userDataPath, 'iris-shots', 'RECORD'))) {
+        const m = /^data:image\/(\w+);base64,(.*)$/.exec(payload.dataUrl)
+        if (m) {
+          const dir = path.join(userDataPath, 'iris-shots', session.id)
+          fs.mkdir(dir, { recursive: true }, function () {
+            fs.writeFile(path.join(dir, 'r' + session.run + '-s' + String(payload.step).padStart(3, '0') + '-' + Date.now() + '.' + (m[1] === 'jpeg' ? 'jpg' : m[1])), Buffer.from(m[2], 'base64'), function () {})
+          })
+        }
+      }
       if (type === 'observation' && payload.url) {
         const host = irisSiteOf(payload.url)
         if (host && !/^(duckduckgo\.com|google\.|bing\.com)/.test(host)) {
