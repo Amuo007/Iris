@@ -791,6 +791,16 @@ function IrisComputer (tabId, config, hooks, viewBounds) {
   this.tabNote = null
 }
 
+/* The Greenhouse form of a posting a company page embeds (its link carries ?gh_jid=N), as a page of its own. */
+function irisGreenhouseDirect (url) {
+  try {
+    const u = new URL(url)
+    const id = u.searchParams.get('gh_jid')
+    if (!id || !/^\d{5,}$/.test(id) || /(^|\.)greenhouse\.io$/i.test(u.hostname)) return null
+    return 'https://boards.greenhouse.io/embed/job_app?token=' + id
+  } catch (e) { return null }
+}
+
 function irisViewAlive (view) {
   return !!(view && view.webContents && !view.webContents.isDestroyed())
 }
@@ -1181,7 +1191,15 @@ IrisComputer.prototype.act = async function (action) {
   switch (action.type) {
     case 'navigate': {
       try { wc.stopFindInPage('clearSelection') } catch (e) { /* nothing to clear */ }
-      const url = irisResolveUrl(action.url)
+      let url = irisResolveUrl(action.url)
+      // a company page that shows its Greenhouse form in an embedded frame (…?gh_jid=N): open the form as a
+      // page of its own — typing into the embedded copy did not reach it on a real site (careerpuck.com)
+      const direct = this.jobsMode ? irisGreenhouseDirect(url) : null
+      if (direct) {
+        this.notes = (this.notes || []).concat('This posting\'s form is Greenhouse\'s, embedded in ' + new URL(url).hostname + ': opened the form directly (' + direct +
+          '). If it says the page was not found, open ' + url + ' instead.')
+        url = direct
+      }
       // Min's own loader: attaches a new tab's view to the window, exactly like typing a URL
       loadURLInView(this.tabId, url, this.window())
       return { ok: true, url: url }
