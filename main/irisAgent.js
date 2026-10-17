@@ -1113,6 +1113,8 @@ IrisComputer.prototype.finishCapture = function (image, size, bounds, wc, sig) {
   let missNote = null
   const click = this.lastClick
   this.lastClick = null
+  // the previous step ended on this click (a box clicked open): typing at the same spot next must not click again
+  this.boxClick = click ? { x: click.x, y: click.y } : null
   if (click && sig && click.fingerprint && sig.fingerprint === click.fingerprint && bounds.width) {
     const k = fitted.width / bounds.width
     try {
@@ -1470,8 +1472,19 @@ IrisComputer.prototype.act = async function (action) {
   // "select all" before typing is for the text already in a field. When the spot is not a text box (the
   // pointer does not turn into a text cursor there), it would select the whole page instead — seen on
   // real forms embedded from another site — so leave it out and say so.
+  // the box was clicked open just before (the step before, at the same spot): clicking it again would close a
+  // dropdown and take the cursor out of it (real run: a Greenhouse School box, eight tries) — type into it as it is
+  let sameBox = false
+  const opened = this.lastClick || this.boxClick
+  this.boxClick = null
+  if (action.type === 'type' && action.x !== undefined && opened && Math.abs(opened.x - action.x) <= 30 && Math.abs(opened.y - action.y) <= 20) {
+    sameBox = true
+    real = Object.assign({}, real)
+    delete real.x
+    delete real.y
+  }
   let notTextBox = false
-  if (action.type === 'type' && action.x !== undefined && action.clear !== false && this.cursorSeen && this.cursorType !== null) {
+  if (!sameBox && action.type === 'type' && action.x !== undefined && action.clear !== false && this.cursorSeen && this.cursorType !== null) {
     await irisSendInput(wc, { type: 'mouseMove', x: Math.round(action.x), y: Math.round(action.y), movementX: 0, movementY: 0 })
     await sleep(30)
     const shape = this.cursorType
@@ -1532,7 +1545,8 @@ IrisComputer.prototype.act = async function (action) {
     // say exactly what went in, so a box that merely looks cut off is not "fixed" by mistake
     const secret = action.text.indexOf('{{') !== -1
     this.notes = (this.notes || []).concat('Typed ' + (secret ? action.text + ' (' + real.text.length + ' characters, filled in from My info)' : '"' + action.text + '"') +
-      (notTextBox ? ' at (' + action.x + ', ' + action.y + '), but the pointer did not turn into a text cursor there: it may not be a text box, so nothing was selected first. Check that the text went into the right field.'
+      (sameBox ? ' into the box you had just clicked, without clicking it again (a second click closes an open list).'
+        : notTextBox ? ' at (' + action.x + ', ' + action.y + '), but the pointer did not turn into a text cursor there: it may not be a text box, so nothing was selected first. Check that the text went into the right field.'
         : action.clear === false ? ' (added to the existing text).' : ' (replacing what was in the field).'))
   }
   return { ok: true, events: plan.length }
