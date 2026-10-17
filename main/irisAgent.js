@@ -1550,7 +1550,9 @@ IrisComputer.prototype.act = async function (action) {
         : notTextBox ? ' at (' + action.x + ', ' + action.y + '), but the pointer did not turn into a text cursor there: it may not be a text box, so nothing was selected first. Check that the text went into the right field.'
         : action.clear === false ? ' (added to the existing text).' : ' (replacing what was in the field).'))
   }
-  return { ok: true, events: plan.length }
+  // a pick from a dropdown (type + Enter) can add or remove questions below it, so the places of the next
+  // fields in the same list are stale: look again first (real run: a 'No' meant for a dropdown went into GitHub)
+  return { ok: true, events: plan.length, pageChanged: action.type === 'type' && !!action.enter }
 }
 
 /*
