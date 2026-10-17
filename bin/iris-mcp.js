@@ -86,6 +86,9 @@ const TOOLS = [
   { name: 'iris_career', description: 'The user\'s career profile with IDs (E1, E1.2, P3, X1…), job preferences and saved application answers.', inputSchema: { type: 'object', properties: {} } },
   { name: 'iris_resume', description: 'Build a one-page PDF resume for a job from the career profile, no model in Iris. picks = {"summary":str,"skills":[{"group","items":[]}],"experience":[{"id":"E1","bullets":["E1.3"]}],"projects":[{"id":"P2","bullets":["P2.1"]}],"extras":["X1"],"rewrite":{"E1.3":"…"}} using IDs from iris_career (best first; Iris trims to one page and undoes rewrites that add facts). Without picks it ranks by shared words.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, company: { type: 'string' }, requirements: { type: 'string' }, picks: { type: 'object' } }, required: ['title'] } },
   { name: 'iris_cover_letter', description: 'Build a one-page cover letter PDF from your text (three short paragraphs, facts only from iris_career). Iris removes sentences with numbers, tools or names the profile does not have. Upload it with iris_upload file "cover letter".', inputSchema: { type: 'object', properties: { title: { type: 'string' }, company: { type: 'string' }, text: { type: 'string' } }, required: ['title', 'text'] } },
+  { name: 'iris_agent_run', description: 'Hand Iris\'s own agent (its model) a task: it starts in a new tab and a new chat, exactly like the user typing it in the Iris panel. mode "continuous" = Non-stop (it keeps going and logs what needs the user), "once" = stops when the task is done. Use iris_agent_status to follow it.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, mode: { type: 'string', enum: ['once', 'continuous'] } }, required: ['task'] } },
+  { name: 'iris_agent_status', description: 'How Iris\'s own run is going: status (running, paused, done, failed, stopped), its newest steps (last = how many, up to 30) and the applications logged in its chat.', inputSchema: { type: 'object', properties: { last: { type: 'integer' } } } },
+  { name: 'iris_agent_stop', description: 'Stop Iris\'s own run.', inputSchema: { type: 'object', properties: { reason: { type: 'string' } } } },
   { name: 'iris_applications', description: 'Jobs already applied to, skipped or left for the user.', inputSchema: { type: 'object', properties: {} } },
   { name: 'iris_log_application', description: 'Record a job application: status applied | skipped | needs_you | failed.', inputSchema: { type: 'object', properties: { status: { type: 'string', enum: ['applied', 'skipped', 'needs_you', 'failed'] }, company: { type: 'string' }, title: { type: 'string' }, url: { type: 'string' }, note: { type: 'string' } }, required: ['status'] } }
 ]
@@ -103,6 +106,9 @@ const DATA_TOOLS = {
   iris_resume: 'resume',
   iris_cover_letter: 'cover_letter',
   iris_applications: 'applications',
+  iris_agent_run: 'agent_run',
+  iris_agent_status: 'agent_status',
+  iris_agent_stop: 'agent_stop',
   iris_log_application: 'log_application'
 }
 

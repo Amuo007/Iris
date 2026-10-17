@@ -126,7 +126,30 @@ async function irisBridgeZoom (args) {
 }
 
 /* Tools that only read Iris's own data may run while Iris works; the page is Iris's then. */
-const IRIS_BRIDGE_READ_ONLY = ['tabs', 'lookup', 'bookmarks', 'my_info', 'accounts', 'downloads', 'career', 'applications']
+const IRIS_BRIDGE_READ_ONLY = ['tabs', 'lookup', 'bookmarks', 'my_info', 'accounts', 'downloads', 'career', 'applications', 'agent_status', 'agent_stop']
+
+/* Iris's own run, for a coding agent that hands Iris a task and checks on it: state, newest steps, this chat's applications. */
+function irisBridgeAgentStatus (last) {
+  const s = irisSession
+  const steps = s ? s.items.filter(function (i) { return i.kind === 'step' }) : []
+  return {
+    status: irisAgentState.status,
+    running: irisIsBusy(),
+    mode: irisAgentState.mode || null,
+    sessionId: irisAgentState.sessionId || (s && s.id) || null,
+    startedAt: irisAgentState.startedAt || null,
+    steps: irisAgentState.steps,
+    reason: irisAgentState.reason,
+    answer: irisAgentState.answer,
+    task: String(irisAgentState.task || '').slice(0, 300),
+    last: steps.slice(-Math.max(1, Math.min(30, Number(last) || 5))).map(function (i) {
+      return { run: i.run, step: i.step, url: i.url || '', thought: i.thought || '', actions: (i.actions || []).map(function (a) { return a.description || a.type }) }
+    }),
+    applications: s ? irisApplicationsLoad().filter(function (a) { return a.sessionId === s.id }).map(function (a) {
+      return { status: a.status, company: a.company, title: a.title, url: a.url, note: a.note, at: a.updated || a.at }
+    }) : []
+  }
+}
 
 async function irisBridgeHandle (tool, args) {
   args = args || {}
@@ -185,6 +208,23 @@ async function irisBridgeHandle (tool, args) {
     }
     case 'applications':
       return { items: irisApplicationsLoad().slice(-100), today: irisAppliedToday() }
+    // Iris's own agent: start a task in a new tab and chat (like Settings → Jobs → Start), check on it, stop it
+    case 'agent_run': {
+      const task = String(args.task || '').trim()
+      if (!task) throw new Error('task is required')
+      const mode = args.mode === 'continuous' ? 'continuous' : 'once'
+      broadcast('iris-agent-scheduled-run', { task: task, mode: mode })
+      const started = Date.now()
+      while (!irisIsBusy() && Date.now() - started < 10000) await sleep(200)
+      if (!irisIsBusy()) throw new Error('Iris did not start (is the browser window open?)')
+      return irisBridgeAgentStatus(1)
+    }
+    case 'agent_status':
+      return irisBridgeAgentStatus(args.last)
+    case 'agent_stop':
+      irisCancelRepeat()
+      if (irisAgent && irisIsBusy()) irisAgent.stop(String(args.reason || 'Stopped by a coding agent'))
+      return irisBridgeAgentStatus(1)
     case 'log_application': {
       if (['applied', 'skipped', 'needs_you', 'failed'].indexOf(args.status) === -1) throw new Error('status must be applied, skipped, needs_you or failed')
       const item = irisApplicationAdd({ status: args.status, company: args.company || '', title: args.title || '', url: args.url || '', note: args.note || '', resume: (irisBridgeComputer && irisBridgeComputer.lastResume) || '' })
