@@ -906,6 +906,8 @@ function imageSignature (image) {
  * attached may not have painted its first frame yet.
  */
 IrisComputer.prototype.screenshot = async function () {
+  // a new look starts a new step: typing without a place needs a click in this step first
+  this.lastActType = null
   const view = this.view()
   const wc = view.webContents
   const url = wc.getURL()
@@ -1187,6 +1189,14 @@ IrisComputer.prototype.act = async function (action) {
   const self = this
   const view = this.view()
   const wc = view.webContents
+  // typing with no place given goes wherever the cursor is: right after a click in the same step that is the
+  // field just clicked, otherwise often the wrong one (real run: "2026" landed in Email). Ask for the place.
+  const prevAct = this.lastActType
+  this.lastActType = action.type
+  if (action.type === 'type' && action.x === undefined && prevAct !== 'click' && prevAct !== 'key') {
+    this.lastActType = prevAct
+    return { ok: false, error: 'say where to type: give x and y of the field (Iris clicks it first). Typing without a place goes into whatever field happens to have the cursor.' }
+  }
 
   switch (action.type) {
     case 'navigate': {
