@@ -464,6 +464,8 @@ function irisJobsPrompt (task, mode) {
     '   form: it sends the form half-filled. Red messages under fields can be left over from such an early send (sites',
     '   check again only on Submit): when a field shows the right value, move on; Submit at the end and fix what is',
     '   still red then.',
+    '   On many boards (Greenhouse among them) "Apply" only jumps down the same page to the form ("Apply for this job",',
+    '   First Name, Email …): once that form is on screen, fill it — do not scroll back up to the button.',
     '   Fill the form on the page itself: never "Autofill with MyGreenhouse", "Apply with LinkedIn / Indeed / Google" or any',
     '   other button that signs in. A file field\'s button is "Attach" / "Upload" / "Choose file" — never Dropbox, Google',
     '   Drive or "Enter manually".',
