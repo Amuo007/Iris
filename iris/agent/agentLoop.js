@@ -44,6 +44,7 @@ const DEFAULTS = {
   answerCheck: true, // one quick call removes details from the final answer that Iris never saw
   maxServerWaitMs: 10 * 60 * 1000, // 0 = wait for the model server forever (non-stop runs)
   askTimeoutMs: 0, // non-stop runs: if a question is not answered in time, carry on without it (0 = wait)
+  noAsk: '', // set (to what to do instead): ask_user never pauses the run
   coordinateSpace: 'auto'
 }
 
@@ -736,6 +737,11 @@ function createAgent (opts) {
     }
 
     // ---- ask the human: pause until they answer (or just press Resume) ------------
+    if (action.type === 'ask_user' && cfg.noAsk) {
+      // a run the user left to Iris (job applications): no question waits on them — decide, or note it and go on
+      history.addSystemNote('Do not ask the user in this run — they are away and want Iris to decide. ' + cfg.noAsk)
+      return { stopBatch: true }
+    }
     if (action.type === 'ask_user') {
       emit('action', { step: state.step, index, total, action, actionView: mapped, anchor: null, description: describeAction(action), automatic: false })
       emit('ask', { step: state.step, question: action.question, timeoutMs: cfg.askTimeoutMs || 0 })

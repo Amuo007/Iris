@@ -791,6 +791,24 @@ function IrisComputer (tabId, config, hooks, viewBounds) {
   this.tabNote = null
 }
 
+/*
+ * The first job of a numbered list in the task ("12. Axon — Software Engineer 1 — https://…") that has no
+ * application record yet — applied ever, or anything logged during this run. Long runs forget their place
+ * (real run: after job 16 Iris went back to job 10 and redid job 11).
+ */
+function irisNextListedJob (task, since) {
+  const lines = String(task || '').split('\n')
+  for (const line of lines) {
+    const m = /^\s*(\d+)\.\s+(.+?)\s+[—–-]\s+(.+?)\s+[—–-]\s+(https?:\/\/\S+)/.exec(line)
+    if (!m) continue
+    const job = { company: m[2].trim(), title: m[3].trim(), url: m[4].trim() }
+    const hit = irisApplicationFind(job)
+    if (hit && (hit.status === 'applied' || (hit.updated || hit.at || 0) >= (since || 0))) continue
+    return m[1] + '. ' + job.company + ' — ' + job.title + ' — ' + job.url
+  }
+  return null
+}
+
 /* The Greenhouse form of a posting a company page embeds (its link carries ?gh_jid=N), as a page of its own. */
 function irisGreenhouseDirect (url) {
   try {
@@ -1393,6 +1411,9 @@ IrisComputer.prototype.act = async function (action) {
         this.lastCover = null
         this.lastJob = null
       }
+      const next = irisNextListedJob(irisAgentState.task, irisAgentState.startedAt)
+      if (next) this.notes = this.notes.concat('Next in the user\'s list: ' + next + ' (jobs before it are done).')
+      else if (/^\s*\d+\.\s/m.test(String(irisAgentState.task || ''))) this.notes = this.notes.concat('Every job in the user\'s list has now been handled: finish with done and the summary.')
       const open = (this.jobsTailored || []).filter(function (j) { return Date.now() - (j.at || 0) < 3 * 3600 * 1000 && !irisApplicationFind(j) })
       if (open.length) {
         this.notes = this.notes.concat('Not logged yet (a resume was made for each): ' + open.map(function (j) { return j.title + (j.company ? ' at ' + j.company : '') }).join('; ') + ' — log_application for each as well (applied, needs_you, skipped or failed).')
@@ -2422,6 +2443,8 @@ function startAgent (task, options) {
       systemExtra: function () { return irisSystemExtra(mode, session.title + '\n' + task, session.projectId, session.id) },
       maxServerWaitMs: unlimited ? 0 : 10 * 60 * 1000,
       askTimeoutMs: unlimited ? 10 * 60 * 1000 : 0, // an overnight run does not wait all night for an answer
+      // job applications: the user wants them done without being asked (real run: a salary question waited 10 minutes)
+      noAsk: computer.jobsMode ? 'Decide as the JOBS rules say for questions the profile does not cover, or log_application needs_you with the reason and go on to the next job.' : '',
       planThinking: cfg.thinking === 'full' ? 'full' : 'medium',
       thinking: cfg.thinking, // 'auto': the loop decides per step
       runLookups: cfg.lookups === false ? 0 : (Number(cfg.runLookups) >= 0 ? Number(cfg.runLookups) : 6)
