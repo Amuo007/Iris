@@ -2,7 +2,7 @@
 
 const test = require('node:test')
 const assert = require('node:assert')
-const { createLookup, parseLookups, parseDuckDuckGo, parseBing, parseOpenAlex, parseArxiv, readableText, looksBlocked, isNever } = require('../iris/agent/lookup')
+const { createLookup, parseHackerNews, parseLookups, parseDuckDuckGo, parseBing, parseOpenAlex, parseArxiv, readableText, looksBlocked, isNever } = require('../iris/agent/lookup')
 
 function fakeFetch (routes, log) {
   return async (url) => {
@@ -232,3 +232,22 @@ test('a Workday board is searched on its side; with no hits the last words (a pl
   assert.strictEqual(r.items[0].title, 'Firmware Engineer II', 'the one in Toronto first')
   assert.strictEqual(r.items[0].url, 'https://acme.wd5.myworkdayjobs.com/External/job/Canada-Toronto/Firmware-Engineer-II_JR2')
 })
+
+test('Hacker News discussions come from its public search, with entities decoded', () => {
+  const items = parseHackerNews({ hits: [{ objectID: '1', story_id: 42, title: 'Strix Halo for local LLMs', url: 'https://example.test/post', points: 120, num_comments: 80, created_at: '2026-03-01T00:00:00Z', story_text: 'Runs Qwen at 40 t&#x2F;s &amp; more' }] }, 5)
+  assert.strictEqual(items[0].url, 'https://news.ycombinator.com/item?id=42')
+  assert.match(items[0].snippet, /120 points, 80 comments\. Runs Qwen at 40 t\/s & more/)
+  assert.strictEqual(items[0].year, 2026)
+})
+
+test('a site: search for one job board keeps postings from other boards when that board has none', async () => {
+  const bing = '<li class="b_algo"><h2><a href="https://boards.greenhouse.io/acme/jobs/1">Software Engineer - Acme</a></h2><p>Toronto</p></li>' +
+    '<li class="b_algo"><h2><a href="https://en.wikipedia.org/wiki/Software_engineer">Software engineer</a></h2><p>x</p></li>'
+  const lk = createLookup(Object.assign({ fetch: fakeFetch([['duckduckgo.com', '<html>no results</html>'], ['bing.com/search', bing]]) }, instant))
+  const r = await lk.lookup({ kind: 'web', query: 'site:jobs.lever.co software engineer Toronto' })
+  assert.ok(r.ok, r.text)
+  assert.match(r.text, /other job boards/)
+  assert.match(r.text, /boards\.greenhouse\.io\/acme\/jobs\/1/)
+  assert.doesNotMatch(r.text, /wikipedia/)
+})
+

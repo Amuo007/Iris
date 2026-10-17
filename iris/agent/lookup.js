@@ -18,7 +18,7 @@
  * Pure apart from the injected `fetch`.
  */
 
-const KINDS = ['web', 'papers', 'arxiv', 'wiki', 'page', 'jobs']
+const KINDS = ['web', 'papers', 'arxiv', 'wiki', 'page', 'jobs', 'hn']
 const ARXIV_STOP = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this', 'about', 'into', 'using', 'based', 'via', 'of', 'in', 'on', 'to', 'a', 'an', 'new', 'recent', 'latest', 'paper', 'papers', '2024', '2025', '2026', 'or'])
 
 /* Never contacted directly (search results that merely mention them are fine). */
@@ -217,6 +217,24 @@ function parseJobBoardQuery (query) {
   return null
 }
 
+/* Hacker News search (Algolia's public API) → [{ title, url, snippet, year }] — stories and the talk about them */
+function parseHackerNews (json, max) {
+  return ((json && json.hits) || []).filter(function (h) { return h.title || h.story_title }).slice(0, max).map(function (h) {
+    const id = h.story_id || h.objectID
+    const discussion = 'https://news.ycombinator.com/item?id=' + id
+    const text = String(h.comment_text || h.story_text || '').replace(/<[^>]+>/g, ' ')
+      .replace(/&#x([0-9a-f]+);/gi, function (m, n) { return String.fromCharCode(parseInt(n, 16)) })
+      .replace(/&#(\d+);/g, function (m, n) { return String.fromCharCode(Number(n)) })
+      .replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim()
+    return {
+      title: clip(h.title || h.story_title, 140),
+      url: discussion,
+      snippet: clip((h.url || h.story_url ? 'link: ' + (h.url || h.story_url) + '. ' : '') + (h.points ? h.points + ' points, ' : '') + (h.num_comments ? h.num_comments + ' comments. ' : '') + text, 220),
+      year: h.created_at ? Number(String(h.created_at).slice(0, 4)) : undefined
+    }
+  })
+}
+
 function jobWords (s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9+#.\s-]/g, ' ').split(/\s+/).filter(function (w) { return w.length > 1 && !/^(and|or|the|in|at|for|of|jobs?|roles?)$/.test(w) })
 }
@@ -301,6 +319,9 @@ function createLookup (opts) {
     // "site:example.com …" — results from elsewhere are no answer (Bing ignores site: for simple clients)
     const site = (/(?:^|\s)site:([^\s]+)/i.exec(query) || [])[1]
     const onSite = function (items) { return site ? items.filter(function (it) { const h = hostOf(it.url); const d = site.toLowerCase().replace(/^www\./, ''); return h === d || h.endsWith('.' + d) }) : items }
+    // "site:jobs.lever.co …": a search engine that ignores site: may still bring postings from other job boards
+    const BOARDS = /(^|\.)(greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|smartrecruiters\.com|workable\.com|recruitee\.com)$/
+    const onBoards = function (items) { return site && BOARDS.test(site.toLowerCase()) ? items.filter(function (it) { return BOARDS.test(hostOf(it.url)) }) : [] }
     const tries = [
       [ddg, parseDuckDuckGo, 'DuckDuckGo'],
       // DuckDuckGo sometimes turns away one request in a row of quick ones: one more try after a pause
@@ -313,8 +334,11 @@ function createLookup (opts) {
         if (t[3]) await delay(t[3])
         const r = await get(t[0])
         if (looksBlocked(r.status, r.body)) { lastError = t[2] + ' refused the request'; continue }
-        const items = onSite(t[1](r.body, cfg.maxResults * (site ? 2 : 1))).slice(0, cfg.maxResults)
+        const found = t[1](r.body, cfg.maxResults * (site ? 2 : 1))
+        const items = onSite(found).slice(0, cfg.maxResults)
         if (items.length) return { source: t[2], items }
+        const boards = onBoards(found).slice(0, cfg.maxResults)
+        if (boards.length) return { source: t[2] + ', other job boards (none on ' + site + ')', items: boards }
         lastError = t[2] + ' returned no results'
       } catch (e) {
         lastError = t[2] + ': ' + (e && e.message ? e.message : e)
@@ -364,6 +388,12 @@ function createLookup (opts) {
       }
     }
     return { source: 'Wikipedia', items }
+  }
+
+  async function hn (query) {
+    const r = await get('https://hn.algolia.com/api/v1/search?hitsPerPage=' + cfg.maxResults + '&query=' + encodeURIComponent(query), 'application/json')
+    if (r.status !== 200) throw new Error('Hacker News search answered ' + r.status)
+    return { source: 'Hacker News', items: parseHackerNews(JSON.parse(r.body), cfg.maxResults) }
   }
 
   async function jobs (query) {
@@ -460,7 +490,7 @@ function createLookup (opts) {
       result = hit.result
     } else {
       try {
-        result = await ({ web, papers, arxiv, wiki, page, jobs })[kind](query, chars || undefined)
+        result = await ({ web, papers, arxiv, wiki, page, jobs, hn })[kind](query, chars || undefined)
       } catch (e) {
         return { ok: false, text: 'Lookup (' + kind + ') "' + clip(query, 80) + '" failed: ' + (e && e.message ? e.message : e), count: 0 }
       }
@@ -473,7 +503,7 @@ function createLookup (opts) {
     const annotate = extra && typeof extra.annotate === 'function' ? extra.annotate : function () { return null }
     const head = kind === 'page'
       ? 'Text of ' + (result.items[0] && result.items[0].url) + ':'
-      : (kind === 'papers' || kind === 'arxiv' ? 'Papers' : kind === 'wiki' ? 'Encyclopedia' : kind === 'jobs' ? 'Openings' : 'Web search') + ' for "' + clip(query, 100) + '" (' + result.source + '):'
+      : (kind === 'papers' || kind === 'arxiv' ? 'Papers' : kind === 'wiki' ? 'Encyclopedia' : kind === 'jobs' ? 'Openings' : kind === 'hn' ? 'Discussions' : 'Web search') + ' for "' + clip(query, 100) + '" (' + result.source + '):'
     if (!result.items.length) return head + ' nothing found.'
     if (kind === 'page') {
       const it = result.items[0]
@@ -514,4 +544,5 @@ function parseLookups (text, max) {
   }
 }
 
-module.exports = { createLookup, parseJobBoardQuery, parseBoardJobs, filterBoardJobs, parseLookups, parseDuckDuckGo, parseBing, parseOpenAlex, parseArxiv, readableText, looksBlocked, isNever, KINDS, NEVER }
+module.exports = {
+  parseHackerNews, createLookup, parseJobBoardQuery, parseBoardJobs, filterBoardJobs, parseLookups, parseDuckDuckGo, parseBing, parseOpenAlex, parseArxiv, readableText, looksBlocked, isNever, KINDS, NEVER }

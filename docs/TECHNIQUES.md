@@ -294,6 +294,18 @@ Updated 2026-10-16 (evening).
 
 ---
 
+### 16b. More look-ups that work (added this evening)
+- **Standalone, as before:** an empty session with none of your logins or cookies; never LinkedIn, Facebook,
+  X or a site with an account saved in Iris. No tricks to avoid detection — only sources that answer plain
+  requests.
+- **New:** Hacker News discussions (`hn`, its public search API); Workday boards searched and Workday/Ashby
+  postings read (their public JSON); a search for one job board keeps other boards' postings when that board
+  has none; Reddit through `site:reddit.com` searches (Reddit itself refuses requests without a login, and
+  adding the word "reddit" brought dictionary pages on Bing).
+- **Measured (16 look-ups about Reddit, X, job postings and everyday facts, same network, alternating):**
+  before **7 / 16**, now **13 / 16**. Still failing: some `site:` searches neither search engine answers for a
+  plain request (X above all — almost nothing there is visible without logging in).
+
 ## Jobs (new today)
 
 ### 17. The career profile ("bank")

@@ -42,10 +42,11 @@ function planMessages (task, extra, opts) {
   if (o.lookups) {
     lines.push(
       'You can look things up before planning, outside the browser (fast, text only). Reply with JSON only:',
-      '{"lookups":[{"kind":"web|papers|arxiv|wiki|page","query":"..."}]}   (at most ' + o.lookups.max + ' now)',
-      'web = search results with snippets (add "reddit" to see how people do it), papers = academic papers with',
-      'abstracts and citation counts, arxiv = newest arXiv preprints, wiki = encyclopedia summary,',
-      'page = the text of one public page (query = its URL).',
+      '{"lookups":[{"kind":"web|papers|arxiv|wiki|page|jobs|hn","query":"..."}]}   (at most ' + o.lookups.max + ' now)',
+      'web = search results with snippets (start the query with site:reddit.com to see how people did it; site:x.com',
+      'gives only snippets), papers = academic papers with abstracts and citation counts, arxiv = newest arXiv preprints,',
+      'wiki = encyclopedia summary, page = the text of one public page (query = its URL), jobs = the openings on one',
+      'Greenhouse/Lever/Ashby/Workday board (query = board address + words), hn = Hacker News discussions (tech, tools).',
       'Look up only what changes the plan: which websites are best for this, what a good result looks like,',
       'how others did it. ' + (o.level === 'deep'
         ? 'Be thorough: compare a few sources before you plan.'
