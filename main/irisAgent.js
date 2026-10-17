@@ -791,24 +791,70 @@ function IrisComputer (tabId, config, hooks, viewBounds) {
   this.tabNote = null
 }
 
+function irisViewAlive (view) {
+  return !!(view && view.webContents && !view.webContents.isDestroyed())
+}
+
+/*
+ * Pop-ups that sign in to a cloud drive instead of opening this computer's files: the "Dropbox" and
+ * "Google Drive" buttons next to a form's resume field. Nothing there can be finished without the
+ * user's account, and the page may shut the pop-up on its own later.
+ */
+const IRIS_CLOUD_PICKER = /^https?:\/\/([a-z0-9-]+\.)*(dropbox\.com\/(dropins|chooser)|(docs|drive)\.google\.com\/picker|accounts\.google\.com\/.*[?&]scope=[^&#]*drive|onedrive\.live\.com\/picker|app\.box\.com\/(chooser|api\/oauth2))/i
+
 /* Iris always works in the tab you can see: a link that opens a new tab takes Iris with it. */
 IrisComputer.prototype.currentTabId = function () {
   const selected = irisTabs.selected
-  if (selected && String(selected) !== String(this.tabId) && getView(selected)) {
+  if (selected && String(selected) !== String(this.tabId) && irisViewAlive(getView(selected)) && !(this.leftTabs && this.leftTabs[selected])) {
     const tabs = irisTabList()
     const index = tabs.findIndex(function (t) { return String(t.id) === String(selected) })
     const info = tabs[index]
     this.tabNote = 'You are now in tab ' + (index + 1) + (info && info.title ? ' ("' + info.title.slice(0, 60) + '")' : '') + '.'
+    // where to go back to when this tab closes under Iris
+    if (irisViewAlive(getView(this.tabId))) this.cameFrom = this.tabId
     this.tabId = selected
     this.pointer = null
     if (this.hooks.onTabChange) this.hooks.onTabChange(selected)
   }
+  const here = irisTabInfo(this.tabId)
+  if (here && IRIS_CLOUD_PICKER.test(here.url || '') && this.cameFrom && irisViewAlive(getView(this.cameFrom))) {
+    let host = 'a cloud drive'
+    try { host = new URL(here.url).hostname.replace(/^www\./, '') } catch (e) { /* keep the words */ }
+    broadcast('iris-agent-tab-action', { op: 'close', id: this.tabId })
+    this.returnTo(this.cameFrom, 'That button opened a sign-in for ' + host + ' in a new tab, not this computer\'s files, so Iris closed it.' +
+      ' To attach a file, click the field\'s "Attach" / "Upload" / "Choose file" button (never Dropbox, Google Drive or "Enter manually"); the file picker opens and {"type":"upload","file":"resume"} picks the file.')
+  }
   return this.tabId
 }
 
+/* Leave the tab Iris is in (closed, or about to be) for another one, and say so in the next observation. */
+IrisComputer.prototype.returnTo = function (id, why) {
+  const tabs = irisTabList()
+  const index = tabs.findIndex(function (t) { return String(t.id) === String(id) })
+  const info = tabs[index]
+  this.leftTabs = Object.assign(this.leftTabs || {}, { [this.tabId]: true })
+  this.tabNote = why + ' You are back in tab ' + (index + 1) + (info && info.title ? ' ("' + info.title.slice(0, 60) + '")' : '') + '.'
+  this.tabId = id
+  this.cameFrom = null
+  this.pointer = null
+  if (String(irisTabs.selected) !== String(id)) broadcast('iris-agent-tab-action', { op: 'switch', id: id })
+  if (this.hooks.onTabChange) this.hooks.onTabChange(id)
+}
+
 IrisComputer.prototype.view = function () {
-  const view = getView(this.currentTabId())
-  if (!view || !view.webContents || view.webContents.isDestroyed()) {
+  let view = getView(this.currentTabId())
+  if (!irisViewAlive(view)) {
+    // the tab closed under Iris (a pop-up its page shut when it was done with it): carry on in the tab it came
+    // from, else the one the browser shows, else the newest one left
+    const self = this
+    const ids = [this.cameFrom, irisTabs.selected].concat(irisTabList().map(function (t) { return t.id }).reverse())
+    const back = ids.find(function (id) { return id && String(id) !== String(self.tabId) && irisViewAlive(getView(id)) })
+    if (back) {
+      this.returnTo(back, 'The tab you were in closed (a pop-up that its page shut).')
+      view = getView(back)
+    }
+  }
+  if (!irisViewAlive(view)) {
     throw new Error('the tab Iris is working in was closed')
   }
   return view
@@ -969,7 +1015,8 @@ IrisComputer.prototype.screenshot = async function () {
   if (this.pendingChooser) {
     const files = irisRecentFiles(12)
     obs.note = (obs.note ? obs.note + '\n' : '') + 'A file picker is open (' + (this.pendingChooser.mode === 'selectMultiple' ? 'several files allowed' : 'one file') + '). ' +
-      (this.lastResume && fs.existsSync(this.lastResume) ? 'For the resume, use {"type":"upload","file":"resume"} (the PDF made for this job, ' + path.basename(this.lastResume) + '). ' : '') +
+      (this.lastResume && fs.existsSync(this.lastResume) ? 'For the resume, use {"type":"upload","file":"resume"} (' + (this.lastResume === irisOwnResume() ? 'the user\'s own resume, ' : 'the PDF made for this job, ') + path.basename(this.lastResume) + '). '
+        : this.jobsMode && irisOwnResume() ? 'For the resume, use {"type":"upload","file":"resume"} (the user\'s own resume, ' + path.basename(irisOwnResume()) + '). ' : '') +
       'Pick a file with {"type":"upload","file":"<name>"}. Recent files: ' + (files.length ? files.map(function (f) { return f.name }).join(', ') : '(none found)') + '.'
   }
   if (!crop) this.lastObservation = obs
@@ -1214,6 +1261,17 @@ IrisComputer.prototype.act = async function (action) {
         this.notes = (this.notes || []).concat('Not logged yet (a resume was made for each): ' + unlogged.map(function (j) { return j.title + (j.company ? ' at ' + j.company : '') }).join('; ') +
           ' — send log_application for each as well (applied, needs_you, skipped or failed).')
       }
+      // tailoring is off (Settings → Jobs → Applying): no model, no PDF, no fit — the user's own resume goes out
+      const own = irisOwnResume()
+      if (own !== null) {
+        this.lastResume = own || null
+        this.lastJob = { title: job.title, company: job.company, url: job.url, fit: null, resume: own, at: Date.now() }
+        this.jobsTailored = (this.jobsTailored || []).filter(function (j) { return !irisSameJob(j, job) }).concat(this.lastJob)
+        this.notes = (this.notes || []).concat('Tailoring is off in Settings → Jobs: nothing to make and no fit check. Apply' +
+          (own ? ' with the user\'s own resume — at the form\'s resume field, click its upload button, then {"type":"upload","file":"resume"} picks ' + path.basename(own) + '.'
+            : '; no resume file is chosen in Settings → Jobs, so pick the user\'s resume PDF from the file picker\'s recent files.'))
+        return { ok: true }
+      }
       broadcastEvent({ type: 'resume:start', title: job.title, company: job.company, sessionId: this.sessionId })
       // the posting's own words next to Iris's summary of it, when its link can be read (see irisPostingText)
       const posting = await irisPostingText(job)
@@ -1285,7 +1343,7 @@ IrisComputer.prototype.act = async function (action) {
         // now is the list, and two skips from one list must not share it (the second would replace the first)
         url: (job && job.url) || action.url || (action.title ? '' : wc.getURL()),
         note: action.note || '',
-        resume: (job && job.resume) || '',
+        resume: (job && job.resume) || (action.status === 'applied' && irisOwnResume()) || '',
         fit: job && job.fit !== undefined ? job.fit : null,
         sessionId: this.sessionId || ''
       }
@@ -1324,10 +1382,11 @@ IrisComputer.prototype.act = async function (action) {
     case 'upload': {
       const chooser = this.pendingChooser
       if (!chooser) return { ok: false, error: 'no file picker is open; click the upload button or "Choose file" first' }
-      // "resume" means the one tailor_resume just made (long paths get mistyped)
+      // "resume" means the one tailor_resume just made, or the user's own PDF when tailoring is off (long paths get mistyped)
       const wanted = String(action.file || '').trim()
       let file = null
-      if (this.lastResume && fs.existsSync(this.lastResume) && (/^(the |my |tailored )*(resume|cv|résumé)( pdf| file)?$/i.test(wanted) || path.basename(wanted) === path.basename(this.lastResume))) file = this.lastResume
+      const resumeNow = this.lastResume && fs.existsSync(this.lastResume) ? this.lastResume : irisOwnResume() || null
+      if (resumeNow && (/^(the |my |tailored |own |user'?s )*(resume|cv|résumé)( pdf| file)?$/i.test(wanted) || path.basename(wanted) === path.basename(resumeNow))) file = resumeNow
       if (!file && this.lastCover && fs.existsSync(this.lastCover) && (/^(the |my )*cover( letter)?( pdf| file)?$/i.test(wanted) || path.basename(wanted) === path.basename(this.lastCover))) file = this.lastCover
       if (!file) file = irisFindFile(action.file)
       if (!file) return { ok: false, error: 'no file named "' + action.file + '" in Downloads, Desktop or Documents' }
@@ -1337,7 +1396,7 @@ IrisComputer.prototype.act = async function (action) {
         return { ok: false, error: 'could not choose the file: ' + e.message }
       }
       this.pendingChooser = null
-      if (this.lastJob && file === this.lastResume) this.lastJob.uploaded = true
+      if (this.lastJob && file === resumeNow) this.lastJob.uploaded = true
       this.notes = (this.notes || []).concat('Chose the file "' + path.basename(file) + '" in the file picker.')
       return { ok: true, pageChanged: true }
     }
@@ -1603,7 +1662,7 @@ IrisComputer.prototype.watch = function (wc) {
     try { wc.removeListener('cursor-changed', onCursor) } catch (e) { /* gone */ }
     try { wc.debugger.removeListener('message', onMessage) } catch (e) { /* gone */ }
     try { if (self.attachedDebugger && wc.debugger.isAttached()) wc.debugger.detach() } catch (e) { /* gone */ }
-    try { if (self.cssKey) wc.removeInsertedCSS(self.cssKey) } catch (e) { /* gone */ }
+    try { if (self.cssKey && !wc.isDestroyed()) wc.removeInsertedCSS(self.cssKey).catch(function () { /* gone */ }) } catch (e) { /* gone */ }
   }
 }
 
@@ -2135,7 +2194,8 @@ function startAgent (task, options) {
 
   const useFakeModel = !!process.env.IRIS_FAKE_MODEL || !!cfg.useFakeModel
   const model = useFakeModel
-    ? require('./iris/agent/fakeModel.js').createFakeModel({})
+    // IRIS_FAKE_SCRIPT (tests only): a JSON file with the fake model's steps
+    ? require('./iris/agent/fakeModel.js').createFakeModel(process.env.IRIS_FAKE_SCRIPT ? { script: JSON.parse(fs.readFileSync(process.env.IRIS_FAKE_SCRIPT, 'utf8')) } : {})
     : irisLockedModel(irisModelClient.createModelClient({
       baseUrl: cfg.baseUrl,
       model: cfg.model,

@@ -263,6 +263,13 @@ webviews.bindIPC('close-window', function (tabId, args) {
   closeTab(tabId)
 })
 
+// the page behind this tab is gone (a pop-up its opener closed): close the tab as well
+webviews.bindEvent('view-gone', function (tabId) {
+  if (tabs.get(tabId)) {
+    closeTab(tabId)
+  }
+})
+
 ipc.on('set-file-view', function (e, data) {
   tabs.get().forEach(function (tab) {
     if (tab.url === data.url) {

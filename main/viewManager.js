@@ -238,24 +238,52 @@ function createView (existingViewId, id, webPreferences, boundsString, events) {
 
   viewMap[id] = view
 
+  /*
+    A pop-up its own page shuts (a sign-in or file-picker window the opener closes with popup.close()) ends
+    its web contents without the tab being closed. Take the dead view out and close its tab, or the tab is
+    left showing nothing and everything that reaches for its web contents fails.
+  */
+  view.webContents.once('destroyed', function () {
+    if (viewMap[id] !== view) {
+      return // destroyView took it out: the tab was closed the normal way
+    }
+    let target = null
+    windows.getAll().forEach(function (window) {
+      if (windows.getState(window).selectedView === id) {
+        window.getContentView().removeChildView(view)
+        windows.getState(window).selectedView = null
+        target = window
+      }
+    })
+    delete viewMap[id]
+    delete viewStateMap[id]
+    target = target || windows.getCurrent()
+    if (target) {
+      getWindowWebContents(target).send('view-event', { tabId: id, event: 'view-gone', args: [] })
+    }
+  })
+
   return view
 }
 
 function destroyView (id) {
-  if (!viewMap[id]) {
+  const view = viewMap[id]
+  if (!view) {
     return
   }
 
   windows.getAll().forEach(function (window) {
     if (windows.getState(window).selectedView === id) {
-      window.getContentView().removeChildView(viewMap[id])
+      window.getContentView().removeChildView(view)
       windows.getState(window).selectedView = null
     }
   })
-  viewMap[id].webContents.destroy()
-
+  // out of the map first, so the 'destroyed' listener in createView knows this close was asked for
   delete viewMap[id]
   delete viewStateMap[id]
+  if (view.webContents && !view.webContents.isDestroyed()) {
+    view.webContents.destroy()
+  }
 }
 
 function destroyAllViews () {
@@ -437,9 +465,13 @@ ipc.handle('getNavigationHistory', function (e, id) {
   }
 })
 
+function viewIsAlive (view) {
+  return !!(view && view.webContents && !view.webContents.isDestroyed())
+}
+
 ipc.on('getCapture', function (e, data) {
   var view = viewMap[data.id]
-  if (!view) {
+  if (!viewIsAlive(view)) {
     // view could have been destroyed
     return
   }
@@ -450,18 +482,27 @@ ipc.on('getCapture', function (e, data) {
       return
     }
     img = img.resize({ width: data.width, height: data.height })
-    e.sender.send('captureData', { id: data.id, url: img.toDataURL() })
+    if (!e.sender.isDestroyed()) {
+      e.sender.send('captureData', { id: data.id, url: img.toDataURL() })
+    }
+  }).catch(function (err) {
+    console.warn('getCapture failed', err.message)
   })
 })
 
 ipc.on('saveViewCapture', function (e, data) {
   var view = viewMap[data.id]
-  if (!view) {
+  if (!viewIsAlive(view)) {
     // view could have been destroyed
+    return
   }
 
   view.webContents.capturePage().then(function (image) {
-    view.webContents.downloadURL(image.toDataURL())
+    if (viewIsAlive(view)) {
+      view.webContents.downloadURL(image.toDataURL())
+    }
+  }).catch(function (err) {
+    console.warn('saveViewCapture failed', err.message)
   })
 })
 

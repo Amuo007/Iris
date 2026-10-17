@@ -32,6 +32,15 @@ crashReporter.start({
   compress: true
 })
 
+/*
+ * Without a handler Electron shows an uncaught error in a modal box, and the whole main process -
+ * the browser and an Iris run in it - waits until someone clicks OK. Iris often runs on its own:
+ * write the error down and keep going.
+ */
+process.on('uncaughtException', function (err) {
+  console.error('Uncaught exception in the main process:', err)
+})
+
 if (process.argv.some(arg => arg === '-v' || arg === '--version')) {
   console.log('Iris: ' + app.getVersion())
   console.log('Chromium: ' + process.versions.chrome)
