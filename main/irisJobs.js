@@ -455,6 +455,9 @@ function irisJobsPrompt (task, mode) {
       : 'upload the user\'s resume PDF (no file is chosen in Settings → Jobs: pick the one with the user\'s name from the file picker\'s recent files; none there → needs_you)') +
       ' — even when one is already attached (sites that remember you show your last one, with the same name): remove or replace it.'
   ]).concat([
+    '   Work authorization, visa, sponsorship, citizenship, criminal record or other legal questions: read every option',
+    '   first and pick the one that matches the answers below word for word in meaning — never "the first option" — and',
+    '   write the option\'s own words in your thought (e.g. picked "Yes, I am authorized but will need sponsorship").',
     '   Enter (enter:true) only picks an option in a dropdown or search box — never press it in a plain text field of a',
     '   form: it sends the form half-filled. Red messages under fields can be left over from such an early send (sites',
     '   check again only on Submit): when a field shows the right value, move on; Submit at the end and fix what is',
