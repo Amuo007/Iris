@@ -2576,6 +2576,16 @@ function startAgent (task, options) {
       if (type === 'run:end' && payload.status !== 'stopped' && !(unlimited && payload.status === 'failed')) irisNotify(payload.status === 'done' ? 'Iris finished' : 'Iris could not finish', (payload.status === 'done' ? payload.answer : payload.reason) || session.title)
       if (type === 'thought' && payload.usage) irisUsageRecord('request', Object.assign({ ms: payload.modelMs }, payload.usage))
       if (type === 'thought' && payload.usage) {
+        // one line per model call: how long the prefill (screenshot + new text) and the answer took
+        try {
+          const u = payload.usage
+          const tm = u.timings || {}
+          fs.appendFileSync(path.join(userDataPath, 'iris-timings.jsonl'), JSON.stringify({
+            t: Date.now(), step: payload.step, prompt: u.prompt_tokens, cached: (u.prompt_tokens_details && u.prompt_tokens_details.cached_tokens) || tm.cache_n || null,
+            completion: u.completion_tokens, ms: payload.modelMs, ttft_ms: u.ttft_ms || null,
+            prompt_n: tm.prompt_n || null, prompt_ms: tm.prompt_ms || null, predicted_n: tm.predicted_n || null, predicted_ms: tm.predicted_ms || null
+          }) + '\n')
+        } catch (e) { /* timing is a nice-to-have */ }
         DBUG('usage step ' + payload.step + ' prompt=' + payload.usage.prompt_tokens + ' cached=' + ((payload.usage.prompt_tokens_details && payload.usage.prompt_tokens_details.cached_tokens) || 0) + ' completion=' + payload.usage.completion_tokens + ' ms=' + payload.modelMs)
       }
       if (type !== 'model:progress') DBUG('event ' + type + ' ' + JSON.stringify(payload && (payload.status || payload.description || payload.error || payload.thought || '') || ''))

@@ -191,10 +191,12 @@ function createModelClient (config) {
       if (!cfg.stream || !res.body || !(res.headers.get('content-type') || '').includes('event-stream')) {
         const json = await res.json()
         const msg = (json.choices && json.choices[0] && json.choices[0].message) || {}
+        // llama.cpp adds its own timings (prompt_ms = prefill, predicted_ms = generation)
+        const usage0 = json.usage ? Object.assign({}, json.usage, json.timings ? { timings: json.timings } : {}) : null
         return {
           content: normalizeResponse(json),
           reasoning: msg.reasoning_content || '',
-          usage: json.usage || null,
+          usage: usage0,
           ms: Date.now() - started
         }
       }
@@ -204,11 +206,15 @@ function createModelClient (config) {
       let usage = null
       let lastTick = 0
       progress({ phase: 'waiting', reasoningChars: 0, contentChars: 0 })
+      let firstToken = 0
+      let timings = null
       await readSse(res.body, function (json) {
         if (json.usage) usage = json.usage
+        if (json.timings) timings = json.timings
         if (json.error) throw new Error('model server error: ' + (json.error.message || JSON.stringify(json.error)).slice(0, 300))
         const delta = json.choices && json.choices[0] && json.choices[0].delta
         if (!delta) return
+        if (!firstToken && (delta.reasoning_content || delta.content)) firstToken = Date.now()
         if (delta.reasoning_content) reasoning += delta.reasoning_content
         if (delta.content) content += delta.content
         const now = Date.now()
@@ -217,6 +223,8 @@ function createModelClient (config) {
           progress({ phase: content ? 'answering' : 'thinking', reasoningChars: reasoning.length, contentChars: content.length, reasoning })
         }
       })
+      // time to the first token (prefill as the user feels it) and the server's own timings, when it sends them
+      if (usage) usage = Object.assign({}, usage, { ttft_ms: firstToken ? firstToken - started : null }, timings ? { timings: timings } : {})
       return { content: cleanContent(content), reasoning, usage, ms: Date.now() - started }
     } catch (err) {
       if (err && (err.name === 'AbortError' || err.name === 'TimeoutError' || controller.signal.aborted)) {
