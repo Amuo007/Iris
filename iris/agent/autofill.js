@@ -460,6 +460,13 @@ const PAGE_COLLECT = `(() => {
       if (seenGroups.has(key) && (el.name || grp.id)) return; seenGroups.add(key);
       if (seenEls.has(grp)) return; seenEls.add(grp);
       const boxes = same.length > 1 ? same : [...grp.querySelectorAll('input[type=' + t + ']')];
+      // Yes / No drawn as two pressed-or-not buttons over one hidden box (Ashby): a choice between the buttons
+      const toggles = boxes.length === 1 ? [...grp.querySelectorAll('button[aria-pressed]')] : [];
+      const yesNo = toggles.length >= 2;
+      // the question as its own label in the group, not a box's (Ashby: a fieldset with no legend)
+      const qLabel = boxes.length > 1 || yesNo ? [...grp.querySelectorAll('label')].find(l => !l.querySelector('input') && !boxes.some(b => b.id && l.htmlFor === b.id) && words(l.innerText)) : null;
+      // required shown only by a style (a CSS "*" after the question)
+      const qReq = !!qLabel && (/required/i.test(typeof qLabel.className === 'string' ? qLabel.className : '') || /\\*/.test(getComputedStyle(qLabel, '::after').content || ''));
       const id = 'f' + (++n); grp.setAttribute('data-iris-af', id);
       const legend = grp.querySelector('legend');
       const by = grp.getAttribute('aria-labelledby');
@@ -467,16 +474,16 @@ const PAGE_COLLECT = `(() => {
       // a lone box with no label of its own (a consent box drawn in a shadow root): the text right around it, up
       // through shadow hosts
       const nearText = x => { let a = x; for (let k = 0; k < 5 && a; k++) { a = a.parentElement || (a.getRootNode && a.getRootNode().host) || null; const tx = a ? clean(String(a.innerText || '').replace(/\\*/g, ' ')) : ''; if (tx.length >= 3) return tx.length <= 300 ? tx : ''; } return ''; };
-      const lone = t === 'checkbox' && boxes.length === 1;
+      const lone = t === 'checkbox' && boxes.length === 1 && !yesNo;
       const optText = b => { const l = __labelFor(b) || b.closest('label'); if (l && words(l.innerText)) return words(l.innerText); const bl = b.getAttribute('aria-labelledby'); const bt = bl ? words(bl.split(' ').map(i => __byId(b, i)).filter(Boolean).map(x => x.innerText).join(' ')) : ''; return bt || words(b.getAttribute('aria-label') || '') || (lone ? nearText(b) : '') || clean(b.value); };
-      const opts = boxes.map(optText);
+      const opts = yesNo ? toggles.map(b => clean(b.innerText)) : boxes.map(optText);
       // the question: the legend, the group's own label, else the group's first line of text that is not an option
       const firstLine = clean(String(grp.innerText || '').split('\\n').map(x => x.trim()).find(x => x && !opts.some(o => o && (x === o || x.indexOf(o) === 0))) || '');
       const around = () => { const own = clean(grp.innerText || ''); let a = grp; for (let k = 0; k < 4 && a; k++) { a = a.parentElement || (a.getRootNode && a.getRootNode().host) || null; if (!a) break; const rest = clean(clean(a.innerText || '').split(own).join(' ')); if (words(rest)) return rest.length <= 300 ? rest : ''; } return ''; };
-      const gl0 = legend ? clean(legend.innerText) : (byText || (same.length > 1 ? firstLine : '') || (boxes.length > 1 || !lone ? around() : '') || labelOf(el));
+      const gl0 = legend ? clean(legend.innerText) : (byText || (qLabel ? words(qLabel.innerText) : '') || (same.length > 1 ? firstLine : '') || (boxes.length > 1 || !lone ? around() : '') || labelOf(el));
       const gl = clean(gl0.replace(/\\*/g, '')).length >= 2 ? gl0 : (lone ? opts[0] : gl0);
-      out.push({ key: id, id: grp.id || el.name, kind: t === 'checkbox' ? 'checkboxes' : 'radios', label: gl, required: grp.getAttribute('aria-required') === 'true' || boxes.some(b => b.required) || /\\*/.test(gl0),
-        name: el.name || '', options: opts, value: boxes.filter(__on).map(optText).join(', '), section: sectionOf(grp) });
+      out.push({ key: id, id: grp.id || el.name, kind: t === 'checkbox' && !yesNo ? 'checkboxes' : 'radios', label: gl, required: grp.getAttribute('aria-required') === 'true' || boxes.some(b => b.required) || /\\*/.test(gl0) || qReq,
+        name: el.name || '', options: opts, value: yesNo ? toggles.filter(b => b.getAttribute('aria-pressed') === 'true').map(b => clean(b.innerText)).join(', ') : boxes.filter(__on).map(optText).join(', '), section: sectionOf(grp) });
       return;
     }
     if (!visible(el) && t !== 'file') return;
@@ -526,7 +533,7 @@ function pageRect (key, part) {
     // a list-picker's own input can be a few pixels wide: its box is the "select" block around it
     const selectBox = x => { let a = x; for (let k = 0; k < 4 && a; k++) { a = a.parentElement; if (a && typeof a.className === 'string' && /select/i.test(a.className) && a.getBoundingClientRect().width >= 60) return a; } return null; };
     if (part === 'control') el = host.closest('.select__control') || host.closest('[class*="control"]') || (__selectLike(host) ? selectBox(host) : null) || host;
-    else if (part.indexOf('box:') === 0) { const i = +part.slice(4); el = host.querySelectorAll('input[type=checkbox], input[type=radio]')[i]; const l = el && (__labelFor(el) || el.closest('label')); el = l || el; }
+    else if (part.indexOf('box:') === 0) { const i = +part.slice(4); const bx = host.querySelectorAll('input[type=checkbox], input[type=radio]'); const tg = bx.length <= 1 ? host.querySelectorAll('button[aria-pressed]') : []; if (tg.length >= 2) { el = tg[i]; } else { el = bx[i]; const l = el && (__labelFor(el) || el.closest('label')); el = l || el; } }
     if (!el) return null;
     el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
     const r = el.getBoundingClientRect();
@@ -570,6 +577,8 @@ function pageValue (key, name) {
     if (__selectLike(el) && __sv(el) !== null) return __sv(el);
     if (el.getAttribute('role') === 'combobox') { const ctl = el.closest('.select__control') || el.closest('[class*="control"]'); const sv = ctl && ctl.querySelectorAll('[class*="single-value"], [class*="multi-value__label"]'); if (sv && sv.length) return [...sv].map(x => clean(x.innerText)).join(', '); if (ctl) return ''; const own = clean(el.tagName === 'INPUT' ? el.value : el.innerText); return /^(select( an option| one)?\\.{0,3}|search|choose\\.{0,3}|--+|please select)$/i.test(own) ? '' : own; }
     if (el.tagName === 'SELECT') { const o = el.selectedIndex >= 0 ? el.options[el.selectedIndex] : null; return o && o.value !== '' && !/^-+.*-+$|^(select|choose|please select|no answer|none selected)\\b/i.test(clean(o.text)) ? clean(o.text) : ''; }
+    // Yes / No buttons over one hidden box (Ashby): the pressed button
+    if (el.querySelectorAll && el.querySelectorAll('input[type=checkbox], input[type=radio]').length <= 1 && el.querySelectorAll('button[aria-pressed]').length >= 2) return [...el.querySelectorAll('button[aria-pressed]')].filter(b => b.getAttribute('aria-pressed') === 'true').map(b => clean(b.innerText)).join(', ');
     if (el.tagName === 'FIELDSET' || el.querySelector) { const boxes = el.querySelectorAll ? [...el.querySelectorAll('input[type=checkbox], input[type=radio]')] : []; if (boxes.length) return boxes.filter(__on).map(b => { const l = __labelFor(b) || b.closest('label'); if (l && clean(l.innerText)) return clean(l.innerText); const bl = b.getAttribute('aria-labelledby'); const bt = bl ? clean(bl.split(' ').map(i => __byId(b, i)).filter(Boolean).map(x => x.innerText).join(' ')) : ''; return bt || clean(b.getAttribute('aria-label') || b.value); }).join(', '); }
     if (el.type === 'file') { if (el.files && el.files.length) return 'attached'; let n = el; for (let k = 0; k < 6 && n; k++) { n = n.parentElement; if (n && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(n.innerText || '')) return 'attached'; } return ''; }
     return clean(el.value);
