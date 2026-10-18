@@ -81,6 +81,7 @@ test('a filled box is left alone; essays and number boxes go to the agent', () =
   assert.strictEqual(plan('First Name', 'text', null, { value: 'Amrinder' }).do, 'leave')
   assert.strictEqual(plan('Why do you want to work here?', 'textarea').do, 'leave')
   assert.strictEqual(plan('Expected salary', 'text', null, { inputType: 'number' }).do, 'leave')
+  assert.deepStrictEqual(plan('End date year', 'text', null, { inputType: 'number' }), { do: 'text', value: '2026' })
 })
 
 test('dropdowns with known options pick by meaning', () => {

@@ -305,9 +305,10 @@ function planField (field, facts, mode) {
   }
   if (field.kind === 'text' || field.kind === 'textarea') {
     if (field.kind === 'textarea' && !/address/i.test(label)) return { do: 'leave', why: 'a written answer: the agent writes it' }
-    if (field.inputType === 'number' || field.inputType === 'date') return { do: 'leave', why: 'a ' + field.inputType + ' box: the agent fills it' }
     const value = rule.text
     if (!value) return { do: 'leave', why: 'no fact for it' }
+    // a number box takes a plain number (a year, GPA, ZIP); a date box is left to the agent (its format varies)
+    if (field.inputType === 'date' || (field.inputType === 'number' && !/^\d+(\.\d+)?$/.test(String(value)))) return { do: 'leave', why: 'a ' + field.inputType + ' box: the agent fills it' }
     return { do: 'text', value: value }
   }
   return { do: 'leave', why: 'unknown kind of field' }
@@ -462,7 +463,7 @@ function pageValue (key) {
     const clean = s => String(s || '').replace(/\\s+/g, ' ').trim();
     if (el.getAttribute('role') === 'combobox') { const ctl = el.closest('.select__control') || el.closest('[class*="control"]'); const sv = ctl && ctl.querySelectorAll('[class*="single-value"], [class*="multi-value__label"]'); if (sv && sv.length) return [...sv].map(x => clean(x.innerText)).join(', '); if (ctl) return ''; const own = clean(el.tagName === 'INPUT' ? el.value : el.innerText); return /^(select( an option| one)?\\.{0,3}|search|choose\\.{0,3}|--+|please select)$/i.test(own) ? '' : own; }
     if (el.tagName === 'SELECT') return el.value ? clean(el.options[el.selectedIndex].text) : '';
-    if (el.tagName === 'FIELDSET' || el.querySelector) { const boxes = el.querySelectorAll ? [...el.querySelectorAll('input[type=checkbox], input[type=radio]')] : []; if (boxes.length) return boxes.filter(b => b.checked).map(b => { const l = __labelFor(b) || b.closest('label'); return clean(l ? l.innerText : (b.getAttribute('aria-label') || b.value)); }).join(', '); }
+    if (el.tagName === 'FIELDSET' || el.querySelector) { const boxes = el.querySelectorAll ? [...el.querySelectorAll('input[type=checkbox], input[type=radio]')] : []; if (boxes.length) return boxes.filter(b => b.checked).map(b => { const l = __labelFor(b) || b.closest('label'); if (l && clean(l.innerText)) return clean(l.innerText); const bl = b.getAttribute('aria-labelledby'); const bt = bl ? clean(bl.split(' ').map(i => __byId(b, i)).filter(Boolean).map(x => x.innerText).join(' ')) : ''; return bt || clean(b.getAttribute('aria-label') || b.value); }).join(', '); }
     if (el.type === 'file') { if (el.files && el.files.length) return 'attached'; let n = el; for (let k = 0; k < 6 && n; k++) { n = n.parentElement; if (n && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(n.innerText || '')) return 'attached'; } return ''; }
     return clean(el.value);
   })()`
