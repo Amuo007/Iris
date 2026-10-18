@@ -184,24 +184,31 @@ async function irisChooseField (computer, wc, label, option) {
     const names = fields.filter(function (f) { return kinds.indexOf(f.kind) >= 0 && f.label }).map(function (f) { return '"' + String(f.label).slice(0, 50) + '"' }).slice(0, 12)
     return { ok: false, error: 'no dropdown or choice labelled "' + label + '" here' + (names.length ? ' (the ones on this page: ' + names.join(', ') + ')' : '') + ': click it yourself' }
   }
+  const result = await irisAfChooseOne(computer, wc, field, option)
+  if (result.error) return { ok: false, error: result.error }
+  if (result.set !== undefined) return { ok: true, note: 'Chose "' + result.set + '" in "' + field.label + '" (read back from the page).' }
+  const seen = result.seen && result.seen.length ? ' Its options: ' + result.seen.slice(0, 15).join(' / ') + '.' : ''
+  return { ok: false, error: 'could not choose "' + option + '" in "' + field.label + '": ' + (result.left || 'it did not take') + '.' + seen }
+}
+
+/* Picks {option} in a known choice field: { set } when the page shows it, else { left, seen } or { error }. */
+async function irisAfChooseOne (computer, wc, field, option) {
   const o = irisAfEscape(String(option).trim())
   const patterns = [new RegExp('^' + o + '$', 'i'), new RegExp('^' + o, 'i'), new RegExp(o, 'i')]
   let result
   if (field.kind === 'select') {
     const i = irisAutofillLib.pickOption(field.options || [], patterns)
-    if (i < 0) return { ok: false, error: 'no option "' + option + '" in "' + field.label + '" — its options: ' + (field.options || []).slice(0, 15).join(' / ') }
+    if (i < 0) return { error: 'no option "' + option + '" in "' + field.label + '" — its options: ' + (field.options || []).slice(0, 15).join(' / ') }
     const ok = await irisAfEval(wc, irisAutofillLib.pageSetSelect(field.key, field.options[i]))
     result = ok ? { set: field.options[i] } : { left: 'the list did not take it' }
   } else if (field.kind === 'radios' || field.kind === 'checkboxes') {
     const i = irisAutofillLib.pickOption(field.options || [], patterns)
-    if (i < 0) return { ok: false, error: 'no choice "' + option + '" in "' + field.label + '" — its choices: ' + (field.options || []).slice(0, 15).join(' / ') }
+    if (i < 0) return { error: 'no choice "' + option + '" in "' + field.label + '" — its choices: ' + (field.options || []).slice(0, 15).join(' / ') }
     result = await irisAfTick(computer, wc, field, i, field.options[i])
   } else {
     result = await irisAfChoose(computer, wc, field, { do: 'choose', patterns: patterns, typeAhead: String(option).trim() }, {})
   }
-  if (result.set !== undefined) return { ok: true, note: 'Chose "' + result.set + '" in "' + field.label + '" (read back from the page).' }
-  const seen = result.seen && result.seen.length ? ' Its options: ' + result.seen.slice(0, 15).join(' / ') + '.' : ''
-  return { ok: false, error: 'could not choose "' + option + '" in "' + field.label + '": ' + (result.left || 'it did not take') + '.' + seen }
+  return result
 }
 
 async function irisFillField (computer, wc, label, text) {
@@ -209,6 +216,13 @@ async function irisFillField (computer, wc, label, text) {
   if (!Array.isArray(fields)) return { ok: false, error: 'could not read the form on this page' }
   const field = irisAutofillLib.findField(fields, label, ['text', 'textarea'])
   if (!field) return { ok: false, error: 'no text box labelled "' + label + '" here: click it and type yourself' }
+  const r = await irisAfFillOne(computer, wc, field, text)
+  return r.set !== undefined ? { ok: true, note: 'Filled "' + field.label + '" (read back from the page: "' + String(r.shown).slice(0, 60) + '").' }
+    : { ok: false, error: 'typed into "' + field.label + '" but it shows "' + String(r.shown || 'nothing').slice(0, 60) + '"' }
+}
+
+/* Puts {text} in a known text box (page setter, else real keys) and reads it back: { set, shown } or { shown }. */
+async function irisAfFillOne (computer, wc, field, text) {
   await irisAfEval(wc, irisAutofillLib.pageSetText(field.key, text))
   await sleep(80)
   let shown = await irisAfEval(wc, irisAutofillLib.pageValue(field.key))
@@ -223,10 +237,39 @@ async function irisFillField (computer, wc, label, text) {
       shown = await irisAfEval(wc, irisAutofillLib.pageValue(field.key))
     }
   }
-  if (irisAfNorm(shown) === irisAfNorm(text) || String(shown || '').replace(/\D/g, '') === String(text).replace(/\D/g, '') && /\d/.test(text)) {
-    return { ok: true, note: 'Filled "' + field.label + '" (read back from the page: "' + String(shown).slice(0, 60) + '").' }
-  }
-  return { ok: false, error: 'typed into "' + field.label + '" but it shows "' + String(shown || 'nothing').slice(0, 60) + '"' }
+  if (irisAfNorm(shown) === irisAfNorm(text) || String(shown || '').replace(/\D/g, '') === String(text).replace(/\D/g, '') && /\d/.test(text)) return { set: text, shown: shown }
+  return { shown: shown }
+}
+
+/*
+ * The questions the rules could not answer, all at once: one text-only model call (no screenshot) answers them from
+ * the profile and saved answers; code fills each and reads it back. Not when the form asks applicants not to use AI or
+ * to prove they are human — those are the agent's (and the user's) to judge.
+ */
+async function irisAfAnswerRest (computer, wc, fields, title) {
+  const labelled = fields.filter(function (f) { return f.label && f.kind !== 'file' && String(f.label).length > 2 })
+  if (labelled.some(function (f) { return /(not|don'?t|do not) use (ai|artificial intelligence|chatgpt|an? ai)|ai (policy|assistant)|confirm (that )?you are (a )?human|automated (application|submission)|are you a (human|robot|bot)/i.test(f.label) })) return { skipped: 'the form has an AI or human-check question' }
+  if (!labelled.length) return { answers: {} }
+  const bank = irisCareerLoad()
+  const cfg = irisSettings()
+  const list = labelled.slice(0, 40).map(function (f) { return { key: f.key, kind: f.kind, label: String(f.label).slice(0, 300), required: !!f.required, options: (f.options || []).slice(0, 40) } })
+  const messages = [
+    { role: 'system', content: 'You fill in a job application form for the user, truthfully, from their profile and saved answers below. ' +
+      'For each field you can answer, give the answer; leave out any field you cannot answer from these facts (an optional one), and any ' +
+      'that is not about the user. A required field the facts do not settle: the most sensible honest answer a new-grad applicant would give ' +
+      '("N/A" for an "if yes, explain" box that does not apply). A list, radio or dropdown: the EXACT text of one of its options (checkboxes: ' +
+      'several, joined with " | "). A written answer (why us, a project, anything else): 2–4 plain sentences built only from facts in the ' +
+      'profile — never invent a number, award, employer, school or skill. Dates as the box asks (e.g. MM/YYYY). Never tick optional ' +
+      'marketing, SMS or talent-community consents. Reply with JSON only: {"answers":{"<key>":"<answer>", ...}}' },
+    { role: 'user', content: 'PROFILE:\n' + irisCareerLib.bankText(bank, 7000) + '\n\nSAVED ANSWERS:\n' + (bank.answers || []).map(function (a) { return a.label + ': ' + a.value }).join('\n') +
+      '\n\nJOB PAGE: ' + String(title || '').slice(0, 160) + '\n\nFIELDS STILL EMPTY:\n' + JSON.stringify(list) }
+  ]
+  const model = irisLockedModel(irisModelClient.createModelClient({ baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0.1, thinking: 'off', timeoutMs: cfg.modelTimeoutMs }), cfg.baseUrl)
+  const reply = await model.next({ messages: messages, thinking: 'off' })
+  if (reply && reply.usage) irisUsageRecord('request', Object.assign({ ms: reply.ms }, reply.usage))
+  const text = typeof reply === 'string' ? reply : (reply && reply.content) || ''
+  const obj = irisLookupLib.firstJsonWith(text, 'answers')
+  return { answers: (obj && obj.answers && typeof obj.answers === 'object') ? obj.answers : {} }
 }
 
 /* checkboxes / radios: a real click on the chosen box's label */
@@ -336,6 +379,31 @@ async function irisAutofillRun (computer, wc) {
         before: field.value || '', options: (result.seen || field.options || null), plan: plan.do, planned: plan.value || plan.option || plan.search || null,
         why: plan.why || null, set: result.set !== undefined ? result.set : null, left: result.set === undefined ? (result.left || null) : null,
         section: field.section || undefined, shape: field.shape || undefined })
+    }
+    // the rest — custom questions, written answers — in one text-only model call, filled by code
+    const rest = left.filter(function (l) { return !l.quiet && l.field.label && l.field.kind !== 'file' && !/already filled|section:|optional box|resume import|a document other/i.test(l.why || '') })
+    if (rest.length && Date.now() - started < 120000) {
+      let asked = null
+      try { asked = await irisAfAnswerRest(computer, wc, rest.map(function (l) { return l.field }), wc.getTitle()) } catch (e) { DBUG('autofill: model answers failed: ' + e.message) }
+      const answers = (asked && asked.answers) || {}
+      for (const l of rest) {
+        const a = answers[l.field.key]
+        if (a === undefined || a === null || String(a).trim() === '') continue
+        const val = String(a).trim()
+        let r = {}
+        try {
+          if (l.field.kind === 'text' || l.field.kind === 'textarea') r = await irisAfFillOne(computer, wc, l.field, val)
+          else if (l.field.kind === 'checkboxes' && /\s\|\s/.test(val)) { for (const v of val.split(/\s\|\s/)) r = await irisAfChooseOne(computer, wc, l.field, v) }
+          else r = await irisAfChooseOne(computer, wc, l.field, val)
+        } catch (e) { r = { left: 'failed (' + e.message + ')' } }
+        const rec = record.find(function (x) { return x.key === l.field.key })
+        if (r.set !== undefined) {
+          set.push({ field: l.field, value: r.set + ' (AI)' })
+          left.splice(left.indexOf(l), 1)
+          if (rec) { rec.plan = 'llm'; rec.planned = val; rec.set = r.set; rec.left = null }
+        } else if (rec) { rec.plan = 'llm'; rec.planned = val; rec.llmLeft = r.left || r.error || 'did not take' }
+      }
+      if (asked && asked.skipped) DBUG('autofill: model answers skipped: ' + asked.skipped)
     }
   } finally {
     computer.injecting = false

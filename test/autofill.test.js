@@ -309,3 +309,4 @@ test('the agent names a field by the label it reads; Iris finds that field', () 
   assert.strictEqual(af.findField(fields, 'Are you legally authorized to work', ['radios']).key, 'f4')
   assert.strictEqual(af.findField(fields, 'Favourite colour', ['combobox', 'select']), null)
 })
+
