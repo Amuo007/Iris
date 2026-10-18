@@ -1224,11 +1224,17 @@ IrisComputer.prototype.act = async function (action) {
       let url = irisResolveUrl(action.url)
       // a company page that shows its Greenhouse form in an embedded frame (…?gh_jid=N): open the form as a
       // page of its own — typing into the embedded copy did not reach it on a real site (careerpuck.com)
+      // — once per link: going to the same link again opens the company page itself (real run: Qualtrics' direct form
+      // was gone, and the rewrite sent Iris back to the dead page four times)
       const direct = this.jobsMode ? irisGreenhouseDirect(url) : null
-      if (direct) {
+      this.ghDirectTried = this.ghDirectTried || new Set()
+      if (direct && !this.ghDirectTried.has(url)) {
+        this.ghDirectTried.add(url)
         this.notes = (this.notes || []).concat('This posting\'s form is Greenhouse\'s, embedded in ' + new URL(url).hostname + ': opened the form directly (' + direct +
-          '). If it says the page was not found, open ' + url + ' instead.')
+          '). If it says the page was not found, navigate to ' + url + ' again: Iris then opens the company\'s own page.')
         url = direct
+      } else if (direct) {
+        this.notes = (this.notes || []).concat('Opened the company\'s own page (' + url + '), not the direct form you saw before. If the posting is gone here too, log_application failed with note "posting closed" and go to the next job.')
       }
       // Min's own loader: attaches a new tab's view to the window, exactly like typing a URL
       loadURLInView(this.tabId, url, this.window())
@@ -2123,7 +2129,10 @@ function irisRecord (session, type, p) {
     } else irisStaleErrors = 0
   } else if (type === 'action' && !p.automatic) {
     // where it pointed too (screenshot pixels), so a review of a real run can tell which click or typing missed
-    stepItem(p.step).actions.push({ type: p.action.type, text: p.action.type === 'type' ? p.action.text : undefined, url: p.action.url, x: p.action.x, y: p.action.y, description: p.description })
+    // every plain field of the action (scroll direction, enter, key, option …), so the step can be replayed exactly
+    const rec = { description: p.description }
+    for (const k in p.action) if (p.action[k] !== null && typeof p.action[k] !== 'object' && typeof p.action[k] !== 'function') rec[k] = p.action[k]
+    stepItem(p.step).actions.push(rec)
   } else if (type === 'action:result' && !p.ok) {
     stepItem(p.step).error = p.error
   } else if (type === 'remember') {
@@ -2407,6 +2416,7 @@ function startAgent (task, options) {
   computer.projectId = session.projectId || null
   computer.projectMemory = irisProjectMemory(session.projectId)
   computer.jobsMode = irisJobsActive(session.title + '\n' + task)
+  computer.ghDirectTried = new Set()
   irisComputer = computer
   irisBindInput(tabId, cfg)
 
