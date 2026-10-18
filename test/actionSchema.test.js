@@ -183,6 +183,8 @@ test('validateAction covers every declared action type', () => {
     cover_letter: { title: 'Android Developer', company: 'ShopFast' },
     log_application: { status: 'applied', company: 'ShopFast', title: 'Android Developer' },
     autofill: {},
+    choose: { field: "State", option: "Texas" },
+    fill: { field: "From", text: "05/2026" },
     done: {},
     fail: {}
   }

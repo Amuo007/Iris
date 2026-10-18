@@ -132,6 +132,26 @@ function buildFacts (bank, info) {
 /* ---------- options ---------- */
 
 /* Index of the first option matching the first pattern that matches anything (patterns in order of preference). */
+/* The field on the page whose label best matches {label} (what the agent read on the screen), of one of {kinds}. */
+function findField (fields, label, kinds) {
+  const norm = function (v) { return clean(v).toLowerCase().replace(/[*✱:?]/g, '').replace(/\s+/g, ' ').trim() }
+  const want = norm(label)
+  if (!want) return null
+  const words = function (v) { return norm(v).split(/[^a-z0-9]+/).filter(function (w) { return w.length > 2 }) }
+  const ww = words(label)
+  let best = null
+  let top = 0
+  for (const f of fields || []) {
+    if (kinds && kinds.indexOf(f.kind) < 0) continue
+    const l = norm(f.label)
+    if (!l) continue
+    let sc = l === want ? 100 : l.indexOf(want) === 0 ? 85 : want.indexOf(l) === 0 && l.length > 3 ? 75 : l.indexOf(want) > 0 ? 65 : want.indexOf(l) > 0 && l.length > 3 ? 55 : 0
+    if (!sc && ww.length) { const lw = words(f.label); const hit = ww.filter(function (w) { return lw.indexOf(w) >= 0 }).length; sc = Math.round(45 * hit / ww.length) }
+    if (sc > top) { top = sc; best = f }
+  }
+  return top >= 30 ? best : null
+}
+
 /* A list's "nothing chosen" entry ("--", "Select…", "Please select"): not a real option. */
 function isPlaceholderOption (t) {
   return /^(-+.*|select\b.*|choose\b.*|please select.*|none selected)?$/i.test(clean(t))
@@ -617,6 +637,7 @@ module.exports = {
   buildFacts,
   pickOption,
   isPlaceholderOption,
+  findField,
   planField,
   PAGE_COLLECT,
   pageRect,

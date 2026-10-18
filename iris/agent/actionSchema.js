@@ -14,7 +14,7 @@
 const COORD_TYPES = new Set(['click', 'double_click', 'right_click', 'drag', 'scroll'])
 
 /* Actions after which the page (or the tab) is different, so a batch must stop there. */
-const PAGE_CHANGING = new Set(['navigate', 'back', 'switch_tab', 'new_tab', 'close_tab', 'zoom', 'find', 'dialog', 'upload', 'ask_user', 'recall', 'bookmarks', 'lookup', 'tailor_resume', 'cover_letter', 'autofill'])
+const PAGE_CHANGING = new Set(['navigate', 'back', 'switch_tab', 'new_tab', 'close_tab', 'zoom', 'find', 'dialog', 'upload', 'ask_user', 'recall', 'bookmarks', 'lookup', 'tailor_resume', 'cover_letter', 'autofill', 'choose'])
 
 const MAX_BATCH = 6
 
@@ -56,6 +56,8 @@ const SPEC = {
   cover_letter: { required: ['title'], optional: ['company', 'requirements'] },
   log_application: { required: ['status'], optional: ['company', 'title', 'url', 'note'] },
   autofill: { required: [], optional: [] },
+  choose: { required: ['field', 'option'], optional: [] },
+  fill: { required: ['field', 'text'], optional: [] },
   move: { required: ['x', 'y'], optional: [] },
   done: { required: [], optional: ['answer'] },
   fail: { required: [], optional: ['reason'] }
@@ -593,7 +595,9 @@ function validateAction (obj, limits) {
       case 'username':
       case 'password':
       case 'file':
-      case 'question': {
+      case 'question':
+      case 'field':
+      case 'option': {
         const v = toStringValue(value)
         if (!v || !v.trim()) errors.push(field + ' must be a non-empty string')
         else action[field] = v.trim()
@@ -779,6 +783,8 @@ function describeAction (action) {
     case 'tailor_resume': return 'Tailor the resume for ' + action.title + (action.company ? ' at ' + action.company : '')
     case 'cover_letter': return 'Write a cover letter for ' + action.title + (action.company ? ' at ' + action.company : '')
     case 'autofill': return 'Autofill the form from the profile'
+    case 'choose': return 'Choose "' + action.option + '" in "' + action.field + '"'
+    case 'fill': return 'Fill "' + action.field + '" with "' + String(action.text).slice(0, 40) + '"'
     case 'log_application': return ({ applied: 'Applied', skipped: 'Skipped', needs_you: 'Needs you', failed: 'Could not apply' })[action.status] + (action.title ? ': ' + action.title : '') + (action.company ? ' at ' + action.company : '')
     case 'done': return action.answer ? `Done \u2014 ${action.answer}` : 'Done'
     case 'fail': return action.reason ? `Stopped \u2014 ${action.reason}` : 'Stopped'
@@ -810,6 +816,10 @@ const ACTION_SPEC_TEXT = [
   '               clicks (x,y) first when given, then REPLACES the text already in the field',
   '               ("clear":false adds to it instead); "text":"" with x,y empties the field;',
   '               enter:true presses Enter after typing (submits searches and forms)',
+  '  choose       {"field":str,"option":str}   pick an option in a form\'s dropdown, list, radio or checkbox by the',
+  '               field\'s label as shown and the option\'s text — Iris finds and picks it itself and reads it back',
+  '               (if the option is not there it lists the real ones). Prefer this to clicking small options.',
+  '  fill         {"field":str,"text":str}     put text in a form box by its label (a date box, a stubborn box)',
   '  key          {"key":"enter|tab|escape|backspace|delete|up|down|left|right|pagedown|pageup|home|end|a..z","modifiers":["command"|"shift"]?}',
   '               (command+a/c/v/x/z work: select all, copy, paste, cut, undo)',
   '  scroll       {"direction":"down|up","amount":int?,"x":int?,"y":int?}   (amount = wheel notches, default 5)',

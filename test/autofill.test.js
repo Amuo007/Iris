@@ -301,3 +301,11 @@ test('a graduation month-and-year question is answered even in a large text box'
   assert.deepStrictEqual(plan('When will you graduate? (month & year) ✱', 'textarea'), { do: 'text', value: 'December 2026' })
   assert.strictEqual(plan('Why do you want to work here?', 'textarea').do, 'leave')
 })
+
+test('the agent names a field by the label it reads; Iris finds that field', () => {
+  const fields = [{ key: 'f1', kind: 'text', label: 'Phone Number' }, { key: 'f2', kind: 'combobox', label: 'State' }, { key: 'f3', kind: 'select', label: 'Please tell us how you heard about this opportunity. ✱' }, { key: 'f4', kind: 'radios', label: 'Are you legally authorized to work in the country for which you are applying? ✱' }]
+  assert.strictEqual(af.findField(fields, 'State', ['combobox', 'select']).key, 'f2')
+  assert.strictEqual(af.findField(fields, 'How did you hear about this opportunity', ['select']).key, 'f3')
+  assert.strictEqual(af.findField(fields, 'Are you legally authorized to work', ['radios']).key, 'f4')
+  assert.strictEqual(af.findField(fields, 'Favourite colour', ['combobox', 'select']), null)
+})

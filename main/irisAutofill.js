@@ -172,6 +172,63 @@ async function irisAfChoose (computer, wc, field, plan, facts) {
   return { left: 'clicked "' + texts[i] + '" but the box shows "' + (shown || 'nothing') + '"', seen: texts }
 }
 
+/* The agent's own "choose" / "fill": a field found by the label it read on the screen, done the way autofill does it
+   (open the list, pick by text, read it back) — no aiming at small options by pixels. */
+function irisAfEscape (s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
+async function irisChooseField (computer, wc, label, option) {
+  const fields = await irisAfEval(wc, irisAutofillLib.PAGE_COLLECT)
+  if (!Array.isArray(fields)) return { ok: false, error: 'could not read the form on this page' }
+  const kinds = ['combobox', 'select', 'radios', 'checkboxes']
+  const field = irisAutofillLib.findField(fields, label, kinds)
+  if (!field) {
+    const names = fields.filter(function (f) { return kinds.indexOf(f.kind) >= 0 && f.label }).map(function (f) { return '"' + String(f.label).slice(0, 50) + '"' }).slice(0, 12)
+    return { ok: false, error: 'no dropdown or choice labelled "' + label + '" here' + (names.length ? ' (the ones on this page: ' + names.join(', ') + ')' : '') + ': click it yourself' }
+  }
+  const o = irisAfEscape(String(option).trim())
+  const patterns = [new RegExp('^' + o + '$', 'i'), new RegExp('^' + o, 'i'), new RegExp(o, 'i')]
+  let result
+  if (field.kind === 'select') {
+    const i = irisAutofillLib.pickOption(field.options || [], patterns)
+    if (i < 0) return { ok: false, error: 'no option "' + option + '" in "' + field.label + '" — its options: ' + (field.options || []).slice(0, 15).join(' / ') }
+    const ok = await irisAfEval(wc, irisAutofillLib.pageSetSelect(field.key, field.options[i]))
+    result = ok ? { set: field.options[i] } : { left: 'the list did not take it' }
+  } else if (field.kind === 'radios' || field.kind === 'checkboxes') {
+    const i = irisAutofillLib.pickOption(field.options || [], patterns)
+    if (i < 0) return { ok: false, error: 'no choice "' + option + '" in "' + field.label + '" — its choices: ' + (field.options || []).slice(0, 15).join(' / ') }
+    result = await irisAfTick(computer, wc, field, i, field.options[i])
+  } else {
+    result = await irisAfChoose(computer, wc, field, { do: 'choose', patterns: patterns, typeAhead: String(option).trim() }, {})
+  }
+  if (result.set !== undefined) return { ok: true, note: 'Chose "' + result.set + '" in "' + field.label + '" (read back from the page).' }
+  const seen = result.seen && result.seen.length ? ' Its options: ' + result.seen.slice(0, 15).join(' / ') + '.' : ''
+  return { ok: false, error: 'could not choose "' + option + '" in "' + field.label + '": ' + (result.left || 'it did not take') + '.' + seen }
+}
+
+async function irisFillField (computer, wc, label, text) {
+  const fields = await irisAfEval(wc, irisAutofillLib.PAGE_COLLECT)
+  if (!Array.isArray(fields)) return { ok: false, error: 'could not read the form on this page' }
+  const field = irisAutofillLib.findField(fields, label, ['text', 'textarea'])
+  if (!field) return { ok: false, error: 'no text box labelled "' + label + '" here: click it and type yourself' }
+  await irisAfEval(wc, irisAutofillLib.pageSetText(field.key, text))
+  await sleep(80)
+  let shown = await irisAfEval(wc, irisAutofillLib.pageValue(field.key))
+  if (irisAfNorm(shown) !== irisAfNorm(text)) {
+    const at = await irisAfEval(wc, irisAutofillLib.pageRect(field.key, ''))
+    if (at) {
+      await irisAfClick(computer, wc, at.x, at.y)
+      await sleep(120)
+      wc.selectAll()
+      await irisAfType(computer, wc, text)
+      await sleep(200)
+      shown = await irisAfEval(wc, irisAutofillLib.pageValue(field.key))
+    }
+  }
+  if (irisAfNorm(shown) === irisAfNorm(text) || String(shown || '').replace(/\D/g, '') === String(text).replace(/\D/g, '') && /\d/.test(text)) {
+    return { ok: true, note: 'Filled "' + field.label + '" (read back from the page: "' + String(shown).slice(0, 60) + '").' }
+  }
+  return { ok: false, error: 'typed into "' + field.label + '" but it shows "' + String(shown || 'nothing').slice(0, 60) + '"' }
+}
+
 /* checkboxes / radios: a real click on the chosen box's label */
 async function irisAfTick (computer, wc, field, index, optionText) {
   const at = await irisAfEval(wc, irisAutofillLib.pageRect(field.key, 'box:' + index))

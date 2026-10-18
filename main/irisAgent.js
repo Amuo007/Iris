@@ -1383,6 +1383,15 @@ IrisComputer.prototype.act = async function (action) {
       this.notes = (this.notes || []).concat(r.report)
       return { ok: true, pageChanged: true }
     }
+    case 'choose':
+    case 'fill': {
+      // a field found by the label the agent read, filled or picked by code and read back (a dropdown, a date box)
+      if (/(^|\.)linkedin\.com$/i.test(irisSiteOf(wc.getURL()) || '')) return { ok: false, error: 'on LinkedIn, click and type yourself' }
+      const r = action.type === 'choose' ? await irisChooseField(this, wc, action.field, action.option) : await irisFillField(this, wc, action.field, action.text)
+      if (!r.ok) return r
+      this.notes = (this.notes || []).concat(r.note)
+      return { ok: true }
+    }
     case 'log_application': {
       // the job this log is about: one Iris made a resume for in this run (by its title), else the last one.
       // A job ruled out from the list has no resume: it must not take another job's link, fit or resume,
