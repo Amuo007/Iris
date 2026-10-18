@@ -103,12 +103,12 @@ async function irisAfChoose (computer, wc, field, plan, facts) {
   }
   if (!options || !options.length) {
     await irisAfKey(wc, 'escape')
-    return { left: 'its list did not open' }
+    return { left: 'its list did not open', seen: [] }
   }
   let texts = options.map(function (o) { return o.text })
   if (plan.yesNoOnly && !texts.every(function (t) { return /^(yes|no)\b/i.test(t) && t.length <= 12 })) {
     await irisAfKey(wc, 'escape')
-    return { left: 'its options are more than yes/no (' + texts.slice(0, 3).join(' / ') + '…): read them and pick' }
+    return { left: 'its options are more than yes/no (' + texts.slice(0, 3).join(' / ') + '…): read them and pick', seen: texts }
   }
   let i = irisAutofillLib.pickOption(texts, patterns, plan.avoid)
   if (i < 0 && plan.search && /\s/.test(plan.search)) {
@@ -124,19 +124,19 @@ async function irisAfChoose (computer, wc, field, plan, facts) {
   }
   if (i < 0) {
     await irisAfKey(wc, 'escape')
-    return { left: 'no option matches the saved answer (' + texts.slice(0, 4).join(' / ') + (texts.length > 4 ? ' …' : '') + ')' }
+    return { left: 'no option matches the saved answer (' + texts.slice(0, 4).join(' / ') + (texts.length > 4 ? ' …' : '') + ')', seen: texts }
   }
   const at = await irisAfEval(wc, irisAutofillLib.pageOptionRect(field.key, i))
   if (!at || at.y < 0) {
     await irisAfKey(wc, 'escape')
-    return { left: 'its option was out of view' }
+    return { left: 'its option was out of view', seen: texts }
   }
   await sleep(120)
   await irisAfClick(computer, wc, at.x, at.y)
   await sleep(300)
   const shown = await irisAfEval(wc, irisAutofillLib.pageValue(field.key))
-  if (irisAfShows(shown, texts[i])) return { set: texts[i] }
-  return { left: 'clicked "' + texts[i] + '" but the box shows "' + (shown || 'nothing') + '"' }
+  if (irisAfShows(shown, texts[i])) return { set: texts[i], seen: texts }
+  return { left: 'clicked "' + texts[i] + '" but the box shows "' + (shown || 'nothing') + '"', seen: texts }
 }
 
 /* checkboxes / radios: a real click on the chosen box's label */
@@ -189,6 +189,7 @@ async function irisAutofillRun (computer, wc) {
   const facts = irisAutofillLib.buildFacts(irisCareerLoad(), irisProfileLoad())
   const set = []
   const left = []
+  const record = []
   computer.injecting = true
   try {
     for (const field of fields) {
@@ -234,6 +235,10 @@ async function irisAutofillRun (computer, wc) {
       }
       if (result.set !== undefined) set.push({ field: field, value: result.set })
       else left.push({ field: field, why: result.left, quiet: result.quiet && !field.required })
+      // for the hybrid dataset: what the tool saw and decided, field by field
+      record.push({ key: field.key, id: field.id, kind: field.kind, label: String(field.label || '').slice(0, 400), required: !!field.required,
+        before: field.value || '', options: (result.seen || field.options || null), plan: plan.do, planned: plan.value || plan.option || plan.search || null,
+        why: plan.why || null, set: result.set !== undefined ? result.set : null, left: result.set === undefined ? (result.left || null) : null })
     }
   } finally {
     computer.injecting = false
@@ -256,5 +261,9 @@ async function irisAutofillRun (computer, wc) {
   }
   lines.push('Now CHECK: the page is back at the top of the form. Scroll down through ALL of it and compare every box with this list; fix anything wrong or empty by hand (normal clicks), answer the questions left to you, then Submit. Do not call autofill again on this form.')
   DBUG('autofill: set ' + set.length + ', left ' + left.length + ' in ' + (Date.now() - started) + ' ms')
+  try {
+    fs.appendFileSync(path.join(userDataPath, 'iris-autofill-log.jsonl'), JSON.stringify({ at: started, ms: Date.now() - started, sessionId: computer.sessionId || null,
+      url: wc.getURL(), mode: allowed.mode, fields: record }) + '\n')
+  } catch (e) { DBUG('autofill: log failed: ' + e.message) }
   return { ok: true, pageChanged: true, report: lines.join('\n'), set: set.length, left: mustDo.length }
 }
