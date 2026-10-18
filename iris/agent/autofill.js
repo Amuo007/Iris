@@ -116,6 +116,7 @@ function buildFacts (bank, info) {
     relocate: yes(answer(/relocat/i)),
     years: (function () { const m = answer(/years of experience/i).match(/(\d+(\.\d+)?)/); return m ? parseFloat(m[1]) : null })(),
     startDate: answer(/start date/i),
+    startDateParts: (function () { const m = answer(/start date/i).match(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})/i); if (!m) return null; const mon = ['january','february','march','april','may','june','july','august','september','october','november','december'].indexOf(m[1].toLowerCase()) + 1; return { y: m[3], m: String(mon).padStart(2, '0'), d: String(m[2]).padStart(2, '0') } })(),
     gender: answer(/^gender$/i),
     transgender: answer(/transgender/i),
     pronouns: answer(/pronoun/i),
@@ -210,7 +211,7 @@ function rulesFor (f) {
     // availability that follows from "willing to relocate": on-site, hybrid, office days, commuting
     { test: /(able|willing|comfortable|open) (to )?(work(ing)? |be(ing)? )?(on-?site|in(-| )office|in person|hybrid|from (the|our) office|commut\w*|relocat\w*)|work(ing)? (on-?site|in(-| )office|hybrid)\b.*\?|(days|times) (a|per) week in (the )?office/i,
       skip: /sponsor|authori|citizen|clearance/i, yesNoOnly: true, choose: f.relocate ? YES : null },
-    { test: /(earliest|available) (start|to start)|start date|when can you start|availability to start/i, skip: /month|year/i, text: f.startDate ? f.startDate.replace(/\s*\(.*\)\s*$/, '') : '' },
+    { test: /(earliest|available) (start|to start)|start date|when can you start|availability to start/i, skip: /month|year/i, text: f.startDate ? f.startDate.replace(/\s*\(.*\)\s*$/, '') : '', date: f.startDateParts },
     { test: /years of (professional |relevant |industry |software |work )*(engineering |industry )?experience|how many years/i, skip: /^(do|have|are|did) you\b|\d+\s*\+/i, pick: f.years !== null ? function (opts) { return pickYears(opts, f.years) } : null, text: f.years !== null ? String(f.years) : '' },
     // "Do you have 3+ years of …?" — a sure No when the profile has fewer years in all (a skill's years are never more)
     { test: /\b(\d+)\s*\+?\s*(or more )?years\b.*experience|experience.*\b(\d+)\s*\+?\s*(or more )?years\b/i, skip: /how many|what is|list|describe/i, yesNoOnly: true,
@@ -312,10 +313,19 @@ function planField (field, facts, mode) {
   }
   if (field.kind === 'text' || field.kind === 'textarea') {
     if (field.kind === 'textarea' && !/address/i.test(label)) return { do: 'leave', why: 'a written answer: the agent writes it' }
-    const value = rule.text
+    let value = rule.text
     if (!value) return { do: 'leave', why: 'no fact for it' }
-    // a number box takes a plain number (a year, GPA, ZIP); a date box is left to the agent (its format varies)
-    if (field.inputType === 'date' || (field.inputType === 'number' && !/^\d+(\.\d+)?$/.test(String(value)))) return { do: 'leave', why: 'a ' + field.inputType + ' box: the agent fills it' }
+    // a date: in the form the box asks for (a date picker takes ISO; a masked box shows its pattern as placeholder)
+    if (rule.date) {
+      const dt = rule.date
+      const ph = String(field.placeholder || '')
+      if (field.inputType === 'date') value = dt.y + '-' + dt.m + '-' + dt.d
+      else if (/m{1,2}\W*d{1,2}\W*y{2,4}/i.test(ph)) value = dt.m + '/' + dt.d + '/' + dt.y
+      else if (/d{1,2}\W*m{1,2}\W*y{2,4}/i.test(ph)) value = dt.d + '/' + dt.m + '/' + dt.y
+      else if (/y{4}\W*m{1,2}\W*d{1,2}/i.test(ph)) value = dt.y + '-' + dt.m + '-' + dt.d
+    } else if (field.inputType === 'date') return { do: 'leave', why: 'a date box: the agent fills it' }
+    // a number box takes a plain number (a year, GPA, ZIP)
+    if (field.inputType === 'number' && !/^\d+(\.\d+)?$/.test(String(value))) return { do: 'leave', why: 'a number box: the agent fills it' }
     return { do: 'text', value: value }
   }
   return { do: 'leave', why: 'unknown kind of field' }
@@ -428,7 +438,7 @@ const PAGE_COLLECT = `(() => {
     }
     const req = el.required || el.getAttribute('aria-required') === 'true' || /\\*/.test(lab);
     const aria = kind === 'combobox' && (el.hasAttribute('aria-expanded') || el.getAttribute('aria-haspopup') === 'listbox' || el.hasAttribute('aria-controls'));
-    out.push({ key: id, id: el.id || el.name, kind, inputType: t, label: label.replace(/\\s*\\*\\s*$/, ''), required: !!req, value, options, aria });
+    out.push({ key: id, id: el.id || el.name, kind, inputType: t, label: label.replace(/\\s*\\*\\s*$/, ''), required: !!req, value, options, aria, placeholder: clean(el.placeholder || '').slice(0, 40) });
   });
   return out;
 })()`

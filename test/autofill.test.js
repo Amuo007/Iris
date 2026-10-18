@@ -156,6 +156,8 @@ test('common questions that follow from the profile', () => {
   assert.strictEqual(p3('Are you able to work onsite 3 days a week?', 'select', ['Yes', 'No']).option, 'Yes')
   assert.strictEqual(p3('Are you comfortable working in-office five days a week?', 'select', ['Yes', 'No']).option, 'Yes')
   assert.deepStrictEqual(p3('Earliest start date'), { do: 'text', value: 'December 21, 2026' })
+  assert.deepStrictEqual(af.planField({ label: 'Available to Start', kind: 'text', placeholder: 'MM/DD/YYYY', required: true }, f3), { do: 'text', value: '12/21/2026' })
+  assert.deepStrictEqual(af.planField({ label: 'Start date', kind: 'text', inputType: 'date', required: true }, f3), { do: 'text', value: '2026-12-21' })
   assert.strictEqual(p3('How many years of software engineering industry experience do you have (excluding internships)?', 'select', ['Less than 2 years', '2-5 years', '5+ years']).option, 'Less than 2 years')
   assert.strictEqual(p3('Years of experience', 'select', ['0', '1-3', '3-5', '5+']).option, '1-3')
   assert.strictEqual(p3('Do you hold an active security clearance?', 'select', ['Yes', 'No']).option, 'No')
