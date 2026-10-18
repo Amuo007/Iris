@@ -132,12 +132,17 @@ test('SMS / WhatsApp opt-ins: no — even when the question mentions email', () 
   assert.deepStrictEqual(plan('LinkedIn Profile URL'), { do: 'text', value: 'https://www.linkedin.com/in/x/' })
 })
 
+test('privacy notices are acknowledged; agreements are left to the agent', () => {
+  assert.strictEqual(plan('Applicant Privacy Acknowledgement', 'select', ['Yes', 'No']).option, 'Yes')
+  assert.strictEqual(plan('Please review and acknowledge our Candidate Privacy Policy linked below:', 'select', ['I acknowledge']).option, 'I acknowledge')
+  assert.strictEqual(plan('By agreeing here I acknowledge the mutual Applicant Arbitration Agreement and the privacy notice', 'select', ['Yes', 'No']).do, 'leave')
+})
+
 test('unknown and optional self-ID questions are left to the agent', () => {
   assert.strictEqual(plan('Do you identify as transgender?', 'select', ['Yes', 'No', 'I don\'t wish to answer'], { required: false }).do, 'leave')
   assert.strictEqual(plan('Do you identify as transgender?', 'select', ['Yes', 'No', 'I don\'t wish to answer']).option, 'I don\'t wish to answer')
   assert.strictEqual(plan('Are you located in the greater Seattle area?', 'select', ['Yes', 'No']).do, 'leave')
   assert.strictEqual(plan('Have you previously applied to Point72?', 'select', ['Yes', 'No']).do, 'leave')
-  assert.strictEqual(plan('Applicant Privacy Acknowledgement', 'select', ['Yes']).do, 'leave')
   assert.strictEqual(plan('Start date month', 'select', ['January']).do, 'leave')
 })
 

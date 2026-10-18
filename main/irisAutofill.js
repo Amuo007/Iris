@@ -164,7 +164,7 @@ async function irisAfUpload (computer, wc, field) {
   } catch (e) {
     return { left: 'the file did not go in (' + e.message + '): use Attach' }
   }
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 20; i++) {
     await sleep(400)
     if (await irisAfEval(wc, irisAutofillLib.pageValue(field.key))) {
       if (computer.lastJob) computer.lastJob.uploaded = true

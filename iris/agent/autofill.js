@@ -195,6 +195,9 @@ function rulesFor (f) {
     // ---- this company
     { test: /(have you|did you)( ever)? (been )?(previously )?(worked|employed|been employed|been engaged)|(current|former) .*(employee|intern|contractor)|do you currently work (for|at)|ever worked (for|at)/i,
       choose: [/never/i, /^no\b/i, /have not|haven'?t/i, /not (worked|been)/i], avoid: /yes/i, text: 'No' },
+    // a privacy notice to acknowledge (not an agreement that binds the user: those the agent reads)
+    { test: /privacy (policy|notice|acknowledg)|personal (information|data) (policy|notice)|candidate privacy|applicant privacy/i, skip: /arbitration|non-?compete|agreement to|waive/i,
+      choose: [/^yes\b/i, /acknowledge/i, /^i (have read|agree|accept|understand)/i, /agree/i], avoid: /^no\b|do not|don'?t/i },
     { test: /how did you (hear|learn|find)|where did you (hear|find|learn)|source of (your )?application|referral source/i,
       choose: [/company'?s? (web)?site|careers? (page|site|website)|company careers/i, /job board/i, /^other$/i], avoid: /linkedin|referr|employee|recruiter|event|agency/i },
     // ---- voluntary self-identification (saved answers only)
@@ -383,7 +386,7 @@ function pageValue (key) {
     if (el.getAttribute('role') === 'combobox') { const ctl = el.closest('.select__control') || el.closest('[class*="control"]'); const sv = ctl && ctl.querySelectorAll('[class*="single-value"], [class*="multi-value__label"]'); return sv && sv.length ? [...sv].map(x => clean(x.innerText)).join(', ') : ''; }
     if (el.tagName === 'SELECT') return el.value ? clean(el.options[el.selectedIndex].text) : '';
     if (el.tagName === 'FIELDSET' || el.querySelector) { const boxes = el.querySelectorAll ? [...el.querySelectorAll('input[type=checkbox], input[type=radio]')] : []; if (boxes.length) return boxes.filter(b => b.checked).map(b => { const l = (b.id && document.querySelector('label[for="' + CSS.escape(b.id) + '"]')) || b.closest('label'); return clean(l ? l.innerText : (b.getAttribute('aria-label') || b.value)); }).join(', '); }
-    if (el.type === 'file') { const box = el.closest('.file-upload, [class*="upload"], .field') || el.parentElement; return box && /\\.(pdf|docx?|txt|rtf)\\b/i.test(box.innerText) ? 'attached' : ''; }
+    if (el.type === 'file') { if (el.files && el.files.length) return 'attached'; let n = el; for (let k = 0; k < 6 && n; k++) { n = n.parentElement; if (n && /\\.(pdf|docx?|txt|rtf)\\b/i.test(n.innerText || '')) return 'attached'; } return ''; }
     return clean(el.value);
   })()`
 }
