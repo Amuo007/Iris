@@ -40,6 +40,7 @@ test('every site but LinkedIn; Greenhouse in full, the rest basic', () => {
 
 test('basic mode leaves custom dropdowns to the agent', () => {
   assert.strictEqual(af.planField({ label: 'Gender', kind: 'combobox', required: true }, facts, 'basic').do, 'leave')
+  assert.strictEqual(af.planField({ label: 'Gender', kind: 'combobox', required: true, aria: true }, facts, 'basic').do, 'choose')
   assert.strictEqual(af.planField({ label: 'First name', kind: 'text', required: true }, facts, 'basic').value, 'Amrinder')
   assert.strictEqual(af.planField({ label: 'Will you need to relocate for this position?', kind: 'radios', options: ['Yes', 'No'], required: true }, facts, 'basic').do, 'leave')
   assert.strictEqual(af.planField({ label: 'Are you willing to relocate?', kind: 'radios', options: ['Yes', 'No'], required: true }, facts, 'basic').option, 'Yes')

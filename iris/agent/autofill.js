@@ -261,7 +261,7 @@ function sponsorChoice (f) {
  */
 function planField (field, facts, mode) {
   const label = clean(field.label).replace(/\s*\*\s*$/, '').replace(/\*/g, '').trim()
-  if (mode === 'basic' && field.kind === 'combobox') return { do: 'leave', why: 'a custom dropdown on this site: pick it by hand' }
+  if (mode === 'basic' && field.kind === 'combobox' && !field.aria) return { do: 'leave', why: 'a custom dropdown on this site: pick it by hand' }
   if (field.kind === 'file') {
     if (/resume import|site autofill/i.test(label)) return { do: 'leave', why: 'the site\'s resume import (its own autofill): not used' }
     if (/resume|cv\b/i.test(label) || /resume/i.test(field.id || '')) return field.value ? { do: 'leave', why: 'already attached' } : { do: 'upload', file: 'resume' }
@@ -334,17 +334,23 @@ const PAGE_COLLECT = `(() => {
   ${AF_DEEP}
   const clean = s => String(s || '').replace(/\\s+/g, ' ').trim();
   const visible = el => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return (r.width > 0 && r.height > 0) || el.type === 'file' || cs.position === 'absolute'; };
+  const placeholder = s => /^(select( an option| one)?\\.{0,3}|search\\.{0,3}|choose\\.{0,3}|--+|please select)$/i.test(s);
   const labelOf = el => {
     if (el.id) { const l = __labelFor(el); if (l && clean(l.innerText)) return clean(l.innerText); }
     const by = el.getAttribute('aria-labelledby'); if (by) { const t = by.split(' ').map(i => __byId(el, i)).filter(Boolean).map(n => n.innerText).join(' '); if (clean(t)) return clean(t); }
-    if (el.getAttribute('aria-label')) return clean(el.getAttribute('aria-label'));
+    const al = clean(el.getAttribute('aria-label')); if (al && !placeholder(al)) return al;
     const fsx = el.closest('fieldset'); if (fsx && fsx.querySelector('legend')) return clean(fsx.querySelector('legend').innerText);
-    const wrap = el.closest('.field, .select, .text-input-wrapper, .input-wrapper, div'); const l2 = wrap && wrap.querySelector('label'); return l2 ? clean(l2.innerText) : '';
+    const wrap = el.closest('.field, .select, .text-input-wrapper, .input-wrapper, div'); const l2 = wrap && wrap.querySelector('label'); if (l2 && clean(l2.innerText)) return clean(l2.innerText);
+    // a dropdown with no label element: the question is the text around it (walk up until there is more than the
+    // dropdown's own placeholder)
+    if (el.getAttribute('role') === 'combobox') { const own = clean(el.tagName === 'INPUT' ? el.value : el.innerText); let up = el; for (let k = 0; k < 8 && up; k++) { up = up.parentElement; if (!up) break; let t = clean(up.innerText || ''); up.querySelectorAll('[role=listbox], [role=status], [role=alert], [aria-live]').forEach(x => { const xt = clean(x.innerText); if (xt) t = clean(t.split(xt).join(' ')); }); const rest = clean(own ? t.split(own).join(' ') : t); if (rest.length >= 3) return rest.length <= 300 ? rest : ''; } }
+    return '';
   };
   const form = document.querySelector('form#application-form, form#application_form, form.application--form, form') || document;
   const out = []; let n = 0; const seenGroups = new Set();
-  let all = [...form.querySelectorAll('input, select, textarea')];
-  if (all.filter(e => e.type !== 'hidden' && e.type !== 'file').length < 3) all = __deep('input, select, textarea');
+  const SEL = 'input, select, textarea, [role=combobox]:not(input):not(select):not(textarea)';
+  let all = [...form.querySelectorAll(SEL)];
+  if (all.filter(e => e.type !== 'hidden' && e.type !== 'file').length < 3) all = __deep(SEL);
   all.forEach(el => {
     const t = (el.type || '').toLowerCase();
     if (t === 'hidden' || t === 'submit' || t === 'button' || el.disabled) return;
@@ -380,7 +386,8 @@ const PAGE_COLLECT = `(() => {
     if (kind === 'combobox') {
       const ctl = el.closest('.select__control') || el.closest('[class*="control"]');
       const sv = ctl && ctl.querySelectorAll('[class*="single-value"], [class*="multi-value__label"]');
-      value = sv && sv.length ? [...sv].map(x => clean(x.innerText)).join(', ') : '';
+      if (sv && sv.length) value = [...sv].map(x => clean(x.innerText)).join(', ');
+      else if (!ctl) { const own = clean(el.tagName === 'INPUT' ? el.value : el.innerText); value = placeholder(own) ? '' : own; }
     } else if (kind === 'select') {
       options = [...el.options].filter(o => o.value !== '').map(o => clean(o.text)); value = el.value ? clean(el.options[el.selectedIndex].text) : '';
     } else if (kind === 'file') {
@@ -398,7 +405,8 @@ const PAGE_COLLECT = `(() => {
       label = byId || (lab && !/^(attach|choose file|upload|browse|drop or select)/i.test(lab) && /resume|cv|cover|document/i.test(lab) ? lab : '') || near || lab || el.id;
     }
     const req = el.required || el.getAttribute('aria-required') === 'true' || /\\*/.test(lab);
-    out.push({ key: id, id: el.id || el.name, kind, inputType: t, label: label.replace(/\\s*\\*\\s*$/, ''), required: !!req, value, options });
+    const aria = kind === 'combobox' && (el.hasAttribute('aria-expanded') || el.getAttribute('aria-haspopup') === 'listbox' || el.hasAttribute('aria-controls'));
+    out.push({ key: id, id: el.id || el.name, kind, inputType: t, label: label.replace(/\\s*\\*\\s*$/, ''), required: !!req, value, options, aria });
   });
   return out;
 })()`
@@ -452,7 +460,7 @@ function pageValue (key) {
     const el = __one('[data-iris-af="${key}"]');
     if (!el) { const box = __one('[data-iris-afbox="${key}"]'); return box && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(box.innerText || '') ? 'attached' : null; }
     const clean = s => String(s || '').replace(/\\s+/g, ' ').trim();
-    if (el.getAttribute('role') === 'combobox') { const ctl = el.closest('.select__control') || el.closest('[class*="control"]'); const sv = ctl && ctl.querySelectorAll('[class*="single-value"], [class*="multi-value__label"]'); return sv && sv.length ? [...sv].map(x => clean(x.innerText)).join(', ') : ''; }
+    if (el.getAttribute('role') === 'combobox') { const ctl = el.closest('.select__control') || el.closest('[class*="control"]'); const sv = ctl && ctl.querySelectorAll('[class*="single-value"], [class*="multi-value__label"]'); if (sv && sv.length) return [...sv].map(x => clean(x.innerText)).join(', '); if (ctl) return ''; const own = clean(el.tagName === 'INPUT' ? el.value : el.innerText); return /^(select( an option| one)?\\.{0,3}|search|choose\\.{0,3}|--+|please select)$/i.test(own) ? '' : own; }
     if (el.tagName === 'SELECT') return el.value ? clean(el.options[el.selectedIndex].text) : '';
     if (el.tagName === 'FIELDSET' || el.querySelector) { const boxes = el.querySelectorAll ? [...el.querySelectorAll('input[type=checkbox], input[type=radio]')] : []; if (boxes.length) return boxes.filter(b => b.checked).map(b => { const l = __labelFor(b) || b.closest('label'); return clean(l ? l.innerText : (b.getAttribute('aria-label') || b.value)); }).join(', '); }
     if (el.type === 'file') { if (el.files && el.files.length) return 'attached'; let n = el; for (let k = 0; k < 6 && n; k++) { n = n.parentElement; if (n && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(n.innerText || '')) return 'attached'; } return ''; }
