@@ -130,6 +130,7 @@ test('SMS / WhatsApp opt-ins: no — even when the question mentions email', () 
   assert.strictEqual(plan('Yes - I consent to receiving text messages', 'radios', ['Yes - I consent to receiving text messages', 'No - I do not consent to receiving text messages']).option, 'No - I do not consent to receiving text messages')
   assert.strictEqual(plan('How did you hear about us? (LinkedIn, a friend, our website …)', 'select', ['LinkedIn', 'Company website', 'Other']).option, 'Company website')
   assert.deepStrictEqual(plan('Email address'), { do: 'text', value: 'a@example.com' })
+  assert.deepStrictEqual(plan('Confirm your email*'), { do: 'text', value: 'a@example.com' })
   assert.deepStrictEqual(plan('LinkedIn Profile URL'), { do: 'text', value: 'https://www.linkedin.com/in/x/' })
 })
 
@@ -180,4 +181,5 @@ test('the resume goes in the resume box only', () => {
   assert.deepStrictEqual(plan('Resume/CV', 'file', null, { id: 'resume' }), { do: 'upload', file: 'resume' })
   assert.strictEqual(plan('Cover Letter', 'file', null, { id: 'cover_letter' }).do, 'leave')
   assert.strictEqual(plan('Resume/CV', 'file', null, { id: 'resume', value: 'resume.pdf' }).do, 'leave')
+  assert.strictEqual(plan('Resume import (the site autofill)', 'file', null, { id: 'spl-dropzone-file-input-2' }).do, 'leave')
 })

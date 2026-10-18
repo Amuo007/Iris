@@ -177,7 +177,7 @@ function rulesFor (f) {
     { test: /^(legal |preferred )?first name|^given name/i, text: f.firstName },
     { test: /^(legal )?last name|^surname|^family name/i, text: f.lastName },
     { test: /^(full |legal |your )?(full )?(legal )?name\b(?!.*(company|school|employer|reference|manager|recruiter|referr))|full legal name/i, text: f.fullName },
-    { test: /^(your )?e-?mail( address)?\b/i, skip: /referr|manager|reference/i, text: f.email, short: true },
+    { test: /^(your )?e-?mail( address)?\b|^(confirm|re-?enter|repeat|verify|retype) (your )?e-?mail/i, skip: /referr|manager|reference/i, text: f.email, short: true },
     { test: /^(mobile |cell |primary )?phone( number)?\b/i, text: f.phone },
     { test: /^(your )?linkedin\b|linkedin (profile|url)/i, text: f.linkedin, short: true },
     { test: /^(your )?github\b|github (profile|url)/i, text: f.github, short: true },
@@ -263,6 +263,7 @@ function planField (field, facts, mode) {
   const label = clean(field.label).replace(/\s*\*\s*$/, '').replace(/\*/g, '').trim()
   if (mode === 'basic' && field.kind === 'combobox') return { do: 'leave', why: 'a custom dropdown on this site: pick it by hand' }
   if (field.kind === 'file') {
+    if (/resume import|site autofill/i.test(label)) return { do: 'leave', why: 'the site\'s resume import (its own autofill): not used' }
     if (/resume|cv\b/i.test(label) || /resume/i.test(field.id || '')) return field.value ? { do: 'leave', why: 'already attached' } : { do: 'upload', file: 'resume' }
     return { do: 'leave', why: 'a document other than the resume' }
   }
@@ -316,23 +317,35 @@ function escapeRe (s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') 
 
 /* ---------- page scripts (run inside the form's page by main/irisAutofill.js) ---------- */
 
+/* Shared by every page script: find things inside shadow roots too (web-component forms such as SmartRecruiters'
+   "Easy apply"), and look labels and ids up in the element's own root first. */
+const AF_DEEP = "const __deep = (sel, root) => { const out = []; const walk = r => { r.querySelectorAll(sel).forEach(e => out.push(e)); r.querySelectorAll('*').forEach(e => { if (e.shadowRoot) walk(e.shadowRoot); }); }; walk(root || document); return out; };" +
+  " const __one = sel => document.querySelector(sel) || __deep(sel)[0] || null;" +
+  " const __root = el => (el && el.getRootNode && el.getRootNode().querySelector) ? el.getRootNode() : document;" +
+  " const __labelFor = el => el && el.id ? (__root(el).querySelector('label[for=\"' + CSS.escape(el.id) + '\"]') || document.querySelector('label[for=\"' + CSS.escape(el.id) + '\"]')) : null;" +
+  " const __byId = (el, i) => (__root(el).getElementById ? __root(el).getElementById(i) : null) || document.getElementById(i);"
+
+
 /*
  * Lists the form's fields. Each gets data-iris-af="fN" so later scripts find it again.
  * kinds: text, textarea, combobox (react-select), select, checkboxes / radios (one per group), file.
  */
 const PAGE_COLLECT = `(() => {
+  ${AF_DEEP}
   const clean = s => String(s || '').replace(/\\s+/g, ' ').trim();
   const visible = el => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return (r.width > 0 && r.height > 0) || el.type === 'file' || cs.position === 'absolute'; };
   const labelOf = el => {
-    if (el.id) { const l = document.querySelector('label[for="' + CSS.escape(el.id) + '"]'); if (l && clean(l.innerText)) return clean(l.innerText); }
-    const by = el.getAttribute('aria-labelledby'); if (by) { const t = by.split(' ').map(i => document.getElementById(i)).filter(Boolean).map(n => n.innerText).join(' '); if (clean(t)) return clean(t); }
+    if (el.id) { const l = __labelFor(el); if (l && clean(l.innerText)) return clean(l.innerText); }
+    const by = el.getAttribute('aria-labelledby'); if (by) { const t = by.split(' ').map(i => __byId(el, i)).filter(Boolean).map(n => n.innerText).join(' '); if (clean(t)) return clean(t); }
     if (el.getAttribute('aria-label')) return clean(el.getAttribute('aria-label'));
     const fsx = el.closest('fieldset'); if (fsx && fsx.querySelector('legend')) return clean(fsx.querySelector('legend').innerText);
     const wrap = el.closest('.field, .select, .text-input-wrapper, .input-wrapper, div'); const l2 = wrap && wrap.querySelector('label'); return l2 ? clean(l2.innerText) : '';
   };
   const form = document.querySelector('form#application-form, form#application_form, form.application--form, form') || document;
   const out = []; let n = 0; const seenGroups = new Set();
-  form.querySelectorAll('input, select, textarea').forEach(el => {
+  let all = [...form.querySelectorAll('input, select, textarea')];
+  if (all.filter(e => e.type !== 'hidden' && e.type !== 'file').length < 3) all = __deep('input, select, textarea');
+  all.forEach(el => {
     const t = (el.type || '').toLowerCase();
     if (t === 'hidden' || t === 'submit' || t === 'button' || el.disabled) return;
     if (/recaptcha/i.test(el.name || el.id || '')) return;
@@ -340,7 +353,7 @@ const PAGE_COLLECT = `(() => {
     if (t === 'checkbox' || t === 'radio') {
       // one group per name (radios of one question can sit in separate wrappers); its box: the smallest element
       // holding all of them
-      const same = el.name ? [...form.querySelectorAll('input[type=' + t + '][name="' + CSS.escape(el.name) + '"]')] : [];
+      const same = el.name ? [...__root(el).querySelectorAll('input[type=' + t + '][name="' + CSS.escape(el.name) + '"]')] : [];
       let grp = el.closest('fieldset') || el.parentElement.parentElement;
       if (same.length > 1) { grp = el.parentElement; while (grp && !same.every(b => grp.contains(b))) grp = grp.parentElement; grp = grp || document.body; }
       const key = (el.name || '') + '|' + (grp && grp.id || '') + '|' + (same.length > 1 ? 'name' : '');
@@ -349,8 +362,8 @@ const PAGE_COLLECT = `(() => {
       const id = 'f' + (++n); grp.setAttribute('data-iris-af', id);
       const legend = grp.querySelector('legend');
       const by = grp.getAttribute('aria-labelledby');
-      const byText = by ? clean(by.split(' ').map(i => document.getElementById(i)).filter(Boolean).map(n => n.innerText).join(' ')) : '';
-      const optText = b => { const l = (b.id && document.querySelector('label[for="' + CSS.escape(b.id) + '"]')) || b.closest('label'); if (l && clean(l.innerText)) return clean(l.innerText); const bl = b.getAttribute('aria-labelledby'); const bt = bl ? clean(bl.split(' ').map(i => document.getElementById(i)).filter(Boolean).map(x => x.innerText).join(' ')) : ''; return bt || clean(b.getAttribute('aria-label') || b.value); };
+      const byText = by ? clean(by.split(' ').map(i => __byId(grp, i)).filter(Boolean).map(n => n.innerText).join(' ')) : '';
+      const optText = b => { const l = __labelFor(b) || b.closest('label'); if (l && clean(l.innerText)) return clean(l.innerText); const bl = b.getAttribute('aria-labelledby'); const bt = bl ? clean(bl.split(' ').map(i => __byId(b, i)).filter(Boolean).map(x => x.innerText).join(' ')) : ''; return bt || clean(b.getAttribute('aria-label') || b.value); };
       const opts = boxes.map(optText);
       // the question: the legend, the group's own label, else the group's first line of text that is not an option
       const firstLine = clean(String(grp.innerText || '').split('\\n').map(x => x.trim()).find(x => x && !opts.some(o => o && (x === o || x.indexOf(o) === 0))) || '');
@@ -378,8 +391,10 @@ const PAGE_COLLECT = `(() => {
     if (kind === 'file') {
       const byId = /resume|\\bcv\\b/i.test(el.id + ' ' + el.name) ? 'Resume/CV' : /cover/i.test(el.id + ' ' + el.name) ? 'Cover Letter' : '';
       // else the nearest text around the box that names the document ("Resume", "Cover letter")
-      let near = ''; let a = el;
-      for (let k = 0; k < 6 && a && !near; k++) { a = a.parentElement; const tx = a ? clean(a.innerText || '') : ''; const m = tx.match(/(resume|r\u00e9sum\u00e9|\\bcv\\b|curriculum vitae|cover letter)/i); if (m && tx.length < 400) near = /cover/i.test(m[1]) ? 'Cover Letter' : 'Resume/CV'; }
+      let near = ''; let a = el; let importer = false;
+      for (let k = 0; k < 8 && a && !near; k++) { a = a.parentElement || (a.getRootNode && a.getRootNode().host) || null; const tx = a ? clean(a.innerText || '') : ''; if (/autofill|auto-?complete|easy apply|import|pars(e|ing)|apply with (your )?(resume|linkedin)/i.test(tx) && tx.length < 600) importer = true; const m = tx.match(/(resume|r\u00e9sum\u00e9|\\bcv\\b|curriculum vitae|cover letter)/i); if (m && tx.length < 400) near = /cover/i.test(m[1]) ? 'Cover Letter' : 'Resume/CV'; }
+      // a box that reads a resume to fill the form for you is the site's own autofill: not the resume field
+      if (importer) near = 'Resume import (the site autofill)';
       label = byId || (lab && !/^(attach|choose file|upload|browse|drop or select)/i.test(lab) && /resume|cv|cover|document/i.test(lab) ? lab : '') || near || lab || el.id;
     }
     const req = el.required || el.getAttribute('aria-required') === 'true' || /\\*/.test(lab);
@@ -392,11 +407,12 @@ const PAGE_COLLECT = `(() => {
    scroll is instant: many forms set scroll-behavior:smooth, and a rect read mid-glide puts the click elsewhere. */
 function pageRect (key, part) {
   return `(() => {
-    const host = document.querySelector('[data-iris-af="${key}"]'); if (!host) return null;
+    ${AF_DEEP}
+    const host = __one('[data-iris-af="${key}"]'); if (!host) return null;
     let el = host;
     const part = ${JSON.stringify(part || '')};
     if (part === 'control') el = host.closest('.select__control') || host.closest('[class*="control"]') || host;
-    else if (part.indexOf('box:') === 0) { const i = +part.slice(4); el = host.querySelectorAll('input[type=checkbox], input[type=radio]')[i]; const l = el && ((el.id && document.querySelector('label[for="' + CSS.escape(el.id) + '"]')) || el.closest('label')); el = l || el; }
+    else if (part.indexOf('box:') === 0) { const i = +part.slice(4); el = host.querySelectorAll('input[type=checkbox], input[type=radio]')[i]; const l = el && (__labelFor(el) || el.closest('label')); el = l || el; }
     if (!el) return null;
     el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
     const r = el.getBoundingClientRect();
@@ -407,7 +423,8 @@ function pageRect (key, part) {
 /* The options of the open react-select list of field {key}, with their centres. */
 function pageOptions (key) {
   return `(() => {
-    const host = document.querySelector('[data-iris-af="${key}"]'); if (!host) return null;
+    ${AF_DEEP}
+    const host = __one('[data-iris-af="${key}"]'); if (!host) return null;
     const lb = host.getAttribute('aria-controls') && document.getElementById(host.getAttribute('aria-controls'));
     const opts = [...(lb || document).querySelectorAll('[role="option"]')];
     return opts.map((o, i) => { const r = o.getBoundingClientRect(); return { i, text: String(o.innerText || '').replace(/\\s+/g, ' ').trim(), x: Math.round(r.left + Math.min(r.width / 2, 120)), y: Math.round(r.top + r.height / 2), h: Math.round(r.height), inView: r.top >= 0 && r.bottom <= innerHeight }; });
@@ -417,7 +434,8 @@ function pageOptions (key) {
 /* Scrolls option {index} of field {key}'s open list into view inside the list; returns its centre. */
 function pageOptionRect (key, index) {
   return `(() => {
-    const host = document.querySelector('[data-iris-af="${key}"]'); if (!host) return null;
+    ${AF_DEEP}
+    const host = __one('[data-iris-af="${key}"]'); if (!host) return null;
     const lb = host.getAttribute('aria-controls') && document.getElementById(host.getAttribute('aria-controls'));
     const o = [...(lb || document).querySelectorAll('[role="option"]')][${Number(index) || 0}]; if (!o) return null;
     o.scrollIntoView({ block: 'nearest', behavior: 'instant' });
@@ -430,12 +448,13 @@ function pageOptionRect (key, index) {
    page replaced after the upload is found again by the section marked around it (pageMarkBox). */
 function pageValue (key) {
   return `(() => {
-    const el = document.querySelector('[data-iris-af="${key}"]');
-    if (!el) { const box = document.querySelector('[data-iris-afbox="${key}"]'); return box && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(box.innerText || '') ? 'attached' : null; }
+    ${AF_DEEP}
+    const el = __one('[data-iris-af="${key}"]');
+    if (!el) { const box = __one('[data-iris-afbox="${key}"]'); return box && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(box.innerText || '') ? 'attached' : null; }
     const clean = s => String(s || '').replace(/\\s+/g, ' ').trim();
     if (el.getAttribute('role') === 'combobox') { const ctl = el.closest('.select__control') || el.closest('[class*="control"]'); const sv = ctl && ctl.querySelectorAll('[class*="single-value"], [class*="multi-value__label"]'); return sv && sv.length ? [...sv].map(x => clean(x.innerText)).join(', ') : ''; }
     if (el.tagName === 'SELECT') return el.value ? clean(el.options[el.selectedIndex].text) : '';
-    if (el.tagName === 'FIELDSET' || el.querySelector) { const boxes = el.querySelectorAll ? [...el.querySelectorAll('input[type=checkbox], input[type=radio]')] : []; if (boxes.length) return boxes.filter(b => b.checked).map(b => { const l = (b.id && document.querySelector('label[for="' + CSS.escape(b.id) + '"]')) || b.closest('label'); return clean(l ? l.innerText : (b.getAttribute('aria-label') || b.value)); }).join(', '); }
+    if (el.tagName === 'FIELDSET' || el.querySelector) { const boxes = el.querySelectorAll ? [...el.querySelectorAll('input[type=checkbox], input[type=radio]')] : []; if (boxes.length) return boxes.filter(b => b.checked).map(b => { const l = __labelFor(b) || b.closest('label'); return clean(l ? l.innerText : (b.getAttribute('aria-label') || b.value)); }).join(', '); }
     if (el.type === 'file') { if (el.files && el.files.length) return 'attached'; let n = el; for (let k = 0; k < 6 && n; k++) { n = n.parentElement; if (n && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(n.innerText || '')) return 'attached'; } return ''; }
     return clean(el.value);
   })()`
@@ -444,7 +463,8 @@ function pageValue (key) {
 /* Marks the section around file box {key} (its label and the place the file name shows up after an upload). */
 function pageMarkBox (key) {
   return `(() => {
-    const el = document.querySelector('[data-iris-af="${key}"]'); if (!el) return false;
+    ${AF_DEEP}
+    const el = __one('[data-iris-af="${key}"]'); if (!el) return false;
     let n = el; for (let k = 0; k < 4 && n.parentElement; k++) { n = n.parentElement; if ((n.innerText || '').length > 12) break; }
     n.setAttribute('data-iris-afbox', '${key}');
     return true;
@@ -454,13 +474,14 @@ function pageMarkBox (key) {
 /* Puts {value} into text box {key} the way React notices (its own value setter, then input/change/blur). */
 function pageSetText (key, value) {
   return `(() => {
-    const el = document.querySelector('[data-iris-af="${key}"]'); if (!el) return false;
+    ${AF_DEEP}
+    const el = __one('[data-iris-af="${key}"]'); if (!el) return false;
     el.scrollIntoView({ block: 'center', behavior: 'instant' });
     el.focus({ preventScroll: true });
     const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-    Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, ${JSON.stringify(String(value))});
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
+    try { Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, ${JSON.stringify(String(value))}); } catch (e) { el.value = ${JSON.stringify(String(value))}; }
+    el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
     el.dispatchEvent(new FocusEvent('blur', { bubbles: false }));
     el.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
     return el.value;
@@ -470,7 +491,8 @@ function pageSetText (key, value) {
 /* Picks option {text} of native select {key}. */
 function pageSetSelect (key, text) {
   return `(() => {
-    const el = document.querySelector('[data-iris-af="${key}"]'); if (!el || el.tagName !== 'SELECT') return false;
+    ${AF_DEEP}
+    const el = __one('[data-iris-af="${key}"]'); if (!el || el.tagName !== 'SELECT') return false;
     const o = [...el.options].find(o => o.text.replace(/\\s+/g, ' ').trim() === ${JSON.stringify(String(text))}); if (!o) return false;
     el.value = o.value; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
     return true;
@@ -478,7 +500,7 @@ function pageSetSelect (key, text) {
 }
 
 /* The form's top, for the agent's check afterwards. */
-const PAGE_SCROLL_TOP = `(() => { const f = document.querySelector('[data-iris-af="f1"]'); const t = f && (f.closest('form') || f); if (t) t.scrollIntoView({ block: 'start', behavior: 'instant' }); window.scrollBy({ top: -80, behavior: 'instant' }); return true; })()`
+const PAGE_SCROLL_TOP = `(() => { ${AF_DEEP} const f = __one('[data-iris-af="f1"]'); const t = f && (f.closest('form') || f); if (t) t.scrollIntoView({ block: 'start', behavior: 'instant' }); window.scrollBy({ top: -80, behavior: 'instant' }); return true; })()`
 
 module.exports = {
   AUTOFILL_HOSTS,
@@ -496,5 +518,6 @@ module.exports = {
   pageSetText,
   pageSetSelect,
   pageMarkBox,
-  PAGE_SCROLL_TOP
+  PAGE_SCROLL_TOP,
+  AF_DEEP
 }
