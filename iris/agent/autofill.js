@@ -187,7 +187,7 @@ function rulesFor (f) {
     { test: /^(location|current location)\b|location \(city\)|^where are you (currently )?(located|based)/i, place: true, text: f.city && f.state ? f.city + ', ' + f.state : '' },
     { test: /^city\b/i, text: f.city, sure: true },
     { test: /^(street )?address( line 1)?$|street address|home address/i, text: [f.street, f.city, f.stateCode, f.zip].filter(Boolean).join(', ').replace(/, (\d{5})$/, ' $1') },
-    { test: /^state\b|^province\b|state\/province/i, choose: f.state ? [new RegExp('^' + f.state + '$', 'i'), new RegExp('^' + f.stateCode + '$', 'i')] : null, text: f.state },
+    { test: /^state\b|^province\b|state\s*\/\s*prov/i, choose: f.state ? [new RegExp('^' + f.state + '$', 'i'), new RegExp('^' + f.stateCode + '$', 'i')] : null, text: f.state },
     { test: /^(zip|postal)( code)?\b/i, text: f.zip, sure: true },
     // ---- education (Greenhouse's school--0 / degree--0 / discipline--0 boxes)
     { test: /^school\b|^university\b|^college\b|^institution\b/i, search: true, choose: f.school ? [new RegExp('^' + f.school + '$', 'i'), new RegExp('^' + f.school + '\\b', 'i')] : null, text: f.school },
@@ -362,6 +362,8 @@ const PAGE_COLLECT = `(() => {
     const wrap = el.closest('.field, .select, .text-input-wrapper, .input-wrapper, div'); const l2 = wrap && wrap.querySelector('label'); if (l2 && clean(l2.innerText)) return clean(l2.innerText);
     // a dropdown with no label element: the question is the text around it (walk up until there is more than the
     // dropdown's own placeholder)
+    // a box whose only label is its placeholder ("City", "Postal code")
+    if (el.placeholder && !placeholder(clean(el.placeholder)) && clean(el.placeholder).length <= 40 && !/^(e\\.?g\\.?|ex\\.?|example)\\b/i.test(clean(el.placeholder))) return clean(el.placeholder);
     if (el.getAttribute('role') === 'combobox') { const own = clean(el.tagName === 'INPUT' ? el.value : el.innerText); let up = el; for (let k = 0; k < 8 && up; k++) { up = up.parentElement; if (!up) break; let t = clean(up.innerText || ''); up.querySelectorAll('[role=listbox], [role=status], [role=alert], [aria-live]').forEach(x => { const xt = clean(x.innerText); if (xt) t = clean(t.split(xt).join(' ')); }); const rest = clean(own ? t.split(own).join(' ') : t); if (rest.length >= 3) return rest.length <= 300 ? rest : ''; } }
     return '';
   };
@@ -408,7 +410,8 @@ const PAGE_COLLECT = `(() => {
       if (sv && sv.length) value = [...sv].map(x => clean(x.innerText)).join(', ');
       else if (!ctl) { const own = clean(el.tagName === 'INPUT' ? el.value : el.innerText); value = placeholder(own) ? '' : own; }
     } else if (kind === 'select') {
-      options = [...el.options].filter(o => o.value !== '').map(o => clean(o.text)); value = el.value ? clean(el.options[el.selectedIndex].text) : '';
+      const blank = o => o.value === '' || /^-+.*-+$|^(select|choose|please select|no answer|none selected)\\b/i.test(clean(o.text));
+      options = [...el.options].filter(o => !blank(o)).map(o => clean(o.text)); value = el.value && el.selectedIndex >= 0 && !blank(el.options[el.selectedIndex]) ? clean(el.options[el.selectedIndex].text) : '';
     } else if (kind === 'file') {
       const box = el.closest('.file-upload, [class*="upload"], .field') || el.parentElement;
       value = box && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(box.innerText) ? clean(box.innerText).slice(0, 80) : '';
@@ -480,7 +483,7 @@ function pageValue (key) {
     if (!el) { const box = __one('[data-iris-afbox="${key}"]'); return box && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(box.innerText || '') ? 'attached' : null; }
     const clean = s => String(s || '').replace(/\\s+/g, ' ').trim();
     if (el.getAttribute('role') === 'combobox') { const ctl = el.closest('.select__control') || el.closest('[class*="control"]'); const sv = ctl && ctl.querySelectorAll('[class*="single-value"], [class*="multi-value__label"]'); if (sv && sv.length) return [...sv].map(x => clean(x.innerText)).join(', '); if (ctl) return ''; const own = clean(el.tagName === 'INPUT' ? el.value : el.innerText); return /^(select( an option| one)?\\.{0,3}|search|choose\\.{0,3}|--+|please select)$/i.test(own) ? '' : own; }
-    if (el.tagName === 'SELECT') return el.value ? clean(el.options[el.selectedIndex].text) : '';
+    if (el.tagName === 'SELECT') { const o = el.selectedIndex >= 0 ? el.options[el.selectedIndex] : null; return o && o.value !== '' && !/^-+.*-+$|^(select|choose|please select|no answer|none selected)\\b/i.test(clean(o.text)) ? clean(o.text) : ''; }
     if (el.tagName === 'FIELDSET' || el.querySelector) { const boxes = el.querySelectorAll ? [...el.querySelectorAll('input[type=checkbox], input[type=radio]')] : []; if (boxes.length) return boxes.filter(b => b.checked).map(b => { const l = __labelFor(b) || b.closest('label'); if (l && clean(l.innerText)) return clean(l.innerText); const bl = b.getAttribute('aria-labelledby'); const bt = bl ? clean(bl.split(' ').map(i => __byId(b, i)).filter(Boolean).map(x => x.innerText).join(' ')) : ''; return bt || clean(b.getAttribute('aria-label') || b.value); }).join(', '); }
     if (el.type === 'file') { if (el.files && el.files.length) return 'attached'; let n = el; for (let k = 0; k < 6 && n; k++) { n = n.parentElement; if (n && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(n.innerText || '')) return 'attached'; } return ''; }
     return clean(el.value);
