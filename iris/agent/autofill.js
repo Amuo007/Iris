@@ -243,6 +243,9 @@ function rulesFor (f) {
     { test: /(current|most recent|present)\b[^?]{0,25}\b(company|employer)|^(company|employer)( name)?$/i, skip: /previous|former|ever|before/i, text: f.company },
     { test: /(current|most recent|present)\b[^?]{0,25}\b(job )?(title|position|role)\b|^(job )?title$/i, skip: /previous|former|desired|applying/i, text: f.title },
     // ---- authorization and sponsorship (plain yes/no boxes only; long option lists go to the agent)
+    // export control (ITAR, EAR, "U.S. person"): a question about being a U.S. citizen or permanent resident, even when it
+    // opens with "Are you legally authorized to work…" (real Impulse Space form) — a visa holder is not one: No
+    { test: /\bitar\b|\bear\b|export (control|regulation|administration)|\bu\.?s\.? persons?\b|lawful permanent resident|green card holder|protected individual|deemed export/i, yesNoOnly: true, choose: f.visaStatus ? NO : null },
     { test: /(legally )?(authori[sz]ed|eligible) to work|work authori[sz]ation|right to work/i, skip: /sponsor/i, choose: f.workAuthorized ? YES : null, yesNoOnly: true },
     { test: /sponsor/i, yesNoOnly: true, choose: sponsorChoice(f) },
     { test: /willing to relocate|open to relocat|consider relocat|able to relocate/i, yesNoOnly: true, choose: f.relocate ? YES : null, text: f.relocate ? 'Yes' : '' },
@@ -413,7 +416,7 @@ const AF_DEEP = "const __deep = (sel, root) => { const out = []; const walk = r 
   " const __text = e => { const c = x => String(x || '').replace(/\\s+/g, ' ').trim(); const own = c(e.innerText); if (own) return own; const al = c(e.getAttribute && (e.getAttribute('aria-label') || e.getAttribute('label') || e.getAttribute('title'))); if (al) return al; if (e.shadowRoot) { const st = c([...e.shadowRoot.querySelectorAll('*')].filter(x => !/^(STYLE|SCRIPT)$/.test(x.tagName) && !x.children.length).map(x => x.textContent).join(' ')); if (st) return st; } return c(e.textContent); };" +
   // the options a dropdown's open list shows: in its own listbox (aria-controls / aria-owns, looked up in the
   // dropdown's own shadow root too), else any drawn on the page, shadow roots included
-  " const __opts = host => { const id = host.getAttribute('aria-controls') || host.getAttribute('aria-owns'); const lb = id && __byId(host, id); const all = lb ? [...lb.querySelectorAll('[role=option]')] : __deep('[role=option]'); return all.filter(o => { const r = o.getBoundingClientRect(); return r.width > 0 && r.height > 0; }); };"
+  " const __opts = host => { const id = host.getAttribute('aria-controls') || host.getAttribute('aria-owns'); const lb = id && __byId(host, id); let all = lb ? [...lb.querySelectorAll('[role=option]')] : __deep('[role=option]'); if (!all.length) { all = [...(lb || document).querySelectorAll('[id*=\"-option-\"], [class*=\"__option\"]')].filter(o => !o.querySelector('[id*=\"-option-\"], [class*=\"__option\"]')); } return all.filter(o => { const r = o.getBoundingClientRect(); return r.width > 0 && r.height > 0; }); };"
 
 
 /*
@@ -472,9 +475,11 @@ const PAGE_COLLECT = `(() => {
       const toggles = boxes.length === 1 ? [...grp.querySelectorAll('button[aria-pressed]')] : [];
       const yesNo = toggles.length >= 2;
       // the question as its own label in the group, not a box's (Ashby: a fieldset with no legend)
-      const qLabel = boxes.length > 1 || yesNo ? [...grp.querySelectorAll('label')].find(l => !l.querySelector('input') && !boxes.some(b => b.id && l.htmlFor === b.id) && words(l.innerText)) : null;
+      // (or a label for the group's id, that the boxes' ids extend: Pinpoint's "…boolean_answer" for "…boolean_answer_true")
+      const qLabel = boxes.length > 1 || yesNo ? ([...grp.querySelectorAll('label')].find(l => !l.querySelector('input') && !boxes.some(b => b.id && l.htmlFor === b.id) && words(l.innerText)) ||
+        (boxes[0].id ? [...__root(el).querySelectorAll('label[for]')].find(l => l.htmlFor && boxes.every(b => b.id && b.id !== l.htmlFor && b.id.indexOf(l.htmlFor) === 0) && words(l.innerText)) : null)) : null;
       // required shown only by a style (a CSS "*" after the question)
-      const qReq = !!qLabel && (/required/i.test(typeof qLabel.className === 'string' ? qLabel.className : '') || /\\*/.test(getComputedStyle(qLabel, '::after').content || ''));
+      const qReq = !!qLabel && (/required/i.test(typeof qLabel.className === 'string' ? qLabel.className : '') || !!qLabel.querySelector('[class*="required" i]') || /\\*/.test(getComputedStyle(qLabel, '::after').content || ''));
       const id = 'f' + (++n); grp.setAttribute('data-iris-af', id);
       const legend = grp.querySelector('legend');
       const by = grp.getAttribute('aria-labelledby');

@@ -169,7 +169,10 @@ test('common questions that follow from the profile', () => {
   assert.strictEqual(p3('Are you a U.S. citizen or permanent resident?', 'select', ['Yes', 'No']).do, 'leave')
   assert.strictEqual(p3('Are you a citizen of the United States? (Non-Citizens will not be eligible to move forward in the hiring process.)', 'radios', ['YES', 'NO']).option, 'NO')
   assert.strictEqual(p3('Are you a US citizen? If not, please explain your status.', 'select', ['Yes', 'No']).option, 'No')
-  assert.strictEqual(p3('Are you a citizen of the United States or a green card holder?', 'radios', ['Yes', 'No']).do, 'leave')
+  // a green card is a U.S.-person question (export control rule): a visa holder is not one
+  assert.strictEqual(p3('Are you a citizen of the United States or a green card holder?', 'radios', ['Yes', 'No']).option, 'No')
+  assert.strictEqual(p3('Are you legally authorized to work in the United States as per the below ITAR requirements?', 'radios', ['Yes', 'No']).option, 'No')
+  assert.strictEqual(p3('Are you legally authorized to work in the United States?', 'radios', ['Yes', 'No']).option, 'Yes')
   assert.strictEqual(p3('Do you have 3+ years of professional experience?', 'select', ['Yes', 'No']).option, 'No')
   assert.strictEqual(p3('Do you have 3+ years of experience in ETL orchestration?', 'select', ['Yes', 'No']).option, 'No')
   assert.strictEqual(p3('Do you have 1+ years of experience with Python?', 'select', ['Yes', 'No']).do, 'leave')
