@@ -471,7 +471,8 @@ async function irisAutofillRun (computer, wc) {
   }
   lines.push('Now: 1) fill each box under "Still to do" straight away with {"type":"choose"} / {"type":"fill"} by its label — no need to scroll to it; ' +
     '2) then ONE pass down the form (the page is back at the top), scrolling about 8 at a time, checking the boxes against this list and fixing what is wrong; ' +
-    '3) Submit (or Next, and autofill again on the next step). Do not scroll up and down hunting.')
+    '3) Submit (or Next, and autofill again on the next step). Do not scroll up and down hunting. ' +
+    'The ✓ choices were picked from each list\'s FULL set of options: a value it did not pick is not offered there (a language, a year) — keep its pick, do not look for one.')
   DBUG('autofill: set ' + set.length + ', left ' + left.length + ' in ' + (Date.now() - started) + ' ms')
   try {
     fs.appendFileSync(path.join(userDataPath, 'iris-autofill-log.jsonl'), JSON.stringify({ at: started, ms: Date.now() - started, sessionId: computer.sessionId || null,
