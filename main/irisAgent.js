@@ -1564,6 +1564,16 @@ IrisComputer.prototype.act = async function (action) {
     }
   }
 
+  // LinkedIn: a click on the very spot clicked a moment ago — a Connect clicked there is now Pending, and a second
+  // click opens "Withdraw invitation" (a real run did it twice in one company): held back once, to look first
+  if (action.type === 'click' && this.jobsMode && /linkedin\.com/i.test(wc.getURL())) {
+    const prev = this.linkedinClick
+    this.linkedinClick = { x: action.x, y: action.y, at: Date.now() }
+    if (prev && !prev.held && Math.abs(prev.x - action.x) <= 12 && Math.abs(prev.y - action.y) <= 12 && Date.now() - prev.at < 30000) {
+      this.linkedinClick.held = true
+      return { ok: false, error: 'not clicked: you clicked this same spot a moment ago. A Connect you clicked turns into Pending, and clicking Pending opens "Withdraw invitation". Look at the screenshot: Pending there means the invitation is sent — go on to the next person; if it still shows Connect, click it again.' }
+    }
+  }
   // a click (or typing into a box) with more aimed actions after it in this step: remember the screen first, to
   // tell whether it changed
   this.preClickThumb = (action.type === 'click' || action.type === 'type') && action.watchChange ? await irisThumb(wc) : null
