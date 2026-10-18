@@ -102,7 +102,10 @@ async function irisAfChoose (computer, wc, field, plan, facts) {
     options = await irisAfEval(wc, irisAutofillLib.pageOptions(field.key))
   }
   if ((!options || !options.length) && plan.typeAhead) {
-    // a list that opens only as you type (Paylocity's State): type the short form, then pick from what it lists
+    // a list that opens only as you type (Paylocity's State): clear what its search box holds (a resume import can
+    // leave text there that is not a pick), type the short form, then pick from what it lists
+    wc.selectAll()
+    await irisAfKey(wc, 'backspace')
     await irisAfType(computer, wc, plan.typeAhead)
     await sleep(900)
     options = await irisAfEval(wc, irisAutofillLib.pageOptions(field.key))
@@ -144,8 +147,28 @@ async function irisAfChoose (computer, wc, field, plan, facts) {
   await sleep(120)
   await irisAfClick(computer, wc, at.x, at.y)
   await sleep(300)
-  const shown = await irisAfEval(wc, irisAutofillLib.pageValue(field.key))
+  let shown = await irisAfEval(wc, irisAutofillLib.pageValue(field.key))
   if (irisAfShows(shown, texts[i])) return { set: texts[i], seen: texts }
+  // the click did not take (a list that closes on the press): the keyboard way — open it, type the option, Enter
+  const again = await irisAfEval(wc, irisAutofillLib.pageRect(field.key, 'control'))
+  if (again && again.y >= 0 && again.y <= again.vh) {
+    await irisAfClick(computer, wc, again.x, again.y)
+    await sleep(250)
+    wc.selectAll()
+    await irisAfKey(wc, 'backspace')
+    await irisAfType(computer, wc, texts[i])
+    await sleep(700)
+    const typed = await irisAfEval(wc, irisAutofillLib.pageOptions(field.key))
+    if (typed && typed.length && irisAfNorm(typed[0].text) === irisAfNorm(texts[i])) {
+      await irisAfKey(wc, 'enter')
+      await sleep(300)
+      shown = await irisAfEval(wc, irisAutofillLib.pageValue(field.key))
+      if (irisAfShows(shown, texts[i])) return { set: texts[i], seen: texts }
+    }
+    wc.selectAll()
+    await irisAfKey(wc, 'backspace')
+    await irisAfKey(wc, 'escape')
+  }
   return { left: 'clicked "' + texts[i] + '" but the box shows "' + (shown || 'nothing') + '"', seen: texts }
 }
 
