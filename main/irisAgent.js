@@ -1639,11 +1639,25 @@ IrisComputer.prototype.act = async function (action) {
   }
   // secrets are filled in here, at the last moment: the model and the panel only see {{Label}}
   let typed = action.type === 'type' ? action.text : null
+  // the e-mail typed on a sign-up page: the new account's username
+  if (action.type === 'type' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(action.text || '').trim())) this.lastTypedEmail = String(action.text).trim()
   if (typed && /\{\{\s*new password\s*\}\}/i.test(typed)) {
     // a strong password made for this one site (the same one again for "confirm password"); saved with the account
     const site = irisSiteOf(wc.getURL()) || 'site'
     this.newPasswords = this.newPasswords || {}
-    if (!this.newPasswords[site]) this.newPasswords[site] = irisNewPassword()
+    if (!this.newPasswords[site]) {
+      this.newPasswords[site] = irisNewPassword()
+      // saved the moment it is made, here where it exists (a real run: TikTok's account made, nothing saved — the
+      // earlier save ran when the step was announced, before the password was made, and skipped the placeholder)
+      let user = this.lastTypedEmail || ''
+      if (!user) { try { user = String((irisCareerLoad().basics || {}).email || '').trim() } catch (e) {} }
+      if (user) {
+        try {
+          irisAccountSave({ site: site, username: user, password: this.newPasswords[site], url: wc.getURL(), title: wc.getTitle(), purpose: this.taskTitle || '' })
+          this.notes = (this.notes || []).concat('The new ' + site + ' account (' + user + ') is saved in Settings → Accounts with the password just made.')
+        } catch (e) { DBUG('account save failed: ' + e.message) }
+      }
+    }
     typed = typed.replace(/\{\{\s*new password\s*\}\}/gi, this.newPasswords[site])
   }
   let real = action.type === 'type' ? Object.assign({}, action, { text: irisFillSecrets(typed) }) : action
