@@ -504,13 +504,17 @@ async function irisAutofillRun (computer, wc) {
   await irisAfEval(wc, irisAutofillLib.PAGE_SCROLL_TOP)
   await sleep(250)
   const short = function (f) { return '"' + String(f.label || f.id).slice(0, 70) + '"' }
+  // required sections filled with an Add button ("Experience *"): none of the boxes above, so said here
+  let addSections = []
+  try { addSections = (await irisAfEval(wc, irisAutofillLib.PAGE_ADD_SECTIONS)) || [] } catch (e) { addSections = [] }
   const mustDo = left.filter(function (l) { return !l.quiet && (l.field.required || l.field.kind === 'file' || /resume/i.test(l.field.label)) })
   const optional = left.filter(function (l) { return !l.quiet && !mustDo.includes(l) })
   const lines = ['Autofill filled ' + set.length + ' of ' + fields.length + ' fields in ' + Math.round((Date.now() - started) / 1000) + ' s (from the profile and saved answers):']
   set.forEach(function (s) { lines.push('  ✓ ' + short(s.field) + ' = ' + String(s.value).slice(0, 80)) })
-  if (mustDo.length) {
+  if (mustDo.length || addSections.length) {
     lines.push('Still to do by hand (required):')
     mustDo.forEach(function (l) { lines.push('  • ' + short(l.field) + ' — ' + l.why) })
+    addSections.forEach(function (n) { lines.push('  • the "' + String(n).slice(0, 40) + '" section (required, marked *) — click its Add and fill one entry from the profile, unless one is already there') })
   }
   if (optional.length) {
     lines.push('Left empty (optional):')

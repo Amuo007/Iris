@@ -655,6 +655,25 @@ function pageSetSelect (key, text) {
 /* The form's top, for the agent's check afterwards. */
 const PAGE_SCROLL_TOP = `(() => { ${AF_DEEP} const f = __one('[data-iris-af="f1"]'); const t = f && (f.closest('form') || f); if (t) t.scrollIntoView({ block: 'start', behavior: 'instant' }); window.scrollBy({ top: -80, behavior: 'instant' }); return true; })()`
 
+/* Required sections filled by an "Add" button (SmartRecruiters' "Experience *"): their names, for the report — a form
+   whose Next did nothing in a real run (Wellmark) had one with no entry */
+const PAGE_ADD_SECTIONS = `(() => {
+  ${AF_DEEP}
+  const clean = s => String(s || '').replace(/\\s+/g, ' ').trim();
+  const out = [];
+  __deep('button, [role=button], [aria-label]').forEach(b => {
+    const t = clean(b.getAttribute('aria-label') || b.textContent);
+    if (!/^\\+?\\s*add\\b/i.test(t) || t.length > 40) return;
+    let row = b.parentElement || (b.getRootNode && b.getRootNode().host) || null;
+    for (let k = 0; k < 3 && row; k++) {
+      const title = [...row.querySelectorAll('*')].find(e => e !== b && !e.contains(b) && !b.contains(e) && !e.querySelector('input, textarea, select, button') && /^[^*]{2,40}\\*$/.test(clean(e.textContent)));
+      if (title) { const name = clean(title.textContent).replace(/\\s*\\*$/, ''); if (!out.includes(name)) out.push(name); return; }
+      row = row.parentElement || (row.getRootNode && row.getRootNode().host) || null;
+    }
+  });
+  return out;
+})()`
+
 module.exports = {
   AUTOFILL_HOSTS,
   pickYears,
@@ -666,6 +685,7 @@ module.exports = {
   findField,
   planField,
   PAGE_COLLECT,
+  PAGE_ADD_SECTIONS,
   pageRect,
   pageOptions,
   pageOptionRect,
