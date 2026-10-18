@@ -1562,6 +1562,23 @@ IrisComputer.prototype.act = async function (action) {
     self.injectingUntil = Date.now() + 400
   }
   this.pointer = irisInputPlan.pointerAfter(action) || this.pointer
+  // a click on the browser's own dropdown (<select>): its list opens as a system menu that no screenshot shows, so
+  // the model clicks it again and again (real run: Lever's "Start Date" list, six blind clicks) — close the menu and
+  // say how to pick from it
+  if (action.type === 'click' || action.type === 'type') {
+    try {
+      const sel = await withTimeout(wc.executeJavaScript('(() => { const e = document.activeElement; if (!e || e.tagName !== "SELECT") return null; ' +
+        'const l = (e.labels && e.labels[0] && e.labels[0].innerText) || e.getAttribute("aria-label") || ""; ' +
+        'const opts = [...e.options].map(o => o.text.trim()).filter(t => t && !/^select|^choose|^-+$/i.test(t)).slice(0, 12); ' +
+        'return { label: String(l).replace(/\\s+/g, " ").trim().slice(0, 80), value: e.selectedIndex >= 0 ? e.options[e.selectedIndex].text.trim() : "", opts: opts } })()'), 1500, 'select check')
+      if (sel) {
+        await irisSendInput(wc, { type: 'keyDown', keyCode: 'Escape' })
+        await irisSendInput(wc, { type: 'keyUp', keyCode: 'Escape' })
+        this.notes = (this.notes || []).concat('That is a plain dropdown' + (sel.label ? ' ("' + sel.label + '")' : '') + ' whose list opens outside the screenshot, so clicking its options cannot work. ' +
+          'Pick from it with {"type":"choose","field":"' + (sel.label || '<its label>') + '","option":"<option text>"}' + (sel.opts.length ? ' — its options: ' + sel.opts.join(' / ') : '') + '.')
+      }
+    } catch (e) { /* only a hint */ }
+  }
   // the same box changed again and again (real run: a Greenhouse yes/no dropdown re-picked four times because a red
   // "required" message stayed until Submit): say so once, with what to do instead
   if ((action.type === 'click' || action.type === 'type') && action.x !== undefined) {
