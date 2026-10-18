@@ -329,7 +329,8 @@ async function irisAutofillRun (computer, wc) {
       }
       if (result.set !== undefined && plan.replace) result.set = result.set + ' (was "' + String(plan.replace).slice(0, 40) + '")'
       if (result.set !== undefined) set.push({ field: field, value: result.set })
-      else left.push({ field: field, why: result.left, quiet: result.quiet && !field.required })
+      // a box already filled is not "to do", required or not (a second run after a blocked Submit lists only the empty ones)
+      else left.push({ field: field, why: result.left, quiet: (result.quiet && !field.required) || plan.why === 'already filled' })
       // for the hybrid dataset: what the tool saw and decided, field by field
       record.push({ key: field.key, id: field.id, kind: field.kind, label: String(field.label || '').slice(0, 400), required: !!field.required,
         before: field.value || '', options: (result.seen || field.options || null), plan: plan.do, planned: plan.value || plan.option || plan.search || null,
