@@ -1810,7 +1810,7 @@ IrisComputer.prototype.settle = async function (action) {
     // "East Asian")
     const before = action.type === 'click' ? this.preClickThumb : null
     this.preClickThumb = null
-    return { moved: still.moved, changed: !!before && irisThumbChange(before, still.last) > 0.012 }
+    return { moved: still.moved, changed: !!before && irisThumbChange(before, still.last, 16) > 0.0115 }
   }
   return { moved: false, changed: false }
 }
@@ -1829,12 +1829,14 @@ async function irisThumb (wc) {
 }
 
 /* The share of cells that changed between two thumbnails (0…1). A blinking caret or a field's focus ring changes a
-   few cells; a scroll changes most of the text on screen; a dropdown list that opens changes 2–20% of them (measured
-   on real forms: lists 239+ cells of 10240, focus rings, toggles and checkboxes 60 or fewer). */
-function irisThumbChange (a, b) {
+   few cells; a scroll changes most of the text on screen. A dropdown list that opens is white on a white page: count
+   fainter changes (level 16) — measured on real forms: lists, even two-option Yes/No ones, 153+ cells of 10240;
+   focus rings, toggles and checkboxes 85 or fewer. */
+function irisThumbChange (a, b, level) {
   if (!a || !b || a.length !== b.length) return 0
+  const min = level || 24
   let n = 0
-  for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > 24) n++
+  for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > min) n++
   return n / a.length
 }
 
