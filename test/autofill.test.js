@@ -259,3 +259,12 @@ test('a lone required privacy box is ticked; optional and talent-community boxes
   const t2 = 'You declare that you have read and agree to the privacy notice of Anton Paar and agree to be part of communities for future career opportunities.'
   assert.strictEqual(af.planField({ label: t2, kind: 'checkboxes', options: [t2], required: true }, facts).do, 'leave')
 })
+
+test('an option drawn as a web component is read from its own shadow root', () => {
+  const text = new Function(af.AF_DEEP + ' return __text')()
+  const el = (o) => Object.assign({ innerText: '', textContent: '', getAttribute: () => null, shadowRoot: null }, o)
+  assert.strictEqual(text(el({ innerText: ' Houston,  TX ' })), 'Houston, TX')
+  assert.strictEqual(text(el({ getAttribute: k => k === 'aria-label' ? 'Houston, TX, US' : null })), 'Houston, TX, US')
+  const leaf = (tagName, textContent) => ({ tagName, textContent, children: [] })
+  assert.strictEqual(text(el({ shadowRoot: { querySelectorAll: () => [leaf('STYLE', '.x{color:red}'), leaf('SPAN', 'Houston, TX, US')] } })), 'Houston, TX, US')
+})

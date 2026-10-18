@@ -371,6 +371,9 @@ const AF_DEEP = "const __deep = (sel, root) => { const out = []; const walk = r 
   // shows as picked sits beside the input (react-select's single-value), and its own text is only the search typed
   " const __selectLike = el => { if (!/^(list|both)$/i.test(el.getAttribute('aria-autocomplete') || '')) return false; let a = el; for (let k = 0; k < 4 && a; k++) { a = a.parentElement; if (!a) break; if (typeof a.className === 'string' && /select/i.test(a.className)) return true; } return false; };" +
   " const __sv = el => { let a = el; for (let k = 0; k < 4 && a; k++) { a = a.parentElement; if (!a) break; if ([...a.querySelectorAll('input, select, textarea')].some(x => x !== el && x.type !== 'hidden')) break; const sv = a.querySelectorAll('[class*=\"single-value\" i], [class*=\"singlevalue\" i], [class*=\"multi-value__label\" i]'); if (sv.length) return [...sv].map(x => String(x.innerText || '').replace(/\\s+/g, ' ').trim()).filter(t => t && !/^(select|choose|search|please select)\\b|^-+$/i.test(t)).join(', '); } return null; };" +
+  // an element's text: its rendered text, else its label attributes, else the text inside its own shadow root (an
+  // option drawn as a web component) or its plain text content
+  " const __text = e => { const c = x => String(x || '').replace(/\\s+/g, ' ').trim(); const own = c(e.innerText); if (own) return own; const al = c(e.getAttribute && (e.getAttribute('aria-label') || e.getAttribute('label') || e.getAttribute('title'))); if (al) return al; if (e.shadowRoot) { const st = c([...e.shadowRoot.querySelectorAll('*')].filter(x => !/^(STYLE|SCRIPT)$/.test(x.tagName) && !x.children.length).map(x => x.textContent).join(' ')); if (st) return st; } return c(e.textContent); };" +
   // the options a dropdown's open list shows: in its own listbox (aria-controls / aria-owns, looked up in the
   // dropdown's own shadow root too), else any drawn on the page, shadow roots included
   " const __opts = host => { const id = host.getAttribute('aria-controls') || host.getAttribute('aria-owns'); const lb = id && __byId(host, id); const all = lb ? [...lb.querySelectorAll('[role=option]')] : __deep('[role=option]'); return all.filter(o => { const r = o.getBoundingClientRect(); return r.width > 0 && r.height > 0; }); };"
@@ -501,7 +504,7 @@ function pageOptions (key) {
     ${AF_DEEP}
     const host = __one('[data-iris-af="${key}"]'); if (!host) return null;
     const opts = __opts(host);
-    return opts.map((o, i) => { const r = o.getBoundingClientRect(); return { i, text: String(o.innerText || '').replace(/\\s+/g, ' ').trim(), x: Math.round(r.left + Math.min(r.width / 2, 120)), y: Math.round(r.top + r.height / 2), h: Math.round(r.height), inView: r.top >= 0 && r.bottom <= innerHeight }; });
+    return opts.map((o, i) => { const r = o.getBoundingClientRect(); return { i, text: __text(o), x: Math.round(r.left + Math.min(r.width / 2, 120)), y: Math.round(r.top + r.height / 2), h: Math.round(r.height), inView: r.top >= 0 && r.bottom <= innerHeight }; });
   })()`
 }
 
