@@ -923,6 +923,27 @@ function imageSignature (image) {
  * or another app. It is bounded by a timeout and retried, because a view that has just been
  * attached may not have painted its first frame yet.
  */
+/* A page that says an application went through ("Thank you for applying", "Application submitted", a /thanks page):
+   remembered, so "applied" is logged only for an application whose confirmation was really seen. */
+const IRIS_CONFIRM_TEXT = /thank(s| you)[^.\n]{0,60}(appl|submitt)|application (has been |was |is )?(submitted|received|sent|complete)|we('ve| have) (received|got) your application|successfully (submitted|applied)|congratulations[^.\n]{0,40}(appl|submitt)|your application is on its way/i
+const IRIS_CONFIRM_PEEK = `(function () {
+  var submit = [].slice.call(document.querySelectorAll('button, input[type=submit], [role=button]')).some(function (b) {
+    var r = b.getBoundingClientRect(); var s = String(b.innerText || b.value || b.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim()
+    return r.width > 0 && r.height > 0 && !b.disabled && /^(submit( (my |your )?application)?|send application)$/i.test(s)
+  })
+  return { text: String(document.body && document.body.innerText || '').slice(0, 6000), submit: submit }
+})()`
+IrisComputer.prototype.noteConfirmation = async function (wc, url) {
+  if (!this.jobsMode || !url || /linkedin\.com/i.test(url)) return
+  try {
+    let hit = /\/(thanks|thank-you|confirmation|submitted|success)(\/|$|\?)/i.test(url)
+    // by its words only when no Submit button is left on the page ("once your application is submitted…" on a form is no confirmation)
+    if (!hit) hit = await withTimeout(wc.executeJavaScript(IRIS_CONFIRM_PEEK), 1200, 'confirm check').then(function (r) { return !!r && !r.submit && IRIS_CONFIRM_TEXT.test(String(r.text || '')) })
+    if (this.unconfirmedLog && (!this.unconfirmedLog.co || String(url).toLowerCase().replace(/[^a-z0-9]/g, '').indexOf(this.unconfirmedLog.co) >= 0)) this.unconfirmedLog.looks++
+    if (hit) this.confirmations = (this.confirmations || []).filter(function (c) { return Date.now() - c.at < 3600000 }).concat({ url: url, at: Date.now() })
+  } catch (e) { /* only a check */ }
+}
+
 IrisComputer.prototype.screenshot = async function () {
   // a new look starts a new step: typing without a place needs a click in this step first
   this.lastActType = null
@@ -935,6 +956,7 @@ IrisComputer.prototype.screenshot = async function () {
   if (!bounds || !bounds.width || !bounds.height) throw new Error('the tab has no size yet')
 
   this.watch(wc)
+  await this.noteConfirmation(wc, url)
   const info = irisTabInfo(this.tabId)
   const tabNote = this.tabNote
   this.tabNote = null
@@ -1408,6 +1430,25 @@ IrisComputer.prototype.act = async function (action) {
       return { ok: true }
     }
     case 'log_application': {
+      // "applied" only for an application whose confirmation page was seen (a real run: Skydio logged as submitted
+      // while its form still sat there unsent). Asked again for the same job, it is taken — noted as unconfirmed.
+      if (action.status === 'applied' && this.jobsMode) {
+        const squash = function (v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '') }
+        const want = irisJobKey(action.url || '').replace(/\/(thanks|thank-you|confirmation|submitted|success)$/, '')
+        const co = squash(action.company).slice(0, 6)
+        const seen = (this.confirmations || []).some(function (c) {
+          const k = irisJobKey(c.url).replace(/\/(thanks|thank-you|confirmation|submitted|success)$/, '')
+          return Date.now() - c.at < 45 * 60000 && ((want && (k === want || k.indexOf(want) === 0 || want.indexOf(k) === 0)) || (co && squash(c.url).indexOf(co) >= 0))
+        })
+        // asked again for the same job after a look at its page: taken
+        const again = this.unconfirmedLog && this.unconfirmedLog.key === (action.company + '|' + action.title) && this.unconfirmedLog.looks > 0
+        if (!seen && !again) {
+          if (!this.unconfirmedLog || this.unconfirmedLog.key !== (action.company + '|' + action.title)) this.unconfirmedLog = { key: action.company + '|' + action.title, co: co, looks: 0 }
+          return { ok: false, error: 'not logged — no confirmation was seen for this application (no "thank you / application submitted" page after Submit), so it may not have gone through. Go back to its page and look: submit it if the form is still there, and log "applied" when the confirmation shows. If its page does show it went through, log it again after that look.' }
+        }
+        if (!seen && again) action = Object.assign({}, action, { note: ((action.note || '') + ' (no confirmation page recognised)').trim() })
+        this.unconfirmedLog = null
+      }
       // the job this log is about: one Iris made a resume for in this run (by its title), else the last one.
       // A job ruled out from the list has no resume: it must not take another job's link, fit or resume,
       // or that other job could never be logged and a later visit to it would read "skipped".
