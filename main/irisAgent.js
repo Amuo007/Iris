@@ -1387,6 +1387,13 @@ IrisComputer.prototype.act = async function (action) {
     case 'fill': {
       // a field found by the label the agent read, filled or picked by code and read back (a dropdown, a date box)
       if (/(^|\.)linkedin\.com$/i.test(irisSiteOf(wc.getURL()) || '')) return { ok: false, error: 'on LinkedIn, click and type yourself' }
+      if (action.type === 'fill' && this.jobsMode && String(action.text || '').length > 150) {
+        const chk = await irisVerifyAnswer(action.text)
+        if (!chk.ok) {
+          return { ok: false, error: 'not filled — this answer states things your profile does not support: ' + chk.unsupported.slice(0, 4).map(function (x) { return '"' + x + '"' }).join(', ') +
+            '. Rewrite it with only facts from the profile (a related real project or skill is fine, and say plainly what is not done yet), or leave the box empty if it is optional.' }
+        }
+      }
       // its clicks and keys are Iris's own, not the user's (else Iris pauses for a "human" touch)
       let r
       this.injecting = true
@@ -1518,6 +1525,16 @@ IrisComputer.prototype.act = async function (action) {
     if (snapped) action = Object.assign({}, action, { x: snapped.x, y: snapped.y })
   }
 
+  // a long written answer on an application is checked against the profile before it is typed (a real run: an "iOS
+  // app I built" that the profile never mentions)
+  if (this.jobsMode && (action.type === 'type' || action.type === 'fill') && String(action.text || '').length > 150 && String(action.text).indexOf('{{') === -1 &&
+      !/(^|\.)linkedin\.com$/i.test(irisSiteOf(wc.getURL()) || '')) {
+    const chk = await irisVerifyAnswer(action.text)
+    if (!chk.ok) {
+      return { ok: false, error: 'not typed — this answer states things your profile does not support: ' + chk.unsupported.slice(0, 4).map(function (x) { return '"' + x + '"' }).join(', ') +
+        '. Rewrite it with only facts from the profile (a related real project or skill is fine, and say plainly what is not done yet), or leave the box empty if it is optional.' }
+    }
+  }
   // secrets are filled in here, at the last moment: the model and the panel only see {{Label}}
   let typed = action.type === 'type' ? action.text : null
   if (typed && /\{\{\s*new password\s*\}\}/i.test(typed)) {

@@ -278,6 +278,36 @@ async function irisAfAnswerRest (computer, wc, fields, title) {
   return { answers: (obj && obj.answers && typeof obj.answers === 'object') ? obj.answers : {} }
 }
 
+/*
+ * A written answer checked against the profile before it goes into an application: anything it states as the user's
+ * own experience, project, number, employer, school or life event that the profile does not support. { ok } or
+ * { ok: false, unsupported: [...] }. Fails open (ok) when the model cannot answer — the prompt rules still hold.
+ */
+async function irisVerifyAnswer (text) {
+  try {
+    const bank = irisCareerLoad()
+    const cfg = irisSettings()
+    const messages = [
+      { role: 'system', content: 'You check a job-application answer written for the user against their profile. List every statement in ' +
+        'the answer that presents something as the user\'s own (an experience, a project or app they built, a number, an employer, a ' +
+        'school, a course, an award, a life event) that the profile below does not support. Skills listed in the profile do NOT prove a ' +
+        'project with them. Opinions, interests and plans are fine. Reply with JSON only: {"unsupported":["<short quote>", ...]} — an ' +
+        'empty list when everything is supported.' },
+      { role: 'user', content: 'PROFILE:\n' + irisCareerLib.bankText(bank, 7000) + '\n\nSAVED ANSWERS:\n' + (bank.answers || []).map(function (a) { return a.label + ': ' + a.value }).join('\n') +
+        '\n\nANSWER TO CHECK:\n' + String(text).slice(0, 3000) }
+    ]
+    const model = irisLockedModel(irisModelClient.createModelClient({ baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0, thinking: 'off', timeoutMs: Math.min(cfg.modelTimeoutMs, 60000) }), cfg.baseUrl)
+    const reply = await model.next({ messages: messages, thinking: 'off' })
+    if (reply && reply.usage) irisUsageRecord('request', Object.assign({ ms: reply.ms }, reply.usage))
+    const obj = irisLookupLib.firstJsonWith(typeof reply === 'string' ? reply : (reply && reply.content) || '', 'unsupported')
+    const bad = obj && Array.isArray(obj.unsupported) ? obj.unsupported.map(function (x) { return String(x).slice(0, 120) }).filter(Boolean) : []
+    return bad.length ? { ok: false, unsupported: bad } : { ok: true }
+  } catch (e) {
+    DBUG('answer check failed: ' + e.message)
+    return { ok: true }
+  }
+}
+
 /* checkboxes / radios: a real click on the chosen box's label */
 async function irisAfTick (computer, wc, field, index, optionText) {
   const at = await irisAfEval(wc, irisAutofillLib.pageRect(field.key, 'box:' + index))
@@ -396,6 +426,14 @@ async function irisAutofillRun (computer, wc) {
         const a = answers[l.field.key]
         if (a === undefined || a === null || String(a).trim() === '') continue
         const val = String(a).trim()
+        if (val.length > 150 && (l.field.kind === 'text' || l.field.kind === 'textarea')) {
+          const chk = await irisVerifyAnswer(val)
+          if (!chk.ok) {
+            const rec0 = record.find(function (x) { return x.key === l.field.key })
+            if (rec0) { rec0.plan = 'llm'; rec0.planned = val; rec0.llmLeft = 'not supported by the profile: ' + chk.unsupported.join('; ') }
+            continue
+          }
+        }
         let r = {}
         try {
           if (l.field.kind === 'text' || l.field.kind === 'textarea') r = await irisAfFillOne(computer, wc, l.field, val)
