@@ -368,7 +368,7 @@ const AF_DEEP = "const __deep = (sel, root) => { const out = []; const walk = r 
   // a pick-from-list box drawn by the page (an input with aria-autocomplete=list inside a "select" widget): what it
   // shows as picked sits beside the input (react-select's single-value), and its own text is only the search typed
   " const __selectLike = el => { if (!/^(list|both)$/i.test(el.getAttribute('aria-autocomplete') || '')) return false; let a = el; for (let k = 0; k < 4 && a; k++) { a = a.parentElement; if (!a) break; if (typeof a.className === 'string' && /select/i.test(a.className)) return true; } return false; };" +
-  " const __sv = el => { let a = el; for (let k = 0; k < 4 && a; k++) { a = a.parentElement; if (!a) break; if ([...a.querySelectorAll('input, select, textarea')].some(x => x !== el && x.type !== 'hidden')) break; const sv = a.querySelectorAll('[class*=\"single-value\" i], [class*=\"singlevalue\" i], [class*=\"multi-value__label\" i]'); if (sv.length) return [...sv].map(x => String(x.innerText || '').replace(/\\s+/g, ' ').trim()).filter(t => t && !/^(select|choose|search|please select)\\b|^-+$/i.test(t)).join(', '); } return ''; };"
+  " const __sv = el => { let a = el; for (let k = 0; k < 4 && a; k++) { a = a.parentElement; if (!a) break; if ([...a.querySelectorAll('input, select, textarea')].some(x => x !== el && x.type !== 'hidden')) break; const sv = a.querySelectorAll('[class*=\"single-value\" i], [class*=\"singlevalue\" i], [class*=\"multi-value__label\" i]'); if (sv.length) return [...sv].map(x => String(x.innerText || '').replace(/\\s+/g, ' ').trim()).filter(t => t && !/^(select|choose|search|please select)\\b|^-+$/i.test(t)).join(', '); } return null; };"
 
 
 /*
@@ -438,7 +438,7 @@ const PAGE_COLLECT = `(() => {
       const ctl = el.closest('.select__control') || el.closest('[class*="control"]');
       const sv = ctl && ctl.querySelectorAll('[class*="single-value"], [class*="multi-value__label"]');
       if (sv && sv.length) value = [...sv].map(x => clean(x.innerText)).join(', ');
-      else if (__selectLike(el)) value = __sv(el);
+      else if (__selectLike(el) && __sv(el) !== null) value = __sv(el);
       else if (!ctl) { const own = clean(el.tagName === 'INPUT' ? el.value : el.innerText); value = placeholder(own) ? '' : own; }
     } else if (kind === 'select') {
       const blank = o => o.value === '' || /^-+.*-+$|^(select|choose|please select|no answer|none selected)\\b/i.test(clean(o.text));
@@ -517,7 +517,7 @@ function pageValue (key, name) {
     if (!el && nm) { const same = __deep('input[name="' + CSS.escape(nm) + '"]'); if (same.length) { el = same[0].parentElement; while (el && !same.every(b => el.contains(b))) el = el.parentElement; } }
     if (!el) { const box = __one('[data-iris-afbox="${key}"]'); return box && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(box.innerText || '') ? 'attached' : null; }
     const clean = s => String(s || '').replace(/\\s+/g, ' ').trim();
-    if (__selectLike(el)) return __sv(el);
+    if (__selectLike(el) && __sv(el) !== null) return __sv(el);
     if (el.getAttribute('role') === 'combobox') { const ctl = el.closest('.select__control') || el.closest('[class*="control"]'); const sv = ctl && ctl.querySelectorAll('[class*="single-value"], [class*="multi-value__label"]'); if (sv && sv.length) return [...sv].map(x => clean(x.innerText)).join(', '); if (ctl) return ''; const own = clean(el.tagName === 'INPUT' ? el.value : el.innerText); return /^(select( an option| one)?\\.{0,3}|search|choose\\.{0,3}|--+|please select)$/i.test(own) ? '' : own; }
     if (el.tagName === 'SELECT') { const o = el.selectedIndex >= 0 ? el.options[el.selectedIndex] : null; return o && o.value !== '' && !/^-+.*-+$|^(select|choose|please select|no answer|none selected)\\b/i.test(clean(o.text)) ? clean(o.text) : ''; }
     if (el.tagName === 'FIELDSET' || el.querySelector) { const boxes = el.querySelectorAll ? [...el.querySelectorAll('input[type=checkbox], input[type=radio]')] : []; if (boxes.length) return boxes.filter(__on).map(b => { const l = __labelFor(b) || b.closest('label'); if (l && clean(l.innerText)) return clean(l.innerText); const bl = b.getAttribute('aria-labelledby'); const bt = bl ? clean(bl.split(' ').map(i => __byId(b, i)).filter(Boolean).map(x => x.innerText).join(' ')) : ''; return bt || clean(b.getAttribute('aria-label') || b.value); }).join(', '); }
