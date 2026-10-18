@@ -163,6 +163,9 @@ test('common questions that follow from the profile', () => {
   assert.strictEqual(p3('Do you hold an active security clearance?', 'select', ['Yes', 'No']).option, 'No')
   assert.strictEqual(p3('Are you a U.S. citizen?', 'select', ['Yes', 'No']).option, 'No')
   assert.strictEqual(p3('Are you a U.S. citizen or permanent resident?', 'select', ['Yes', 'No']).do, 'leave')
+  assert.strictEqual(p3('Are you a citizen of the United States? (Non-Citizens will not be eligible to move forward in the hiring process.)', 'radios', ['YES', 'NO']).option, 'NO')
+  assert.strictEqual(p3('Are you a US citizen? If not, please explain your status.', 'select', ['Yes', 'No']).option, 'No')
+  assert.strictEqual(p3('Are you a citizen of the United States or a green card holder?', 'radios', ['Yes', 'No']).do, 'leave')
   assert.strictEqual(p3('Do you have 3+ years of professional experience?', 'select', ['Yes', 'No']).option, 'No')
   assert.strictEqual(p3('Do you have 3+ years of experience in ETL orchestration?', 'select', ['Yes', 'No']).option, 'No')
   assert.strictEqual(p3('Do you have 1+ years of experience with Python?', 'select', ['Yes', 'No']).do, 'leave')
@@ -194,4 +197,18 @@ test('the resume goes in the resume box only', () => {
   assert.strictEqual(plan('Cover Letter', 'file', null, { id: 'cover_letter' }).do, 'leave')
   assert.strictEqual(plan('Resume/CV', 'file', null, { id: 'resume', value: 'resume.pdf' }).do, 'leave')
   assert.strictEqual(plan('Resume import (the site autofill)', 'file', null, { id: 'spl-dropzone-file-input-2' }).do, 'leave')
+})
+
+test('a ticked box shows on its own input or on the styled wrapper around it', () => {
+  const on = new Function(af.AF_DEEP + ' return __on')()
+  const node = (attrs, parent) => ({ parentElement: parent || null, getAttribute: k => (attrs && k in attrs) ? attrs[k] : null })
+  const box = (checked, parent) => ({ checked, parentElement: parent })
+  assert.strictEqual(on(box(true, node({}))), true)
+  assert.strictEqual(on(box(false, node({}, node({})))), false)
+  // input > label > div[role=radio aria-checked]: the site keeps the input itself unticked
+  assert.strictEqual(on(box(false, node({}, node({ role: 'radio', 'aria-checked': 'true' })))), true)
+  assert.strictEqual(on(box(false, node({}, node({ role: 'radio', 'aria-checked': 'false' }, node({ 'aria-checked': 'true' }))))), false)
+  assert.strictEqual(on(box(false, node({ 'aria-pressed': 'true' }))), true)
+  // only the box's own wrapper counts, not some far-off ancestor
+  assert.strictEqual(on(box(false, node({}, node({}, node({}, node({ 'aria-checked': 'true' })))))), false)
 })

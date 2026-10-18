@@ -217,7 +217,7 @@ function rulesFor (f) {
     { test: /\b(\d+)\s*\+?\s*(or more )?years\b.*experience|experience.*\b(\d+)\s*\+?\s*(or more )?years\b/i, skip: /how many|what is|list|describe/i, yesNoOnly: true,
       choose: f.years !== null ? function (label) { const m = label.match(/\b(\d+)\s*\+?\s*(or more )?years\b/i); return m && +m[1] > f.years ? NO : null } : null },
     { test: /security clearance/i, skip: /if (yes|so)|list|which|level/i, yesNoOnly: true, choose: NO },
-    { test: /^(are you )?(a )?u\.?s\.? citizen\??$|are you a (united states|u\.?s\.?) citizen\??$/i, yesNoOnly: true, choose: f.visaStatus ? NO : null },
+    { test: /^(are you )?(a )?u\.?s\.? citizen\??$|are you a (united states|u\.?s\.?) citizen\??$|^(are you )?(a )?(u\.?s\.?|united states) citizen\?|^are you a citizen of the (u\.?s\.?a?|united states( of america)?)\?/i, yesNoOnly: true, choose: f.visaStatus ? NO : null },
     // marketing texts: no — the site still writes by email and phone calls
     { test: /\bsms\b|text messag|whatsapp/i, choose: [/^no\b/i, /do not consent|don'?t consent|opt out/i], avoid: /^yes\b|i consent to/i },
     // ---- this company
@@ -352,7 +352,10 @@ const AF_DEEP = "const __deep = (sel, root) => { const out = []; const walk = r 
   " const __one = sel => document.querySelector(sel) || __deep(sel)[0] || null;" +
   " const __root = el => (el && el.getRootNode && el.getRootNode().querySelector) ? el.getRootNode() : document;" +
   " const __labelFor = el => el && el.id ? (__root(el).querySelector('label[for=\"' + CSS.escape(el.id) + '\"]') || document.querySelector('label[for=\"' + CSS.escape(el.id) + '\"]')) : null;" +
-  " const __byId = (el, i) => (__root(el).getElementById ? __root(el).getElementById(i) : null) || document.getElementById(i);"
+  " const __byId = (el, i) => (__root(el).getElementById ? __root(el).getElementById(i) : null) || document.getElementById(i);" +
+  // a ticked box: its own checked, else the styled wrapper that shows it (role=radio / a toggle button with
+  // aria-checked or aria-pressed; some sites never tick the hidden input itself)
+  " const __on = b => { if (b.checked) return true; let n = b; for (let k = 0; k < 3 && n; k++) { n = n.parentElement; if (!n) break; const a = n.getAttribute('aria-checked') || n.getAttribute('aria-pressed'); if (a) return a === 'true'; } return false; };"
 
 
 /*
@@ -406,7 +409,7 @@ const PAGE_COLLECT = `(() => {
       const firstLine = clean(String(grp.innerText || '').split('\\n').map(x => x.trim()).find(x => x && !opts.some(o => o && (x === o || x.indexOf(o) === 0))) || '');
       const gl = legend ? clean(legend.innerText) : (byText || (same.length > 1 ? firstLine : '') || labelOf(el));
       out.push({ key: id, id: grp.id || el.name, kind: t === 'checkbox' ? 'checkboxes' : 'radios', label: gl, required: grp.getAttribute('aria-required') === 'true' || boxes.some(b => b.required) || /\\*/.test(gl),
-        options: opts, value: boxes.filter(b => b.checked).map(optText).join(', ') });
+        name: el.name || '', options: opts, value: boxes.filter(__on).map(optText).join(', ') });
       return;
     }
     if (!visible(el) && t !== 'file') return;
@@ -486,15 +489,18 @@ function pageOptionRect (key, index) {
 
 /* What field {key} shows now (a text box's value, a dropdown's chosen option, the ticked boxes). A file box the
    page replaced after the upload is found again by the section marked around it (pageMarkBox). */
-function pageValue (key) {
+function pageValue (key, name) {
   return `(() => {
     ${AF_DEEP}
-    const el = __one('[data-iris-af="${key}"]');
+    let el = __one('[data-iris-af="${key}"]');
+    // a choice group the page drew again (its mark gone): find it again by its boxes' name
+    const nm = ${JSON.stringify(name || '')};
+    if (!el && nm) { const same = __deep('input[name="' + CSS.escape(nm) + '"]'); if (same.length) { el = same[0].parentElement; while (el && !same.every(b => el.contains(b))) el = el.parentElement; } }
     if (!el) { const box = __one('[data-iris-afbox="${key}"]'); return box && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(box.innerText || '') ? 'attached' : null; }
     const clean = s => String(s || '').replace(/\\s+/g, ' ').trim();
     if (el.getAttribute('role') === 'combobox') { const ctl = el.closest('.select__control') || el.closest('[class*="control"]'); const sv = ctl && ctl.querySelectorAll('[class*="single-value"], [class*="multi-value__label"]'); if (sv && sv.length) return [...sv].map(x => clean(x.innerText)).join(', '); if (ctl) return ''; const own = clean(el.tagName === 'INPUT' ? el.value : el.innerText); return /^(select( an option| one)?\\.{0,3}|search|choose\\.{0,3}|--+|please select)$/i.test(own) ? '' : own; }
     if (el.tagName === 'SELECT') { const o = el.selectedIndex >= 0 ? el.options[el.selectedIndex] : null; return o && o.value !== '' && !/^-+.*-+$|^(select|choose|please select|no answer|none selected)\\b/i.test(clean(o.text)) ? clean(o.text) : ''; }
-    if (el.tagName === 'FIELDSET' || el.querySelector) { const boxes = el.querySelectorAll ? [...el.querySelectorAll('input[type=checkbox], input[type=radio]')] : []; if (boxes.length) return boxes.filter(b => b.checked).map(b => { const l = __labelFor(b) || b.closest('label'); if (l && clean(l.innerText)) return clean(l.innerText); const bl = b.getAttribute('aria-labelledby'); const bt = bl ? clean(bl.split(' ').map(i => __byId(b, i)).filter(Boolean).map(x => x.innerText).join(' ')) : ''; return bt || clean(b.getAttribute('aria-label') || b.value); }).join(', '); }
+    if (el.tagName === 'FIELDSET' || el.querySelector) { const boxes = el.querySelectorAll ? [...el.querySelectorAll('input[type=checkbox], input[type=radio]')] : []; if (boxes.length) return boxes.filter(__on).map(b => { const l = __labelFor(b) || b.closest('label'); if (l && clean(l.innerText)) return clean(l.innerText); const bl = b.getAttribute('aria-labelledby'); const bt = bl ? clean(bl.split(' ').map(i => __byId(b, i)).filter(Boolean).map(x => x.innerText).join(' ')) : ''; return bt || clean(b.getAttribute('aria-label') || b.value); }).join(', '); }
     if (el.type === 'file') { if (el.files && el.files.length) return 'attached'; let n = el; for (let k = 0; k < 6 && n; k++) { n = n.parentElement; if (n && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(n.innerText || '')) return 'attached'; } return ''; }
     return clean(el.value);
   })()`

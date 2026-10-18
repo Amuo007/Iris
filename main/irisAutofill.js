@@ -146,7 +146,7 @@ async function irisAfTick (computer, wc, field, index, optionText) {
   await sleep(150)
   await irisAfClick(computer, wc, at.x, at.y)
   await sleep(200)
-  const shown = await irisAfEval(wc, irisAutofillLib.pageValue(field.key))
+  const shown = await irisAfEval(wc, irisAutofillLib.pageValue(field.key, field.name))
   if (irisAfShows(shown, optionText)) return { set: optionText }
   return { left: 'ticked "' + optionText + '" but it does not show as ticked' }
 }
