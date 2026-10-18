@@ -1267,6 +1267,33 @@ function irisResolveUrl (text) {
 /**
  * Carry out one action. Coordinates arrive in view-space CSS pixels.
  */
+/* {{New password}} in text to type or fill: a strong password made for this site (the same again for "confirm
+   password"), saved as the account at once. Typing and fill both come here (a real run: fill put the placeholder
+   itself in Workday's password box, the model then made up a password from the user's name and typed it). */
+IrisComputer.prototype.withNewPassword = function (wc, text) {
+  let typed = text
+  if (typed && /\{\{\s*new password\s*\}\}/i.test(typed)) {
+    // a strong password made for this one site (the same one again for "confirm password"); saved with the account
+    const site = irisSiteOf(wc.getURL()) || 'site'
+    this.newPasswords = this.newPasswords || {}
+    if (!this.newPasswords[site]) {
+      this.newPasswords[site] = irisNewPassword()
+      // saved the moment it is made, here where it exists (a real run: TikTok's account made, nothing saved — the
+      // earlier save ran when the step was announced, before the password was made, and skipped the placeholder)
+      let user = this.lastTypedEmail || ''
+      if (!user) { try { user = String((irisCareerLoad().basics || {}).email || '').trim() } catch (e) {} }
+      if (user) {
+        try {
+          irisAccountSave({ site: site, username: user, password: this.newPasswords[site], url: wc.getURL(), title: wc.getTitle(), purpose: this.taskTitle || '' })
+          this.notes = (this.notes || []).concat('The new ' + site + ' account (' + user + ') is saved in Settings → Accounts with the password just made.')
+        } catch (e) { DBUG('account save failed: ' + e.message) }
+      }
+    }
+    typed = typed.replace(/\{\{\s*new password\s*\}\}/gi, this.newPasswords[site])
+  }
+  return typed
+}
+
 IrisComputer.prototype.act = async function (action) {
   const self = this
   const view = this.view()
@@ -1351,6 +1378,8 @@ IrisComputer.prototype.act = async function (action) {
         const host = irisSiteOf(wc.getURL()) || ''
         const made = this.newPasswords && (this.newPasswords[host] || this.newPasswords[String(action.site || '').replace(/^www\./, '')])
         const pw = /\{\{\s*new password\s*\}\}/i.test(action.password || '') || (!action.password && made) ? made || '' : action.password
+        // no password known (none made here): saving would leave an account no one can sign in to
+        if (!pw) return { ok: false, error: 'no password to save — Iris saves a new account itself when {{New password}} goes into its password box; type that placeholder there (never a password you make up)' }
         irisAccountSave({ site: action.site, username: action.username, password: pw, url: wc.getURL(), title: wc.getTitle(), purpose: action.purpose || this.taskTitle || '' })
       } catch (e) {
         return { ok: false, error: 'could not save the account: ' + e.message }
@@ -1462,7 +1491,12 @@ IrisComputer.prototype.act = async function (action) {
       let r
       this.injecting = true
       try {
-        r = action.type === 'choose' ? await irisChooseField(this, wc, action.field, action.option) : await irisFillField(this, wc, action.field, action.text)
+        if (action.type === 'fill' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(action.text || '').trim())) this.lastTypedEmail = String(action.text).trim()
+        const secret = action.type === 'fill' && /\{\{[^}]+\}\}/.test(String(action.text || ''))
+        const text = secret ? irisFillSecrets(this.withNewPassword(wc, action.text)) : action.text
+        r = action.type === 'choose' ? await irisChooseField(this, wc, action.field, action.option) : await irisFillField(this, wc, action.field, text)
+        // a password or other secret is never read back into the notes (they reach the model and the logs)
+        if (secret && r && r.note) r.note = 'Filled "' + String(action.field || '').slice(0, 60) + '" with ' + String(action.text).match(/\{\{[^}]+\}\}/)[0] + ' (a secret: not shown).'
       } finally {
         this.injecting = false
         this.injectingUntil = Date.now() + 400
@@ -1641,25 +1675,7 @@ IrisComputer.prototype.act = async function (action) {
   let typed = action.type === 'type' ? action.text : null
   // the e-mail typed on a sign-up page: the new account's username
   if (action.type === 'type' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(action.text || '').trim())) this.lastTypedEmail = String(action.text).trim()
-  if (typed && /\{\{\s*new password\s*\}\}/i.test(typed)) {
-    // a strong password made for this one site (the same one again for "confirm password"); saved with the account
-    const site = irisSiteOf(wc.getURL()) || 'site'
-    this.newPasswords = this.newPasswords || {}
-    if (!this.newPasswords[site]) {
-      this.newPasswords[site] = irisNewPassword()
-      // saved the moment it is made, here where it exists (a real run: TikTok's account made, nothing saved — the
-      // earlier save ran when the step was announced, before the password was made, and skipped the placeholder)
-      let user = this.lastTypedEmail || ''
-      if (!user) { try { user = String((irisCareerLoad().basics || {}).email || '').trim() } catch (e) {} }
-      if (user) {
-        try {
-          irisAccountSave({ site: site, username: user, password: this.newPasswords[site], url: wc.getURL(), title: wc.getTitle(), purpose: this.taskTitle || '' })
-          this.notes = (this.notes || []).concat('The new ' + site + ' account (' + user + ') is saved in Settings → Accounts with the password just made.')
-        } catch (e) { DBUG('account save failed: ' + e.message) }
-      }
-    }
-    typed = typed.replace(/\{\{\s*new password\s*\}\}/gi, this.newPasswords[site])
-  }
+  typed = this.withNewPassword(wc, typed)
   let real = action.type === 'type' ? Object.assign({}, action, { text: irisFillSecrets(typed) }) : action
   // a jump of more than about two screens skips whole parts of a form (real run: 15 down, 15 up, again and again)
   if (action.type === 'scroll' && (action.amount || 3) > 12) real = Object.assign({}, real, { amount: 12 })
