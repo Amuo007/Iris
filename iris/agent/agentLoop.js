@@ -801,7 +801,7 @@ function createAgent (opts) {
     // cursor needs no spot, so it goes on.
     if (settled && (settled.moved || settled.changed) && aimedLater) {
       history.addSystemNote('The page ' + (settled.changed ? 'changed' : 'moved') + ' after "' + describeAction(action) + '" (' +
-        (settled.changed ? 'a list or panel opened, or the form moved' : 'it scrolled') + '): the ' + (total - 1 - index) +
+        (settled.changed ? 'a list or panel opened (a box that suggests as you type, a dropdown), or the form moved' : 'it scrolled') + '): the ' + (total - 1 - index) +
         ' action(s) after it in your last step were NOT done. Plan them again from this screenshot.')
       return { stopBatch: true }
     }

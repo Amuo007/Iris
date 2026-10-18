@@ -1492,8 +1492,9 @@ IrisComputer.prototype.act = async function (action) {
     }
   }
 
-  // a click with more aimed actions after it in this step: remember the screen first, to tell whether it changed
-  this.preClickThumb = action.type === 'click' && action.watchChange ? await irisThumb(wc) : null
+  // a click (or typing into a box) with more aimed actions after it in this step: remember the screen first, to
+  // tell whether it changed
+  this.preClickThumb = (action.type === 'click' || action.type === 'type') && action.watchChange ? await irisThumb(wc) : null
   // a click that lands just beside a link, button or field moves onto it, like a hand finding the target
   if ((action.type === 'click' || action.type === 'double_click' || (action.type === 'type' && action.x !== undefined)) && this.config.snapClicks !== false) {
     const snapped = await this.snapToTarget(wc, action)
@@ -1817,12 +1818,17 @@ IrisComputer.prototype.settle = async function (action) {
   // a click or key can start a smooth scroll (an "Apply" that slides down to its form) or a late shift of the
   // layout: wait until two quick looks agree, so the next screenshot shows where things really are
   // (real run: Point72's form was still sliding up when Iris looked; three values went one box too high)
-  if (action && (action.type === 'click' || action.type === 'key' || action.type === 'scroll')) {
+  // typing into a box that suggests as you type (an address finder) can open a list over the next boxes: with more
+  // aimed actions to come, give it a moment and look (real run: Paylocity's address list covered City, and the click
+  // meant for City picked a stranger's address in Katy)
+  const typedAimed = action && action.type === 'type' && action.watchChange
+  if (typedAimed) await sleep(450)
+  if (action && (action.type === 'click' || action.type === 'key' || action.type === 'scroll' || typedAimed)) {
     const still = await irisWaitStill(wc)
     // a click that opened a list or a panel, or moved the form: the step's later clicks were aimed at the old screen
     // (real run: Robinhood's race list opened over the next box, and the click meant for "military status" picked
     // "East Asian")
-    const before = action.type === 'click' ? this.preClickThumb : null
+    const before = action.type === 'click' || action.type === 'type' ? this.preClickThumb : null
     this.preClickThumb = null
     return { moved: still.moved, changed: !!before && irisThumbChange(before, still.last, 16) > 0.0115 }
   }

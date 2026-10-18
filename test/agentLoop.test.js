@@ -432,6 +432,19 @@ test('a click that opened a list stops the later aimed clicks, but typing into t
   assert.deepStrictEqual(seen.slice(0, 2), [true, false])
 })
 
+test('typing that opens a suggestion list over the next box stops the later aimed actions', async () => {
+  const h = harness([
+    JSON.stringify({ thought: 'street, then city', actions: [{ type: 'type', text: '17723 Quiet Loch Ln', x: 300, y: 270 }, { type: 'type', text: 'Houston', x: 300, y: 340 }] }),
+    (ctx) => { h.msgs = JSON.stringify(ctx.messages); return json('done', { type: 'done', answer: 'ok' }) }
+  ])
+  const seen = []
+  h.computer.settle = (a) => { seen.push(!!a.watchChange); return { moved: false, changed: a.text === '17723 Quiet Loch Ln' } }
+  await h.agent.run('fill the address')
+  assert.deepStrictEqual(h.computer.actions.map(a => a.text), ['17723 Quiet Loch Ln'])
+  assert.match(h.msgs, /page changed after .*suggests as you type/)
+  assert.strictEqual(seen[0], true)
+})
+
 test('a follow-up keeps the conversation and starts a fresh step budget', async () => {
   const h = harness([json('first', { type: 'done', answer: 'A' }), (ctx) => { h.msgs = ctx.messages; return json('second', { type: 'done', answer: 'B' }) }], null, { safety: { maxSteps: 1 } })
   assert.strictEqual((await h.agent.run('first question')).answer, 'A')
