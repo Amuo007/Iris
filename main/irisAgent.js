@@ -2632,13 +2632,22 @@ function startAgent (task, options) {
           // a password made for this site is saved itself, not the placeholder
           const made = /new password/i.test(a.text) && computer.newPasswords && computer.newPasswords[session.signup.site]
           session.signup.password = made || a.text.trim()
+          // a made-up password is saved the moment it is typed: if the run breaks later, the account still works
+          // (a real night: three Workday accounts made, every run failed, no password kept — locked out next day)
+          if (made) {
+            const su = session.signup
+            if (!su.username) { try { su.username = String((irisCareerLoad().basics || {}).email || '').trim() } catch (e) {} }
+            if (su.username) {
+              try { irisAccountSave({ site: su.site, username: su.username, password: made, url: computer.state().url, purpose: session.title }); su.savedNow = true } catch (e) { DBUG('account save failed: ' + e.message) }
+            }
+          }
         } else if (a.type === 'type' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.text.trim())) {
           session.signup.username = a.text.trim()
         }
       }
       if (type === 'run:end' && session.signup) {
         const su = session.signup
-        if (payload.status === 'done' && !su.saved && su.site && su.username && su.password) {
+        if (!su.saved && !su.savedNow && su.site && su.username && su.password && !/^\{\{/.test(su.password)) {
           try {
             irisAccountSave({ site: su.site, username: su.username, password: su.password, url: computer.state().url, purpose: session.title })
             broadcastEvent({ type: 'remember', note: 'Saved the new ' + su.site + ' account in Settings → Accounts', sessionId: session.id })
