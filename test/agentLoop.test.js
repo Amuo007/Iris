@@ -934,3 +934,13 @@ test('auto thinking: thinks on a new page or after a miss, answers quickly on ro
   await agent.run('do it')
   assert.deepStrictEqual(levels, ['low', 'off', 'off', 'low', 'off'], 'first look thinks; scroll and type on the same page do not; a new page thinks; a scroll after it does not')
 })
+
+test('working on the same spot again and again gets a nudge, then "leave this job"', async () => {
+  const replies = []
+  for (let i = 0; i < 8; i++) replies.push(JSON.stringify({ thought: 'try the State box again', actions: [{ type: 'click', x: 300 + (i % 2) * 5, y: 400 + (i % 3) * 4 }] }))
+  replies.push((ctx) => { h.msgs = JSON.stringify(ctx.messages); return json('done', { type: 'done', answer: 'ok' }) })
+  const h = harness(replies)
+  await h.agent.run('fill the form')
+  assert.match(h.msgs, /worked on the same spot \d+ times lately/)
+  assert.match(h.msgs, /STUCK: you have worked on the same spot/)
+})

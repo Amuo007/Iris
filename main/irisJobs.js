@@ -423,6 +423,10 @@ function irisJobsPrompt (task, mode) {
   const tailoring = own === null
   const ownName = own ? path.basename(own) : ''
   const lines = ['JOBS — the user keeps a career profile in Iris (Settings → Jobs). Applying for one job:',
+    'THE RULES BELOW ARE DEFAULTS, NOT WALLS. The goal is the application done, honestly. When the usual way does not',
+    'work (a box refuses a value, an option is missing, LinkedIn has no notes left, a page will not load), do what a',
+    'sensible person would: the next-best honest choice, another way (keyboard, typing then Enter, another option),',
+    'skip what is optional, or move on to the next job. Never stop the whole run and never keep retrying one thing.',
     '1. Find postings that match' + (p.roles ? ': ' + p.roles : ' the profile') + (p.locations ? '; places: ' + p.locations : '') + (p.workplace !== 'any' ? '; ' + p.workplace + ' only' : '') + '.',
     '   PLACES ARE A HARD LIMIT: apply only when the posting shows a location in ' + (p.locations || 'the United States') + ' (a city/state there, the country, or "Remote" within it). A posting elsewhere — or one with no location where the company is based abroad (check its careers page or a look-up) — is skipped: do not apply, do not log it, do not contact its people.',
     '   Company boards that need no account (boards.greenhouse.io, jobs.lever.co, jobs.ashbyhq.com) are quickest; Workday',

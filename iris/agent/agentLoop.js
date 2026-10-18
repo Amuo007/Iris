@@ -382,6 +382,11 @@ function createAgent (opts) {
     let compactions = 0
     let lastFingerprint = null
     let lastActed = null
+    // spots aimed at on this page lately: working on one box over and over (a dropdown that will not take a pick, a
+    // date box) is being stuck even when each try looks different (real runs: 30+ tries on a Workday date box)
+    let aims = []
+    let stuckWarned = 0
+    let aimsUrl = ''
     let lastFailed = false
     asking = false
 
@@ -596,6 +601,29 @@ function createAgent (opts) {
         if (outcome.stopBatch) break
       }
       lastActed = batch[batch.length - 1]
+
+      const pageKey = String(obs.url || '').split('?')[0]
+      if (pageKey !== aimsUrl) { aims = []; stuckWarned = 0; aimsUrl = pageKey }
+      batch.forEach(function (a) {
+        if (a && typeof a.x === 'number' && typeof a.y === 'number' && /^(click|double_click|type)$/.test(a.type)) aims.push(Math.round(a.x / 60) + ',' + Math.round(a.y / 45))
+      })
+      if (aims.length > 12) aims = aims.slice(-12)
+      const most = function (list) { const c = {}; let top = 0; list.forEach(function (k) { c[k] = (c[k] || 0) + 1; if (c[k] > top) top = c[k] }); return top }
+      const in8 = most(aims.slice(-8))
+      const in12 = most(aims)
+      if (in12 >= 7 && stuckWarned < 2) {
+        stuckWarned = 2
+        history.addSystemNote('STUCK: you have worked on the same spot ' + in12 + ' times in your last ' + aims.length + ' aimed actions. If it is ' +
+          'the same field or button still not taking it, stop: leave this job — log_application {"status":"needs_you","note":"<which field ' +
+          'would not take what>"} — and go on to the next one. (Only if it is a Next/Continue button on a new page each time, carry on.)')
+      } else if (in8 >= 4 && stuckWarned < 1) {
+        stuckWarned = 1
+        history.addSystemNote('You have worked on the same spot ' + in8 + ' times lately without getting past it. Do not try it the same way ' +
+          'again. Do what a person would: use the keyboard (click it, type the value, press Enter or Tab), pick another fitting option, ' +
+          'leave it if it is optional, or if it is required and still will not take it, log needs_you for this job and go on.')
+      } else if (in8 <= 2) {
+        stuckWarned = 0
+      }
 
       if (stopRequested) return finish('stopped', stopRequested)
       /* eslint-enable no_constant_condition */
