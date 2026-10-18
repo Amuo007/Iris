@@ -186,7 +186,7 @@ function rulesFor (f) {
     // ---- place
     { test: /^country\b/i, choose: [/^united states( of america)?(\s*\+1)?$/i, /^united states\b(?!.*(minor|islands))/i, /^usa?$/i], text: f.country, self: true },
     { test: /^(location|current location)\b|location \(city\)|^where are you (currently )?(located|based)/i, place: true, text: f.city && f.state ? f.city + ', ' + f.state : '', self: true },
-    { test: /^city\b/i, text: f.city, sure: true, self: true },
+    { test: /^city\b/i, text: f.city, sure: true, self: true, place: true },
     // a first address line beside its own City / State / Zip boxes takes the street alone; one Address box takes it all
     { test: /^(street )?address( line)? ?1$|^street( address)?( line 1)?$|^address \(street\)/i, text: f.street, self: true },
     { test: /^(home |mailing |current |full )?address$|home address|mailing address/i, text: [f.street, f.city, f.stateCode, f.zip].filter(Boolean).join(', ').replace(/, (\d{5})$/, ' $1'), self: true },
@@ -526,6 +526,19 @@ function pageValue (key, name) {
   })()`
 }
 
+/* Whether the page (its shadow roots too) shows text {t} anywhere: the name of a file just attached, which some
+   sites list away from the box it was dropped on. */
+function pageHasText (t) {
+  return `(() => {
+    const t = ${JSON.stringify(String(t || '').toLowerCase())}; if (!t) return false;
+    if (String(document.body.innerText || '').toLowerCase().includes(t)) return true;
+    let found = false;
+    const walk = r => { r.querySelectorAll('*').forEach(e => { if (!found && e.shadowRoot) { if (String(e.shadowRoot.textContent || '').toLowerCase().includes(t)) found = true; else walk(e.shadowRoot); } }); };
+    walk(document);
+    return found;
+  })()`
+}
+
 /* Marks the section around file box {key} (its label and the place the file name shows up after an upload). */
 function pageMarkBox (key) {
   return `(() => {
@@ -583,6 +596,7 @@ module.exports = {
   pageValue,
   pageSetText,
   pageSetSelect,
+  pageHasText,
   pageMarkBox,
   PAGE_SCROLL_TOP,
   AF_DEEP

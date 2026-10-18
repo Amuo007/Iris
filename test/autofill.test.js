@@ -243,3 +243,11 @@ test('a first address line beside City/State/Zip takes the street; one Address b
   assert.deepStrictEqual(plan('Address', 'text'), { do: 'text', value: '17723 Quiet Loch Ln, Houston, TX 77084' })
   assert.strictEqual(plan('Address Line 2(optional)', 'text').do, 'leave')
 })
+
+test('a City box that searches as you type looks up the home city', () => {
+  const p = plan('City', 'combobox', null, { aria: true })
+  assert.strictEqual(p.do, 'choose')
+  assert.strictEqual(p.search, 'Houston')
+  assert.strictEqual(p.place, true)
+  assert.deepStrictEqual(plan('City', 'text'), { do: 'text', value: 'Houston' })
+})
