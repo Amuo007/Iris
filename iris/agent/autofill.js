@@ -132,6 +132,11 @@ function buildFacts (bank, info) {
 /* ---------- options ---------- */
 
 /* Index of the first option matching the first pattern that matches anything (patterns in order of preference). */
+/* A list's "nothing chosen" entry ("--", "Select…", "Please select"): not a real option. */
+function isPlaceholderOption (t) {
+  return /^(-+.*|select\b.*|choose\b.*|please select.*|none selected)?$/i.test(clean(t))
+}
+
 function pickOption (options, patterns, avoid) {
   const list = (options || []).map(function (o) { return clean(typeof o === 'string' ? o : o.text) })
   for (const re of patterns) {
@@ -311,7 +316,7 @@ function planField (field, facts, mode) {
       if (field.kind === 'combobox' && rule.text && (rule.search || rule.place)) return { do: 'choose', search: rule.text, patterns: [new RegExp('^' + escapeRe(rule.text), 'i')], place: !!rule.place }
       return { do: 'leave', why: 'no saved answer' }
     }
-    if (rule.yesNoOnly && field.options && field.options.length && !field.options.every(function (o) { return /^(yes|no)\b/i.test(clean(o)) && clean(o).length <= 12 })) {
+    if (rule.yesNoOnly && field.options && field.options.length && !field.options.filter(function (o) { return !isPlaceholderOption(o) }).every(function (o) { return /^(yes|no)\b/i.test(clean(o)) && clean(o).length <= 12 })) {
       return { do: 'leave', why: 'its options are more than yes/no: the agent reads them' }
     }
     if (field.options && field.options.length) {
@@ -320,7 +325,8 @@ function planField (field, facts, mode) {
       return { do: 'choose', option: clean(field.options[i]), patterns: choose, avoid: rule.avoid || null }
     }
     // options are only known once the list is open (react-select): the runner picks with the same patterns
-    return { do: 'choose', patterns: choose, avoid: rule.avoid || null, yesNoOnly: !!rule.yesNoOnly, search: rule.search ? rule.text : null, place: !!rule.place }
+    // typeAhead: the short form to type when the list will not open on a click (a State list takes "TX")
+    return { do: 'choose', patterns: choose, avoid: rule.avoid || null, yesNoOnly: !!rule.yesNoOnly, search: rule.search ? rule.text : null, place: !!rule.place, typeAhead: (rule.alts || [])[0] || null }
   }
   if (field.kind === 'text' || field.kind === 'textarea') {
     if (field.kind === 'textarea' && !/address/i.test(label)) return { do: 'leave', why: 'a written answer: the agent writes it' }
@@ -491,7 +497,9 @@ function pageRect (key, part) {
     const host = __one('[data-iris-af="${key}"]'); if (!host) return null;
     let el = host;
     const part = ${JSON.stringify(part || '')};
-    if (part === 'control') el = host.closest('.select__control') || host.closest('[class*="control"]') || host;
+    // a list-picker's own input can be a few pixels wide: its box is the "select" block around it
+    const selectBox = x => { let a = x; for (let k = 0; k < 4 && a; k++) { a = a.parentElement; if (a && typeof a.className === 'string' && /select/i.test(a.className) && a.getBoundingClientRect().width >= 60) return a; } return null; };
+    if (part === 'control') el = host.closest('.select__control') || host.closest('[class*="control"]') || (__selectLike(host) ? selectBox(host) : null) || host;
     else if (part.indexOf('box:') === 0) { const i = +part.slice(4); el = host.querySelectorAll('input[type=checkbox], input[type=radio]')[i]; const l = el && (__labelFor(el) || el.closest('label')); el = l || el; }
     if (!el) return null;
     el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
@@ -604,6 +612,7 @@ module.exports = {
   parseAddress,
   buildFacts,
   pickOption,
+  isPlaceholderOption,
   planField,
   PAGE_COLLECT,
   pageRect,

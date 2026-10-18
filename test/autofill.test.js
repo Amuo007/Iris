@@ -268,3 +268,14 @@ test('an option drawn as a web component is read from its own shadow root', () =
   const leaf = (tagName, textContent) => ({ tagName, textContent, children: [] })
   assert.strictEqual(text(el({ shadowRoot: { querySelectorAll: () => [leaf('STYLE', '.x{color:red}'), leaf('SPAN', 'Houston, TX, US')] } })), 'Houston, TX, US')
 })
+
+test('a "--" placeholder does not make a Yes/No list "more than yes/no"; a State list can be typed into', () => {
+  assert.strictEqual(plan('Did you Graduate? (required)', 'select', ['--', 'Yes', 'No']).option, 'No')
+  assert.strictEqual(af.isPlaceholderOption('--'), true)
+  assert.strictEqual(af.isPlaceholderOption('Select...'), true)
+  assert.strictEqual(af.isPlaceholderOption('No'), false)
+  const st = plan('State', 'combobox', null, { aria: true, section: 'Information' })
+  assert.strictEqual(st.do, 'choose')
+  assert.strictEqual(st.typeAhead, 'TX')
+  assert.strictEqual(af.pickOption(['TN', 'TX', 'UT'], st.patterns), 1)
+})

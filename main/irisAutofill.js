@@ -101,12 +101,22 @@ async function irisAfChoose (computer, wc, field, plan, facts) {
     await sleep(900)
     options = await irisAfEval(wc, irisAutofillLib.pageOptions(field.key))
   }
+  if ((!options || !options.length) && plan.typeAhead) {
+    // a list that opens only as you type (Paylocity's State): type the short form, then pick from what it lists
+    await irisAfType(computer, wc, plan.typeAhead)
+    await sleep(900)
+    options = await irisAfEval(wc, irisAutofillLib.pageOptions(field.key))
+    if (!options || !options.length) {
+      wc.selectAll()
+      await irisAfKey(wc, 'backspace')
+    }
+  }
   if (!options || !options.length) {
     await irisAfKey(wc, 'escape')
     return { left: 'its list did not open', seen: [] }
   }
   let texts = options.map(function (o) { return o.text })
-  if (plan.yesNoOnly && !texts.every(function (t) { return /^(yes|no)\b/i.test(t) && t.length <= 12 })) {
+  if (plan.yesNoOnly && !texts.filter(function (t) { return !irisAutofillLib.isPlaceholderOption(t) }).every(function (t) { return /^(yes|no)\b/i.test(t) && t.length <= 12 })) {
     await irisAfKey(wc, 'escape')
     return { left: 'its options are more than yes/no (' + texts.slice(0, 3).join(' / ') + '…): read them and pick', seen: texts }
   }
