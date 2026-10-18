@@ -220,7 +220,7 @@ function rulesFor (f) {
     // ---- education (Greenhouse's school--0 / degree--0 / discipline--0 boxes)
     { test: /^(school|institution) type|type of (school|institution)/i, choose: /bachelor|master/.test(f.degreeLevel || '') ? [/college\s*\/\s*universit/i, /^universit/i, /4[- ]?year/i, /^college\b/i] : null },
     { test: /^did you graduate|^have you graduated|^graduated\??$/i, yesNoOnly: true, choose: f.degreeLevel ? (f.degreeDone ? YES : NO) : null },
-    { test: /^school\b|^university\b|^college\b|^institution\b/i, skip: /type\b|district|level/i, search: true, choose: f.school ? [new RegExp('^' + f.school + '$', 'i'), new RegExp('^' + f.school + '\\b', 'i')] : null, text: f.school },
+    { test: /^school\b|^university\b|^college\b|^institution\b/i, skip: /type\b|district|level/i, search: true, choose: f.school ? [new RegExp('^' + f.school + '$', 'i'), new RegExp('^' + f.school + '\\s*[-–(,:]\\s*(main|flagship)', 'i'), new RegExp('^' + f.school + '\\b(?!\\s*[-–(,:]\\s*\\w)', 'i'), new RegExp('^' + f.school + '\\b', 'i')] : null, text: f.school },
     { test: /highest (level of )?(education|degree)|education level|level of education/i, choose: f.degreeDone ? null : [/high school/i, /secondary/i], requires: !f.degreeDone },
     { test: /^degree\b/i, choose: f.degreeLevel === 'bachelor' ? [/^bachelor'?s? degree$/i, /^bachelor/i, /\bB\.?S\.?\b/] : f.degreeLevel === 'master' ? [/^master'?s? degree$/i, /^master/i] : null },
     { test: /^discipline\b|^major\b|field of study|area of study/i, choose: f.major ? [new RegExp('^' + f.major + '$', 'i'), new RegExp(f.major, 'i')] : null, text: f.major },

@@ -194,7 +194,8 @@ async function irisChooseField (computer, wc, label, option) {
 /* Picks {option} in a known choice field: { set } when the page shows it, else { left, seen } or { error }. */
 async function irisAfChooseOne (computer, wc, field, option) {
   const o = irisAfEscape(String(option).trim())
-  const patterns = [new RegExp('^' + o + '$', 'i'), new RegExp('^' + o, 'i'), new RegExp(o, 'i')]
+  // "University of Houston" among its campuses: the main one, not the first branch in the alphabet (real run: Clear Lake)
+  const patterns = [new RegExp('^' + o + '$', 'i'), new RegExp('^' + o + '\\s*[-–(,:]\\s*(main|flagship)', 'i'), new RegExp('^' + o + '\\b(?!\\s*[-–(,:]\\s*\\w)', 'i'), new RegExp('^' + o, 'i'), new RegExp(o, 'i')]
   let result
   if (field.kind === 'select') {
     const i = irisAutofillLib.pickOption(field.options || [], patterns)

@@ -315,3 +315,10 @@ test('a name pronunciation box is not the full name', () => {
   assert.strictEqual(plan('Name Pronunciation | How do you pronounce your name?', 'text').do, 'leave')
   assert.deepStrictEqual(plan('Full name ✱', 'text'), { do: 'text', value: 'Amrinder Singh' })
 })
+
+test('a school among its campuses: the main campus, not the first branch', () => {
+  const opts = ['Sam Houston State University', 'University of Houston - Clear Lake', 'University of Houston - Downtown', 'University of Houston - Main Campus', 'University of Houston - Victoria']
+  const p = plan('School', 'select', opts)
+  assert.strictEqual(p.option, 'University of Houston - Main Campus')
+  assert.strictEqual(plan('School', 'select', ['University of Houston', 'University of Houston - Clear Lake']).option, 'University of Houston')
+})
