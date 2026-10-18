@@ -444,7 +444,8 @@ const PAGE_COLLECT = `(() => {
     // no label element: the question is the text around the box — walk up (through shadow hosts: a form drawn in
     // web components) until there is more than the box's own text and placeholder
     // (a list hidden behind a picker, like Lever's school list under select2, also shows its choice or placeholder there: "Other" is no question)
-    { const own = clean(el.tagName === 'INPUT' ? el.value : el.innerText); const ph = clean(el.placeholder || el.getAttribute('data-placeholder') || ''); const shown = el.tagName === 'SELECT' && el.getAttribute('aria-hidden') === 'true' && el.selectedIndex >= 0 ? clean(el.options[el.selectedIndex].text) : ''; let up = el; for (let k = 0; k < 8 && up; k++) { up = up.parentElement || (up.getRootNode && up.getRootNode().host) || null; if (!up) break; let t = clean(up.innerText || ''); up.querySelectorAll('[role=listbox], [role=status], [role=alert], [aria-live]').forEach(x => { const xt = clean(x.innerText); if (xt) t = clean(t.split(xt).join(' ')); }); let rest = clean(own ? t.split(own).join(' ') : t); if (ph) rest = clean(rest.split(ph).join(' ')); if (shown) rest = clean(rest.split(shown).join(' ')); if (clean(rest.replace(/\\*/g, '')).length >= 3) return rest.length <= 300 ? rest : rest.length <= 1500 ? rest.slice(0, 300) : ''; } }
+    // (a box or radio's value — "on" by default — is not shown: taking it out cut "Terms and Conditions" to "C diti s")
+    { const own = clean(el.tagName === 'INPUT' ? (/^(checkbox|radio)$/i.test(el.type) ? '' : el.value) : el.innerText); const ph = clean(el.placeholder || el.getAttribute('data-placeholder') || ''); const shown = el.tagName === 'SELECT' && el.getAttribute('aria-hidden') === 'true' && el.selectedIndex >= 0 ? clean(el.options[el.selectedIndex].text) : ''; let up = el; for (let k = 0; k < 8 && up; k++) { up = up.parentElement || (up.getRootNode && up.getRootNode().host) || null; if (!up) break; let t = clean(up.innerText || ''); up.querySelectorAll('[role=listbox], [role=status], [role=alert], [aria-live]').forEach(x => { const xt = clean(x.innerText); if (xt) t = clean(t.split(xt).join(' ')); }); let rest = clean(own ? t.split(own).join(' ') : t); if (ph) rest = clean(rest.split(ph).join(' ')); if (shown) rest = clean(rest.split(shown).join(' ')); if (clean(rest.replace(/\\*/g, '')).length >= 3) return rest.length <= 300 ? rest : rest.length <= 1500 ? rest.slice(0, 300) : ''; } }
     return '';
   };
   const form = document.querySelector('form#application-form, form#application_form, form.application--form, form') || document;
@@ -455,12 +456,13 @@ const PAGE_COLLECT = `(() => {
   // section title, like Paylocity's "Work History 1")
   const HEADS = [...document.querySelectorAll('h1, h2, h3, h4, h5, h6, legend, [role=heading], [class*="section-heading" i], [class*="sectionheading" i], [class*="section-title" i], [class*="sectiontitle" i], [class*="section__title" i], [class*="section-header" i]')].filter(h => { const t = clean(h.innerText || ''); return t && t.length <= 60 && !h.querySelector('input, select, textarea'); });
   const sectionOf = el => { let s = ''; for (const h of HEADS) { if (h.contains(el)) continue; if (h.compareDocumentPosition(el) & 4) s = clean(h.innerText); else break; } return s; };
-  const SEL = 'input, select, textarea, [role=combobox]:not(input):not(select):not(textarea)';
+  // (Workday's dropdowns are buttons that open a list: button[aria-haspopup=listbox])
+  const SEL = 'input, select, textarea, [role=combobox]:not(input):not(select):not(textarea), button[aria-haspopup="listbox"]';
   let all = [...form.querySelectorAll(SEL)];
   if (all.filter(e => e.type !== 'hidden' && e.type !== 'file').length < 3) all = __deep(SEL);
   all.forEach(el => {
     const t = (el.type || '').toLowerCase();
-    if (t === 'hidden' || t === 'submit' || t === 'button' || el.disabled) return;
+    if (t === 'hidden' || t === 'submit' || (t === 'button' && el.getAttribute('aria-haspopup') !== 'listbox') || el.disabled) return;
     if (/recaptcha/i.test(el.name || el.id || '')) return;
     // (a search list or date box with neither is still a question: Ashby's Location, School and Graduation Date)
     if (!el.id && !el.name && t !== 'file' && t !== 'checkbox' && t !== 'radio' && el.getAttribute('role') !== 'combobox' && !el.hasAttribute('aria-autocomplete') && !el.placeholder) return;
@@ -505,7 +507,7 @@ const PAGE_COLLECT = `(() => {
     if (!visible(el) && t !== 'file') return;
     const id = 'f' + (++n); el.setAttribute('data-iris-af', id);
     const lab = labelOf(el);
-    let kind = el.tagName === 'SELECT' ? 'select' : el.tagName === 'TEXTAREA' ? 'textarea' : t === 'file' ? 'file' : (el.getAttribute('role') === 'combobox' || __selectLike(el) ? 'combobox' : 'text');
+    let kind = el.tagName === 'SELECT' ? 'select' : el.tagName === 'TEXTAREA' ? 'textarea' : t === 'file' ? 'file' : (el.getAttribute('role') === 'combobox' || __selectLike(el) || el.tagName === 'BUTTON' ? 'combobox' : 'text');
     let value = '', options = null;
     if (kind === 'combobox') {
       const ctl = el.closest('.select__control') || el.closest('[class*="control"]');
