@@ -282,6 +282,50 @@ function isUSLocation (loc) {
   return false
 }
 
+/* Rows of the public SimplifyJobs lists (their listings.json): open, in the US, computer-science work (software,
+   AI/ML/data; hardware or quant only when the title is software-side), a bachelor's level, no citizenship or
+   clearance demand — newest first, one row per link. {words}: any of them in the title, company or category. */
+const FRESH_CS_CATEGORY = /^(software|ai\/ml\/data|data science)/i
+const FRESH_CS_TITLE = /software|firmware|embedded|fpga|developer|programmer|computer|asic|verification|robot|autonom|machine learning|\bml\b|\bai\b|data|cloud|security|infrastructure|backend|front[- ]?end|full[- ]?stack|mobile|\bios\b|android|devops|\bsre\b|platform/i
+function freshTermOver (term, nowSec) {
+  const m = /^(spring|summer|fall|winter)\s+(\d{4})$/i.exec(String(term || '').trim())
+  if (!m) return false
+  const d = new Date(nowSec * 1000)
+  const y = +m[2]
+  const endMonth = { spring: 4, summer: 7, fall: 11, winter: 1 }[m[1].toLowerCase()]
+  return y < d.getFullYear() || (y === d.getFullYear() && d.getMonth() > endMonth)
+}
+function parseFreshListings (rows, words, nowSec) {
+  const seen = new Set()
+  const ago = function (s) { return 'posted ' + (s < 3600 ? Math.max(1, Math.round(s / 60)) + ' min' : s < 172800 ? Math.round(s / 3600) + ' h' : Math.round(s / 86400) + ' days') + ' ago' }
+  return (rows || []).filter(function (x) {
+    if (!x || !x.active || x.is_visible === false || !x.url) return false
+    const cat = String(x.category || '')
+    // the lists' categories are loose ("Operations Intern" under Software): the title must be computer work too
+    if (!(FRESH_CS_CATEGORY.test(cat) || /hardware|quant/i.test(cat)) || !FRESH_CS_TITLE.test(x.title || '')) return false
+    // an internship whose terms are all over (Summer 2026 in October 2026)
+    if ((x.terms || []).length && x.terms.every(function (t) { return freshTermOver(t, nowSec) })) return false
+    if (!(x.locations || []).some(isUSLocation)) return false
+    if (/citizenship is required/i.test(x.sponsorship || '') || /clearance|ts\/sci|\bu\.?s\.? citizen/i.test(x.title || '')) return false
+    if (x.degrees && x.degrees.length && !x.degrees.some(function (d) { return /bachelor/i.test(d) })) return false
+    const hay = (x.title + ' ' + x.company_name + ' ' + cat).toLowerCase()
+    return !words.length || words.some(function (w) { return hay.indexOf(w) !== -1 })
+  }).sort(function (a, b) {
+    // newest day first; within a day, boards that need no account (quickest to apply) first
+    const day = function (x) { return Math.floor((nowSec - (x.date_posted || 0)) / 86400) }
+    const easy = function (x) { return /greenhouse\.io|jobs\.lever\.co|jobs\.ashbyhq\.com/i.test(x.url) ? 0 : 1 }
+    return day(a) - day(b) || easy(a) - easy(b) || (b.date_posted || 0) - (a.date_posted || 0)
+  }).filter(function (x) {
+    const k = String(x.url).split('?')[0].replace(/\/(apply|application)\/?$/, '')
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  }).map(function (x) {
+    return { title: clip(x.company_name + ' — ' + x.title, 140), location: clip((x.locations || []).filter(isUSLocation).slice(0, 2).join('; '), 80),
+      team: x.list === 'newgrad' ? 'new grad' : 'internship' + (x.terms && x.terms.length ? ' ' + x.terms.join('/') : ''), year: ago(nowSec - (x.date_posted || 0)), url: x.url }
+  })
+}
+
 function filterBoardJobs (jobs, words, max) {
   jobs = jobs.filter(function (j) { return isUSLocation(j.location) })
   if (!words.length) return jobs.slice(0, max)
@@ -310,14 +354,14 @@ function createLookup (opts) {
   let queue = Promise.resolve()
 
   /* one request at a time, and never two to the same site within perHostGapMs */
-  function get (url, accept, json) {
+  function get (url, accept, json, ms) {
     const run = async function () {
       const host = hostOf(url)
       const wait = lastHit[host] === undefined ? 0 : lastHit[host] + cfg.perHostGapMs - now()
       if (wait > 0) await delay(wait)
       lastHit[host] = now()
       const ctrl = typeof AbortController === 'function' ? new AbortController() : null
-      const timer = setTimeout(function () { if (ctrl) ctrl.abort() }, cfg.timeoutMs)
+      const timer = setTimeout(function () { if (ctrl) ctrl.abort() }, ms || cfg.timeoutMs)
       try {
         const headers = { 'User-Agent': cfg.userAgent, Accept: accept || 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8', 'Accept-Language': 'en-US,en;q=0.9' }
         // a small JSON search (Workday's job search is a POST); everything else is a plain GET
@@ -416,7 +460,32 @@ function createLookup (opts) {
     return { source: 'Hacker News', items: parseHackerNews(JSON.parse(r.body), cfg.maxResults) }
   }
 
+  /* "fresh intern" / "fresh new grad" [words]: the public SimplifyJobs lists read as data — one look-up for the
+     newest US openings with direct links, instead of searching (each list is kept 30 min) */
+  const FRESH_LISTS = { intern: 'https://raw.githubusercontent.com/SimplifyJobs/Summer2027-Internships/dev/.github/scripts/listings.json',
+    newgrad: 'https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json' }
+  const freshCache = {}
+  async function freshRows (which) {
+    const c = freshCache[which]
+    if (c && now() - c.at < 30 * 60000) return c.rows
+    const r = await get(FRESH_LISTS[which], 'application/json', null, 60000)
+    if (r.status !== 200) throw new Error('the ' + which + ' list answered ' + r.status)
+    const rows = JSON.parse(r.body).map(function (x) { return Object.assign({ list: which }, x) })
+    freshCache[which] = { at: now(), rows: rows }
+    return rows
+  }
+  async function fresh (query) {
+    const q = String(query).toLowerCase()
+    const which = /intern/.test(q) && !/new ?grad/.test(q) ? ['intern'] : /new ?grad|full[- ]time|entry/.test(q) && !/intern/.test(q) ? ['newgrad'] : ['intern', 'newgrad']
+    const words = q.replace(/^\s*(fresh|latest|newest)\b/, ' ').replace(/\b(intern(ship)?s?|new ?grads?|full[- ]time|entry[- ]level|jobs?|openings?|roles?|positions?|lists?|simplify(jobs)?|us|usa|united|states|recent(ly)?|posted|today|and|or|the|for|in|of)\b/g, ' ')
+      .split(/[\s,]+/).filter(function (w) { return w.length > 1 })
+    let rows = []
+    for (const w of which) rows = rows.concat(await freshRows(w))
+    return { source: 'SimplifyJobs ' + which.join(' + ') + ' lists, newest first' + (words.length ? ', matching ' + words.join(' / ') : ''), items: parseFreshListings(rows, words, now() / 1000), fresh: true }
+  }
+
   async function jobs (query) {
+    if (/^\s*(fresh|latest|newest)\b/i.test(query)) return fresh(query)
     const board = parseJobBoardQuery(query)
     if (!board) throw new Error('give a Greenhouse, Lever, Ashby or Workday board address (e.g. jobs.lever.co/acme) and the words to match')
     if (board.ats === 'workday') {
@@ -517,6 +586,12 @@ function createLookup (opts) {
       }
       cache.set(key, { at: now(), result })
     }
+    // the fresh lists: jobs already handled left out, then the newest 15
+    if (result.fresh) {
+      const handled = extra && typeof extra.annotate === 'function' ? extra.annotate : function () { return null }
+      const left = result.items.filter(function (it) { return !handled(it) })
+      result = { source: result.source + ' — ' + left.length + ' not handled yet' + (left.length > 15 ? ', the newest 15 shown' : ''), items: left.slice(0, 15) }
+    }
     return { ok: true, text: format(kind, query, result, extra), count: result.items.length, items: result.items }
   }
 
@@ -587,4 +662,4 @@ function parseLookups (text, max) {
 }
 
 module.exports = {
-  parseHackerNews, createLookup, parseJobBoardQuery, parseBoardJobs, filterBoardJobs, isUSLocation, parseLookups, firstJsonWith, parseDuckDuckGo, parseBing, parseOpenAlex, parseArxiv, readableText, looksBlocked, isNever, KINDS, NEVER }
+  parseHackerNews, createLookup, parseJobBoardQuery, parseBoardJobs, filterBoardJobs, parseFreshListings, isUSLocation, parseLookups, firstJsonWith, parseDuckDuckGo, parseBing, parseOpenAlex, parseArxiv, readableText, looksBlocked, isNever, KINDS, NEVER }

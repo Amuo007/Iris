@@ -255,3 +255,26 @@ test('a site: search for one job board keeps postings from other boards when tha
   assert.doesNotMatch(r.text, /wikipedia/)
 })
 
+
+test('fresh lists (SimplifyJobs rows): US computer work, open, not over, newest day first and easy boards first', () => {
+  const { parseFreshListings } = require('../iris/agent/lookup.js')
+  const now = Date.UTC(2026, 9, 18, 12) / 1000
+  const row = (o) => Object.assign({ active: true, is_visible: true, category: 'Software', title: 'Software Engineer Intern', company_name: 'Acme', locations: ['Austin, TX'], url: 'https://x.example/' + Math.random(), date_posted: now - 3600, terms: ['Summer 2027'], degrees: ["Bachelor's"] }, o)
+  const rows = [
+    row({ company_name: 'Old', date_posted: now - 5 * 86400 }),
+    row({ company_name: 'Hard', url: 'https://acme.wd1.myworkdayjobs.com/x', date_posted: now - 1800 }),
+    row({ company_name: 'Easy', url: 'https://jobs.lever.co/easy/1/apply', date_posted: now - 7200 }),
+    row({ company_name: 'Abroad', locations: ['Toronto, ON, Canada'] }),
+    row({ company_name: 'Closed', active: false }),
+    row({ company_name: 'Ops', title: 'Operations Intern' }),
+    row({ company_name: 'Past', terms: ['Summer 2026'] }),
+    row({ company_name: 'PhD', degrees: ['PhD'] }),
+    row({ company_name: 'Citizen', sponsorship: 'U.S. Citizenship is Required' }),
+    row({ company_name: 'Chips', category: 'Hardware', title: 'Firmware Engineer Intern' }),
+    row({ company_name: 'Mech', category: 'Hardware', title: 'Mechanical Design Intern' })
+  ]
+  const names = parseFreshListings(rows, [], now).map(j => j.title.split(' — ')[0])
+  assert.deepStrictEqual(names, ['Easy', 'Hard', 'Chips', 'Old'])
+  assert.deepStrictEqual(parseFreshListings(rows, ['firmware'], now).map(j => j.title.split(' — ')[0]), ['Chips'])
+  assert.match(parseFreshListings(rows, [], now)[0].year, /posted 2 h ago/)
+})

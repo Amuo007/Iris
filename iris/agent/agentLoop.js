@@ -102,6 +102,8 @@ function createAgent (opts) {
   let finishChecked = false
   let runLookups = 0
   let lookupsAsked = new Set() // queries already looked up in this run: the same one again finds the same
+  let logsDone = 0 // jobs logged in this run: the fresh job lists change after each (handled jobs drop out)
+  const freshAskedAt = new Map()
   let smartLevel = null
   let asking = false // paused on an ask_user question (may time out in a non-stop run)
   let strictNudgeAt = -100 // judgements counted when Iris was last told to be stricter
@@ -287,6 +289,8 @@ function createAgent (opts) {
     finishChecked = false
     runLookups = 0
     lookupsAsked = new Set()
+    logsDone = 0
+    freshAskedAt.clear()
     smartLevel = runOptions && runOptions.plan ? (runOptions.plan === 'deep' ? 'deep' : 'quick') : null
     if (runOptions && runOptions.plan) {
       emit('plan:start', { level: smartLevel })
@@ -698,6 +702,7 @@ function createAgent (opts) {
 
   /** Carry out one parsed action. Returns { finished } to end the run, { stopBatch } to re-look. */
   async function perform (action, index, total, mapping, obs, pageState, unchanged) {
+    if (action.type === 'log_application') logsDone++
     // ---- terminal states -----------------------------------------------------
     if (isTerminal(action)) {
       // a planned run must have looked at what it reports: send it back once if it judged nothing
@@ -788,6 +793,10 @@ function createAgent (opts) {
         return { stopBatch: true }
       }
       const qKey = (action.kind || 'web') + ':' + String(action.query || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+      // the fresh job lists ("fresh intern"): asked again after a job was logged, they show the next ones
+      const freshList = (action.kind === 'jobs') && /^\s*(fresh|latest|newest)\b/i.test(String(action.query || ''))
+      if (freshList && lookupsAsked.has(qKey) && freshAskedAt.get(qKey) !== logsDone) lookupsAsked.delete(qKey)
+      if (freshList) freshAskedAt.set(qKey, logsDone)
       if (lookupsAsked.has(qKey)) {
         history.addSystemNote('You already looked this up in this run ("' + action.query + '"): it finds the same. Act on its results — open one ' +
           'you have not handled — or use a DIFFERENT source (another board, a public list of openings read as a page look-up).')
