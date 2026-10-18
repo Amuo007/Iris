@@ -204,6 +204,9 @@ function rulesFor (f) {
     { test: /highest (level of )?(education|degree)|education level|level of education/i, choose: f.degreeDone ? null : [/high school/i, /secondary/i], requires: !f.degreeDone },
     { test: /^degree\b/i, choose: f.degreeLevel === 'bachelor' ? [/^bachelor'?s? degree$/i, /^bachelor/i, /\bB\.?S\.?\b/] : f.degreeLevel === 'master' ? [/^master'?s? degree$/i, /^master/i] : null },
     { test: /^discipline\b|^major\b|field of study|area of study/i, choose: f.major ? [new RegExp('^' + f.major + '$', 'i'), new RegExp(f.major, 'i')] : null, text: f.major },
+    // a question for the month and the year together ("When will you graduate? (month & year)"): a short fact, even in
+    // a large text box
+    { test: /when (will|do) you (expect to )?graduat|graduat\w*[^?]{0,20}\(?month (&|and|\/) year/i, text: f.gradMonth && f.gradYear ? f.gradMonth + ' ' + f.gradYear : '', fact: true },
     { test: /^end date month|graduation month|^end month/i, choose: f.gradMonth ? [new RegExp('^' + f.gradMonth, 'i')] : null, text: f.gradMonth },
     { test: /^end date year|graduation (date|year)|^end year|year of graduation|expected graduation/i, choose: f.gradYear ? [new RegExp('^' + f.gradYear + '$')] : null, text: f.gradYear },
     { test: /^start date (month|year)|^start (month|year)/i, leave: 'not in the profile' },
@@ -329,7 +332,7 @@ function planField (field, facts, mode) {
     return { do: 'choose', patterns: choose, avoid: rule.avoid || null, yesNoOnly: !!rule.yesNoOnly, search: rule.search ? rule.text : null, place: !!rule.place, typeAhead: (rule.alts || [])[0] || null }
   }
   if (field.kind === 'text' || field.kind === 'textarea') {
-    if (field.kind === 'textarea' && !/address/i.test(label)) return { do: 'leave', why: 'a written answer: the agent writes it' }
+    if (field.kind === 'textarea' && !/address/i.test(label) && !rule.fact) return { do: 'leave', why: 'a written answer: the agent writes it' }
     let value = rule.text
     if (!value) return { do: 'leave', why: 'no fact for it' }
     // a date: in the form the box asks for (a date picker takes ISO; a masked box shows its pattern as placeholder)

@@ -296,3 +296,8 @@ test('job look-ups keep US postings only', () => {
   for (const loc of ['Istanbul', '', 'London, United Kingdom', 'Toronto, ON', 'Bangalore, India', 'Tbilisi, Georgia']) assert.strictEqual(L.isUSLocation(loc), false, loc)
   assert.deepStrictEqual(L.filterBoardJobs([{ title: 'SWE New Grad', team: '', location: 'Istanbul' }, { title: 'SWE New Grad', team: '', location: 'Austin, TX' }], [], 5).map(j => j.location), ['Austin, TX'])
 })
+
+test('a graduation month-and-year question is answered even in a large text box', () => {
+  assert.deepStrictEqual(plan('When will you graduate? (month & year) ✱', 'textarea'), { do: 'text', value: 'December 2026' })
+  assert.strictEqual(plan('Why do you want to work here?', 'textarea').do, 'leave')
+})
