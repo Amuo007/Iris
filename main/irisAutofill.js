@@ -243,7 +243,8 @@ async function irisAutofillRun (computer, wc) {
       // for the hybrid dataset: what the tool saw and decided, field by field
       record.push({ key: field.key, id: field.id, kind: field.kind, label: String(field.label || '').slice(0, 400), required: !!field.required,
         before: field.value || '', options: (result.seen || field.options || null), plan: plan.do, planned: plan.value || plan.option || plan.search || null,
-        why: plan.why || null, set: result.set !== undefined ? result.set : null, left: result.set === undefined ? (result.left || null) : null })
+        why: plan.why || null, set: result.set !== undefined ? result.set : null, left: result.set === undefined ? (result.left || null) : null,
+        section: field.section || undefined, shape: field.shape || undefined })
     }
   } finally {
     computer.injecting = false

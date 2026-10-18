@@ -391,15 +391,17 @@ const PAGE_COLLECT = `(() => {
     const al = clean(el.getAttribute('aria-label')); if (al && !placeholder(al)) return al;
     const fsx = el.closest('fieldset'); if (fsx && fsx.querySelector('legend')) return clean(fsx.querySelector('legend').innerText);
     const wrap = el.closest('.field, .select, .text-input-wrapper, .input-wrapper, div'); const l2 = wrap && wrap.querySelector('label'); if (l2 && clean(l2.innerText)) return clean(l2.innerText);
-    // a dropdown with no label element: the question is the text around it (walk up until there is more than the
-    // dropdown's own placeholder)
     // a box whose only label is its placeholder ("City", "Postal code")
     if (el.placeholder && !placeholder(clean(el.placeholder)) && clean(el.placeholder).length <= 40 && !/^(e\\.?g\\.?|ex\\.?|example)\\b/i.test(clean(el.placeholder))) return clean(el.placeholder);
-    if (el.getAttribute('role') === 'combobox') { const own = clean(el.tagName === 'INPUT' ? el.value : el.innerText); let up = el; for (let k = 0; k < 8 && up; k++) { up = up.parentElement; if (!up) break; let t = clean(up.innerText || ''); up.querySelectorAll('[role=listbox], [role=status], [role=alert], [aria-live]').forEach(x => { const xt = clean(x.innerText); if (xt) t = clean(t.split(xt).join(' ')); }); const rest = clean(own ? t.split(own).join(' ') : t); if (rest.length >= 3) return rest.length <= 300 ? rest : ''; } }
+    // no label element: the question is the text around the box — walk up (through shadow hosts: a form drawn in
+    // web components) until there is more than the box's own text and placeholder
+    { const own = clean(el.tagName === 'INPUT' ? el.value : (el.getAttribute('role') === 'combobox' ? el.innerText : '')); const ph = clean(el.placeholder || ''); let up = el; for (let k = 0; k < 8 && up; k++) { up = up.parentElement || (up.getRootNode && up.getRootNode().host) || null; if (!up) break; let t = clean(up.innerText || ''); up.querySelectorAll('[role=listbox], [role=status], [role=alert], [aria-live]').forEach(x => { const xt = clean(x.innerText); if (xt) t = clean(t.split(xt).join(' ')); }); let rest = clean(own ? t.split(own).join(' ') : t); if (ph) rest = clean(rest.split(ph).join(' ')); if (clean(rest.replace(/\\*/g, '')).length >= 3) return rest.length <= 300 ? rest : ''; } }
     return '';
   };
   const form = document.querySelector('form#application-form, form#application_form, form.application--form, form') || document;
-  const out = []; let n = 0; const seenGroups = new Set();
+  const out = []; let n = 0; const seenGroups = new Set(); const seenEls = new Set();
+  // for the log: what a box with no label looks like (its tag and attributes, and the hosts it sits in)
+  const shape = x => { const one = e => e.tagName.toLowerCase() + [...e.attributes].filter(a => !/^(style|data-iris)/.test(a.name)).map(a => '[' + a.name + '=' + String(a.value).slice(0, 30) + ']').join(''); let out = one(x); let r = x.getRootNode && x.getRootNode(); for (let k = 0; k < 3 && r && r.host; k++) { out += ' in ' + one(r.host); r = r.host.getRootNode(); } return out.slice(0, 400); };
   // the section a field sits in: the nearest heading before it (a heading tag, a legend, or a block styled as a
   // section title, like Paylocity's "Work History 1")
   const HEADS = [...document.querySelectorAll('h1, h2, h3, h4, h5, h6, legend, [role=heading], [class*="section-heading" i], [class*="sectionheading" i], [class*="section-title" i], [class*="sectiontitle" i], [class*="section__title" i], [class*="section-header" i]')].filter(h => { const t = clean(h.innerText || ''); return t && t.length <= 60 && !h.querySelector('input, select, textarea'); });
@@ -411,15 +413,16 @@ const PAGE_COLLECT = `(() => {
     const t = (el.type || '').toLowerCase();
     if (t === 'hidden' || t === 'submit' || t === 'button' || el.disabled) return;
     if (/recaptcha/i.test(el.name || el.id || '')) return;
-    if (!el.id && !el.name && t !== 'file') return;
+    if (!el.id && !el.name && t !== 'file' && t !== 'checkbox' && t !== 'radio') return;
     if (t === 'checkbox' || t === 'radio') {
       // one group per name (radios of one question can sit in separate wrappers); its box: the smallest element
       // holding all of them
       const same = el.name ? [...__root(el).querySelectorAll('input[type=' + t + '][name="' + CSS.escape(el.name) + '"]')] : [];
-      let grp = el.closest('fieldset') || el.parentElement.parentElement;
+      let grp = el.closest('fieldset, [role=radiogroup], [role=group]') || el.parentElement.parentElement;
       if (same.length > 1) { grp = el.parentElement; while (grp && !same.every(b => grp.contains(b))) grp = grp.parentElement; grp = grp || document.body; }
       const key = (el.name || '') + '|' + (grp && grp.id || '') + '|' + (same.length > 1 ? 'name' : '');
-      if (seenGroups.has(key)) return; seenGroups.add(key);
+      if (seenGroups.has(key) && (el.name || grp.id)) return; seenGroups.add(key);
+      if (seenEls.has(grp)) return; seenEls.add(grp);
       const boxes = same.length > 1 ? same : [...grp.querySelectorAll('input[type=' + t + ']')];
       const id = 'f' + (++n); grp.setAttribute('data-iris-af', id);
       const legend = grp.querySelector('legend');
@@ -470,7 +473,7 @@ const PAGE_COLLECT = `(() => {
     }
     const req = el.required || el.getAttribute('aria-required') === 'true' || /\\*/.test(lab);
     const aria = kind === 'combobox' && (__selectLike(el) || el.hasAttribute('aria-expanded') || el.getAttribute('aria-haspopup') === 'listbox' || el.hasAttribute('aria-controls'));
-    out.push({ key: id, id: el.id || el.name, kind, inputType: t, label: label.replace(/\\s*\\*\\s*$/, ''), required: !!req, value, options, aria, placeholder: clean(el.placeholder || '').slice(0, 40), section: sectionOf(el) });
+    out.push({ key: id, id: el.id || el.name, kind, inputType: t, label: label.replace(/\\s*\\*\\s*$/, ''), required: !!req, value, options, aria, placeholder: clean(el.placeholder || '').slice(0, 40), section: sectionOf(el), shape: label ? undefined : shape(el) });
   });
   return out;
 })()`
