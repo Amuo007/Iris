@@ -423,10 +423,29 @@ async function irisAutofillRun (computer, wc) {
       let asked = null
       try { asked = await irisAfAnswerRest(computer, wc, rest.map(function (l) { return l.field }), wc.getTitle()) } catch (e) { DBUG('autofill: model answers failed: ' + e.message) }
       const answers = (asked && asked.answers) || {}
+      // every number of 3+ digits in an answer must be the user's own (a real run wrote the university's zip, 77004, for
+      // the home zip 77084): digits found in the profile's values, a year near now, or the field's own options
+      const ownDigits = []
+      const walk = function (v) { if (typeof v === 'string') { const d = v.replace(/\D/g, ''); if (d.length >= 3) ownDigits.push(d) } else if (v && typeof v === 'object') Object.keys(v).forEach(function (k) { walk(v[k]) }) }
+      walk(irisCareerLoad()); walk(irisProfileLoad())
+      const thisYear = new Date().getFullYear()
+      const madeUpNumbers = function (val, field) {
+        return (String(val).match(/\d{3,}/g) || []).filter(function (n) {
+          if (n.length === 4 && +n >= thisYear - 1 && +n <= thisYear + 3) return false
+          if ((field.options || []).some(function (o) { return String(o).indexOf(n) >= 0 })) return false
+          return !ownDigits.some(function (d) { return d.indexOf(n) >= 0 })
+        })
+      }
       for (const l of rest) {
         const a = answers[l.field.key]
         if (a === undefined || a === null || String(a).trim() === '') continue
         const val = String(a).trim()
+        const odd = madeUpNumbers(val, l.field)
+        if (odd.length) {
+          const rec1 = record.find(function (x) { return x.key === l.field.key })
+          if (rec1) { rec1.plan = 'llm'; rec1.planned = val; rec1.llmLeft = 'a number not in the profile: ' + odd.join(', ') }
+          continue
+        }
         if (val.length > 150 && (l.field.kind === 'text' || l.field.kind === 'textarea')) {
           const chk = await irisVerifyAnswer(val)
           if (!chk.ok) {

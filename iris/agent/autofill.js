@@ -218,6 +218,9 @@ function rulesFor (f) {
     { test: /^(home |mailing |current |full )?address$|home address|mailing address/i, text: [f.street, f.city, f.stateCode, f.zip].filter(Boolean).join(', ').replace(/, (\d{5})$/, ' $1'), self: true },
     { test: /^state\b|^province\b|state\s*\/\s*prov/i, choose: f.state ? [new RegExp('^' + f.state + '$', 'i'), new RegExp('^' + f.stateCode + '$', 'i')] : null, text: f.state, alts: [f.stateCode], self: true },
     { test: /^(zip|postal)( code)?\b/i, text: f.zip, sure: true, self: true },
+    // asked in a sentence ("If you are based in the U.S. please provide your zipcode"): a real run left it to the model,
+    // which wrote the university's zip
+    { test: /\b(zip ?code|zip|postal code|post code)\b/i, skip: /work|office|company|employer|school|universit/i, short: true, text: f.zip, self: true },
     // ---- education (Greenhouse's school--0 / degree--0 / discipline--0 boxes)
     { test: /^(school|institution) type|type of (school|institution)/i, choose: /bachelor|master/.test(f.degreeLevel || '') ? [/college\s*\/\s*universit/i, /^universit/i, /4[- ]?year/i, /^college\b/i] : null },
     { test: /^did you graduate|^have you graduated|^graduated\??$/i, yesNoOnly: true, choose: f.degreeLevel ? (f.degreeDone ? YES : NO) : null },
