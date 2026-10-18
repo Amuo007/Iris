@@ -2645,6 +2645,19 @@ function startAgent (task, options) {
         const resolved = irisResolveUrl(payload.action.url)
         if (/\?/.test(resolved) && !/duckduckgo\.com\/\?q=/.test(resolved)) (session.runUrls = session.runUrls || []).push(resolved)
       }
+      // "submitted — now log it and go on" with no log_application among the actions: remind it at once (real run:
+      // Shield AI applied, then straight to LinkedIn — the application was never logged)
+      if (type === 'thought') { session.lastThought = String(payload.thought || ''); session.loggedThisStep = false }
+      if (type === 'action' && payload.action && computer.jobsMode) {
+        const a0 = payload.action
+        if (a0.type === 'log_application') session.loggedThisStep = true
+        else if ((a0.type === 'navigate' || a0.type === 'new_tab' || a0.type === 'switch_tab') && !session.loggedThisStep &&
+          /submitted successfully|application (was |has been |is )?(submitted|sent|received|complete)|thank(s| you) for (applying|your (application|interest))|successfully (applied|submitted)/i.test(session.lastThought || '')) {
+          computer.notes = (computer.notes || []).concat('You wrote that the application was submitted but you did not log it. Log it now, before anything else: ' +
+            '{"type":"log_application","status":"applied","company":"<company>","title":"<job title>","url":"<the job\'s link>"}.')
+          session.loggedThisStep = true
+        }
+      }
       // a sign-up during this run is recorded even if the model forgets save_account
       if (type === 'thought' && payload.thought && /sign ?up|create (an |your |a new )?account|register|create one/i.test(payload.thought)) {
         session.signup = session.signup || { saved: false }
