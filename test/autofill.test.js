@@ -112,6 +112,16 @@ test('sponsorship: future yes; "now" decided by the question\'s own list', () =>
   assert.strictEqual(plan('Work Authorization', 'select', ['I am authorized to work in the US for any employer', 'I am authorized to work in the US for my present employer only']).do, 'leave')
 })
 
+test('saved self-ID answers are said plainly, never "decline"', () => {
+  const f2 = af.buildFacts(Object.assign({}, bank, { answers: bank.answers.concat([{ label: 'Transgender', value: 'No (I do not identify as transgender)' }, { label: 'Pronouns', value: 'He/Him' }]) }), info)
+  const p2 = (label, kind, options, extra) => af.planField(Object.assign({ label, kind: kind || 'text', options: options || null, required: true }, extra || {}), f2)
+  assert.strictEqual(p2('Do you identify as transgender?', 'select', ['Yes', 'No', "I don't wish to answer"]).option, 'No')
+  assert.strictEqual(p2('Do you identify as transgender?', 'select', ['Yes', 'No', "I don't wish to answer"], { required: false }).option, 'No')
+  assert.strictEqual(p2('Pronouns', 'select', ['She/Her', 'He/Him', 'They/Them', 'Decline']).option, 'He/Him')
+  assert.strictEqual(p2('Pronouns', 'text').value, 'He/Him')
+  assert.strictEqual(p2('What is your sexual orientation?', 'select', ['Heterosexual', 'Gay', 'Decline to self-identify'], { required: false }).do, 'leave')
+})
+
 test('unknown and optional self-ID questions are left to the agent', () => {
   assert.strictEqual(plan('Do you identify as transgender?', 'select', ['Yes', 'No', 'I don\'t wish to answer'], { required: false }).do, 'leave')
   assert.strictEqual(plan('Do you identify as transgender?', 'select', ['Yes', 'No', 'I don\'t wish to answer']).option, 'I don\'t wish to answer')

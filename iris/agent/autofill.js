@@ -116,6 +116,9 @@ function buildFacts (bank, info) {
     relocate: yes(answer(/relocat/i)),
     startDate: answer(/start date/i),
     gender: answer(/^gender$/i),
+    transgender: answer(/transgender/i),
+    pronouns: answer(/pronoun/i),
+    orientation: answer(/sexual orientation|orientation/i),
     race: answer(/race|ethnic/i),
     veteran: answer(/veteran/i),
     disability: answer(/disabilit/i),
@@ -193,9 +196,11 @@ function rulesFor (f) {
     { test: /how did you (hear|learn|find)|where did you (hear|find|learn)|source of (your )?application|referral source/i,
       choose: [/company'?s? (web)?site|careers? (page|site|website)|company careers/i, /job board/i, /^other$/i], avoid: /linkedin|referr|employee|recruiter|event|agency/i },
     // ---- voluntary self-identification (saved answers only)
-    { test: /transgender/i, choose: DECLINE, onlyIfRequired: true },
-    { test: /sexual orientation/i, choose: DECLINE, onlyIfRequired: true },
-    { test: /pronoun/i, choose: DECLINE, onlyIfRequired: true },
+    // a saved answer is said plainly (the user: no "I don't wish to answer" when there is a real answer); the
+    // decline option only for a required question with nothing saved
+    { test: /transgender/i, choose: f.transgender ? (/^\s*no\b/i.test(f.transgender) ? [/^no\b/i, /do not identify as transgender|don'?t identify as transgender|not transgender/i] : [/^yes\b/i]) : DECLINE, avoid: f.transgender ? /decline|wish|prefer not|not to (say|answer|disclose)/i : null, onlyIfRequired: !f.transgender },
+    { test: /sexual orientation/i, choose: f.orientation ? [new RegExp('^' + escapeRe(f.orientation.split(/[ (/]/)[0]), 'i')] : DECLINE, onlyIfRequired: !f.orientation },
+    { test: /pronoun/i, choose: f.pronouns ? [new RegExp('^' + escapeRe(f.pronouns.split('/')[0]) + '\\s*/\\s*' + escapeRe((f.pronouns.split('/')[1] || '').trim()), 'i'), new RegExp('^' + escapeRe(f.pronouns.split('/')[0]) + '\\b', 'i')] : DECLINE, text: f.pronouns, onlyIfRequired: !f.pronouns },
     { test: /hispanic|latin[oax]/i, choose: f.race ? (/hispanic|latin/i.test(f.race) ? [/^yes\b/i] : [/^no\b/i, /not hispanic/i]) : null },
     { test: /\brace\b|ethnicity|racial/i, choose: raceAsianIndian ? [/^south asian\b/i, /\bsouth asian\b/i, /^asian\b(?!.*(east|pacific))/i, /^asian$/i] : (/asian/i.test(f.race) ? [/^asian$/i, /^asian\b/i] : null), avoid: /east asian|pacific|two or more|^hispanic/i },
     { test: /^gender\b|gender identity|^sex\b|identify your sex|^what is your gender/i, choose: f.gender ? (genderMale ? [/^male$/i, /^man$/i, /^cisgender man$/i, /^male\b/i, /^man\b/i] : [/^female$/i, /^woman$/i, /^cisgender woman$/i]) : null, avoid: genderMale ? /female|woman|trans/i : /trans/i },
