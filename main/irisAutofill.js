@@ -291,7 +291,8 @@ async function irisVerifyAnswer (text) {
       { role: 'system', content: 'You check a job-application answer written for the user against their profile. List every statement in ' +
         'the answer that presents something as the user\'s own (an experience, a project or app they built, a number, an employer, a ' +
         'school, a course, an award, a life event) that the profile below does not support. Skills listed in the profile do NOT prove a ' +
-        'project with them. Opinions, interests and plans are fine. Reply with JSON only: {"unsupported":["<short quote>", ...]} — an ' +
+        'project with them, and a fact that is only inferred (when the user moved, what they struggled with, their culture or family) ' +
+        'is NOT supported unless the profile states it. Opinions, interests and plans are fine. Reply with JSON only: {"unsupported":["<short quote>", ...]} — an ' +
         'empty list when everything is supported.' },
       { role: 'user', content: 'PROFILE:\n' + irisCareerLib.bankText(bank, 7000) + '\n\nSAVED ANSWERS:\n' + (bank.answers || []).map(function (a) { return a.label + ': ' + a.value }).join('\n') +
         '\n\nANSWER TO CHECK:\n' + String(text).slice(0, 3000) }
