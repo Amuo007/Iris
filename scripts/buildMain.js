@@ -26,6 +26,7 @@ const modules = [
   'main/themeMain.js',
   'main/irisAgent.js',
   'main/irisJobs.js',
+  'main/irisAutofill.js',
   'main/irisBridge.js'
 ]
 

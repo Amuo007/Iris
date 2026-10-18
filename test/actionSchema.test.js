@@ -182,6 +182,7 @@ test('validateAction covers every declared action type', () => {
     tailor_resume: { title: 'Android Developer', company: 'ShopFast', requirements: 'Kotlin, Compose' },
     cover_letter: { title: 'Android Developer', company: 'ShopFast' },
     log_application: { status: 'applied', company: 'ShopFast', title: 'Android Developer' },
+    autofill: {},
     done: {},
     fail: {}
   }

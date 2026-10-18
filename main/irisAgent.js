@@ -1369,6 +1369,16 @@ IrisComputer.prototype.act = async function (action) {
       broadcastEvent({ type: 'letter', ok: true, file: r.file, words: r.words, removed: r.removed.length, title: job.title, company: job.company, sessionId: this.sessionId })
       return { ok: true }
     }
+    case 'autofill': {
+      // a Simplify-like fill of the standard fields (Greenhouse forms; never LinkedIn) — the agent checks it all after
+      if (!this.jobsMode) return { ok: false, error: 'autofill is only for job application forms' }
+      if (this.autofilledUrl === String(wc.getURL()).split('#')[0]) return { ok: false, error: 'autofill already ran on this form: check it and fill the rest by hand' }
+      const r = await irisAutofillRun(this, wc)
+      if (!r.ok) return r
+      this.autofilledUrl = String(wc.getURL()).split('#')[0]
+      this.notes = (this.notes || []).concat(r.report)
+      return { ok: true, pageChanged: true }
+    }
     case 'log_application': {
       // the job this log is about: one Iris made a resume for in this run (by its title), else the last one.
       // A job ruled out from the list has no resume: it must not take another job's link, fit or resume,
