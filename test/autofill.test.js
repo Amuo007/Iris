@@ -216,3 +216,30 @@ test('a ticked box shows on its own input or on the styled wrapper around it', (
   // only the box's own wrapper counts, not some far-off ancestor
   assert.strictEqual(on(box(false, node({}, node({}, node({}, node({ 'aria-checked': 'true' })))))), false)
 })
+
+test('home address and contact facts go in the applicant\'s own section only', () => {
+  assert.deepStrictEqual(plan('City', 'text', null, { section: 'Information' }), { do: 'text', value: 'Houston' })
+  assert.strictEqual(plan('City', 'text', null, { section: 'Work History 1' }).do, 'leave')
+  assert.strictEqual(plan('Zip Code', 'text', null, { section: 'Work History 1' }).do, 'leave')
+  assert.strictEqual(plan('State', 'text', null, { section: 'Education History 1' }).do, 'leave')
+  assert.strictEqual(plan('Phone', 'text', null, { section: 'References' }).do, 'leave')
+  assert.strictEqual(plan('First name', 'text', null, { section: 'Emergency Contact' }).do, 'leave')
+  // a filled employer city is not "put right" to the home city either
+  assert.strictEqual(plan('City', 'text', null, { section: 'Employment History', value: 'Austin' }).do, 'leave')
+  // a job title that happens to say "Experience" is not a work-history block
+  assert.deepStrictEqual(plan('City', 'text', null, { section: 'Developer Experience Engineer' }), { do: 'text', value: 'Houston' })
+  // school and employer questions still fill inside their own sections
+  assert.strictEqual(plan('School Name', 'text', null, { section: 'Education History 1' }).value, 'University of Houston')
+})
+
+test('school type and graduated questions', () => {
+  assert.strictEqual(plan('School Type (required)', 'select', ['Unspecified', 'High School', 'Community College', 'Vocational', 'College/University', 'Graduate School']).option, 'College/University')
+  assert.strictEqual(plan('Did you Graduate? (required)', 'select', ['Yes', 'No']).option, 'No')
+})
+
+test('a first address line beside City/State/Zip takes the street; one Address box takes it all', () => {
+  assert.deepStrictEqual(plan('Address Line 1', 'text'), { do: 'text', value: '17723 Quiet Loch Ln' })
+  assert.deepStrictEqual(plan('Street address', 'text'), { do: 'text', value: '17723 Quiet Loch Ln' })
+  assert.deepStrictEqual(plan('Address', 'text'), { do: 'text', value: '17723 Quiet Loch Ln, Houston, TX 77084' })
+  assert.strictEqual(plan('Address Line 2(optional)', 'text').do, 'leave')
+})

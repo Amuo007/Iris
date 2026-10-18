@@ -175,23 +175,27 @@ function rulesFor (f) {
   const noDis = /^\s*no\b/i.test(f.disability)
   return [
     // ---- contact
-    { test: /^(legal |preferred )?first name|^given name/i, text: f.firstName, sure: true },
-    { test: /^(legal )?last name|^surname|^family name/i, text: f.lastName, sure: true },
-    { test: /^(full |legal |your )?(full )?(legal )?name\b(?!.*(company|school|employer|reference|manager|recruiter|referr))|full legal name/i, text: f.fullName },
-    { test: /^(your )?e-?mail( address)?\b|^(confirm|re-?enter|repeat|verify|retype) (your )?e-?mail/i, skip: /referr|manager|reference/i, text: f.email, short: true, sure: true },
-    { test: /^(mobile |cell |primary )?phone( number)?\b|^mobile( number)?\b/i, text: f.phone, sure: true },
+    { test: /^(legal |preferred )?first name|^given name/i, text: f.firstName, sure: true, self: true },
+    { test: /^(legal )?last name|^surname|^family name/i, text: f.lastName, sure: true, self: true },
+    { test: /^(full |legal |your )?(full )?(legal )?name\b(?!.*(company|school|employer|reference|manager|recruiter|referr))|full legal name/i, text: f.fullName, self: true },
+    { test: /^(your )?e-?mail( address)?\b|^(confirm|re-?enter|repeat|verify|retype) (your )?e-?mail/i, skip: /referr|manager|reference/i, text: f.email, short: true, sure: true, self: true },
+    { test: /^(mobile |cell |primary )?phone( number)?\b|^mobile( number)?\b/i, text: f.phone, sure: true, self: true },
     { test: /^(your )?linkedin\b|linkedin (profile|url)/i, text: f.linkedin, short: true },
     { test: /^(your )?github\b|github (profile|url)/i, text: f.github, short: true },
     { test: /^(your |personal )?(website|portfolio|blog)\b|personal (site|website)/i, skip: /linkedin|github/i, text: f.website, short: true },
     // ---- place
-    { test: /^country\b/i, choose: [/^united states( of america)?(\s*\+1)?$/i, /^united states\b(?!.*(minor|islands))/i, /^usa?$/i], text: f.country },
-    { test: /^(location|current location)\b|location \(city\)|^where are you (currently )?(located|based)/i, place: true, text: f.city && f.state ? f.city + ', ' + f.state : '' },
-    { test: /^city\b/i, text: f.city, sure: true },
-    { test: /^(street )?address( line 1)?$|street address|home address/i, text: [f.street, f.city, f.stateCode, f.zip].filter(Boolean).join(', ').replace(/, (\d{5})$/, ' $1') },
-    { test: /^state\b|^province\b|state\s*\/\s*prov/i, choose: f.state ? [new RegExp('^' + f.state + '$', 'i'), new RegExp('^' + f.stateCode + '$', 'i')] : null, text: f.state },
-    { test: /^(zip|postal)( code)?\b/i, text: f.zip, sure: true },
+    { test: /^country\b/i, choose: [/^united states( of america)?(\s*\+1)?$/i, /^united states\b(?!.*(minor|islands))/i, /^usa?$/i], text: f.country, self: true },
+    { test: /^(location|current location)\b|location \(city\)|^where are you (currently )?(located|based)/i, place: true, text: f.city && f.state ? f.city + ', ' + f.state : '', self: true },
+    { test: /^city\b/i, text: f.city, sure: true, self: true },
+    // a first address line beside its own City / State / Zip boxes takes the street alone; one Address box takes it all
+    { test: /^(street )?address( line)? ?1$|^street( address)?( line 1)?$|^address \(street\)/i, text: f.street, self: true },
+    { test: /^(home |mailing |current |full )?address$|home address|mailing address/i, text: [f.street, f.city, f.stateCode, f.zip].filter(Boolean).join(', ').replace(/, (\d{5})$/, ' $1'), self: true },
+    { test: /^state\b|^province\b|state\s*\/\s*prov/i, choose: f.state ? [new RegExp('^' + f.state + '$', 'i'), new RegExp('^' + f.stateCode + '$', 'i')] : null, text: f.state, alts: [f.stateCode], self: true },
+    { test: /^(zip|postal)( code)?\b/i, text: f.zip, sure: true, self: true },
     // ---- education (Greenhouse's school--0 / degree--0 / discipline--0 boxes)
-    { test: /^school\b|^university\b|^college\b|^institution\b/i, search: true, choose: f.school ? [new RegExp('^' + f.school + '$', 'i'), new RegExp('^' + f.school + '\\b', 'i')] : null, text: f.school },
+    { test: /^(school|institution) type|type of (school|institution)/i, choose: /bachelor|master/.test(f.degreeLevel || '') ? [/college\s*\/\s*universit/i, /^universit/i, /4[- ]?year/i, /^college\b/i] : null },
+    { test: /^did you graduate|^have you graduated|^graduated\??$/i, yesNoOnly: true, choose: f.degreeLevel ? (f.degreeDone ? YES : NO) : null },
+    { test: /^school\b|^university\b|^college\b|^institution\b/i, skip: /type\b|district|level/i, search: true, choose: f.school ? [new RegExp('^' + f.school + '$', 'i'), new RegExp('^' + f.school + '\\b', 'i')] : null, text: f.school },
     { test: /highest (level of )?(education|degree)|education level|level of education/i, choose: f.degreeDone ? null : [/high school/i, /secondary/i], requires: !f.degreeDone },
     { test: /^degree\b/i, choose: f.degreeLevel === 'bachelor' ? [/^bachelor'?s? degree$/i, /^bachelor/i, /\bB\.?S\.?\b/] : f.degreeLevel === 'master' ? [/^master'?s? degree$/i, /^master/i] : null },
     { test: /^discipline\b|^major\b|field of study|area of study/i, choose: f.major ? [new RegExp('^' + f.major + '$', 'i'), new RegExp(f.major, 'i')] : null, text: f.major },
@@ -262,6 +266,8 @@ function sponsorChoice (f) {
  * What to do with one collected field: {do:'text', value} | {do:'choose', patterns, avoid, search} |
  * {do:'upload', file:'resume'} | {do:'leave', why}. Fields that already hold a value are left as they are.
  */
+const OTHER_SECTION = /^((work|employment|job|professional) )?(history|experience)( #?\d+)?$|^(work|employment|job) history\b|^(previous |past |prior |former )?employers?( #?\d+)?$|^education(al)?( history| background| information| details)?( #?\d+)?$|^(school|college|university)( #?\d+)?$|^(professional )?references?\b|^emergency contact/i
+
 function planField (field, facts, mode) {
   const label = clean(field.label).replace(/\s*\*\s*$/, '').replace(/\*/g, '').trim()
   if (mode === 'basic' && field.kind === 'combobox' && !field.aria) return { do: 'leave', why: 'a custom dropdown on this site: pick it by hand' }
@@ -273,6 +279,9 @@ function planField (field, facts, mode) {
   if (!label) return { do: 'leave', why: field.value ? 'already filled' : 'no label' }
   // contact boxes have short labels: a long question that merely mentions "email" or "LinkedIn" is not one
   const rule = rulesFor(facts).find(function (r) { return r.test.test(label) && !(r.skip && r.skip.test(label)) && !(r.short && label.length > 60) })
+  // the applicant's own name, phone and address go in their own section only: in a Work History, Education or
+  // References block the same boxes belong to an employer, a school or another person
+  if (rule && rule.self && field.section && OTHER_SECTION.test(clean(field.section))) return { do: 'leave', why: 'in the "' + clean(field.section).slice(0, 40) + '" section: not the applicant\'s own details' }
   if (field.value) {
     // a box already filled (the site's resume import, a browser's saved address): the profile is the truth for the
     // sure facts — put it right when it differs, else leave it
@@ -355,7 +364,11 @@ const AF_DEEP = "const __deep = (sel, root) => { const out = []; const walk = r 
   " const __byId = (el, i) => (__root(el).getElementById ? __root(el).getElementById(i) : null) || document.getElementById(i);" +
   // a ticked box: its own checked, else the styled wrapper that shows it (role=radio / a toggle button with
   // aria-checked or aria-pressed; some sites never tick the hidden input itself)
-  " const __on = b => { if (b.checked) return true; let n = b; for (let k = 0; k < 3 && n; k++) { n = n.parentElement; if (!n) break; const a = n.getAttribute('aria-checked') || n.getAttribute('aria-pressed'); if (a) return a === 'true'; } return false; };"
+  " const __on = b => { if (b.checked) return true; let n = b; for (let k = 0; k < 3 && n; k++) { n = n.parentElement; if (!n) break; const a = n.getAttribute('aria-checked') || n.getAttribute('aria-pressed'); if (a) return a === 'true'; } return false; };" +
+  // a pick-from-list box drawn by the page (an input with aria-autocomplete=list inside a "select" widget): what it
+  // shows as picked sits beside the input (react-select's single-value), and its own text is only the search typed
+  " const __selectLike = el => { if (!/^(list|both)$/i.test(el.getAttribute('aria-autocomplete') || '')) return false; let a = el; for (let k = 0; k < 4 && a; k++) { a = a.parentElement; if (!a) break; if (typeof a.className === 'string' && /select/i.test(a.className)) return true; } return false; };" +
+  " const __sv = el => { let a = el; for (let k = 0; k < 4 && a; k++) { a = a.parentElement; if (!a) break; if ([...a.querySelectorAll('input, select, textarea')].some(x => x !== el && x.type !== 'hidden')) break; const sv = a.querySelectorAll('[class*=\"single-value\" i], [class*=\"singlevalue\" i], [class*=\"multi-value__label\" i]'); if (sv.length) return [...sv].map(x => String(x.innerText || '').replace(/\\s+/g, ' ').trim()).filter(t => t && !/^(select|choose|search|please select)\\b|^-+$/i.test(t)).join(', '); } return ''; };"
 
 
 /*
@@ -382,6 +395,10 @@ const PAGE_COLLECT = `(() => {
   };
   const form = document.querySelector('form#application-form, form#application_form, form.application--form, form') || document;
   const out = []; let n = 0; const seenGroups = new Set();
+  // the section a field sits in: the nearest heading before it (a heading tag, a legend, or a block styled as a
+  // section title, like Paylocity's "Work History 1")
+  const HEADS = [...document.querySelectorAll('h1, h2, h3, h4, h5, h6, legend, [role=heading], [class*="section-heading" i], [class*="sectionheading" i], [class*="section-title" i], [class*="sectiontitle" i], [class*="section__title" i], [class*="section-header" i]')].filter(h => { const t = clean(h.innerText || ''); return t && t.length <= 60 && !h.querySelector('input, select, textarea'); });
+  const sectionOf = el => { let s = ''; for (const h of HEADS) { if (h.contains(el)) continue; if (h.compareDocumentPosition(el) & 4) s = clean(h.innerText); else break; } return s; };
   const SEL = 'input, select, textarea, [role=combobox]:not(input):not(select):not(textarea)';
   let all = [...form.querySelectorAll(SEL)];
   if (all.filter(e => e.type !== 'hidden' && e.type !== 'file').length < 3) all = __deep(SEL);
@@ -409,18 +426,19 @@ const PAGE_COLLECT = `(() => {
       const firstLine = clean(String(grp.innerText || '').split('\\n').map(x => x.trim()).find(x => x && !opts.some(o => o && (x === o || x.indexOf(o) === 0))) || '');
       const gl = legend ? clean(legend.innerText) : (byText || (same.length > 1 ? firstLine : '') || labelOf(el));
       out.push({ key: id, id: grp.id || el.name, kind: t === 'checkbox' ? 'checkboxes' : 'radios', label: gl, required: grp.getAttribute('aria-required') === 'true' || boxes.some(b => b.required) || /\\*/.test(gl),
-        name: el.name || '', options: opts, value: boxes.filter(__on).map(optText).join(', ') });
+        name: el.name || '', options: opts, value: boxes.filter(__on).map(optText).join(', '), section: sectionOf(grp) });
       return;
     }
     if (!visible(el) && t !== 'file') return;
     const id = 'f' + (++n); el.setAttribute('data-iris-af', id);
     const lab = labelOf(el);
-    let kind = el.tagName === 'SELECT' ? 'select' : el.tagName === 'TEXTAREA' ? 'textarea' : t === 'file' ? 'file' : (el.getAttribute('role') === 'combobox' ? 'combobox' : 'text');
+    let kind = el.tagName === 'SELECT' ? 'select' : el.tagName === 'TEXTAREA' ? 'textarea' : t === 'file' ? 'file' : (el.getAttribute('role') === 'combobox' || __selectLike(el) ? 'combobox' : 'text');
     let value = '', options = null;
     if (kind === 'combobox') {
       const ctl = el.closest('.select__control') || el.closest('[class*="control"]');
       const sv = ctl && ctl.querySelectorAll('[class*="single-value"], [class*="multi-value__label"]');
       if (sv && sv.length) value = [...sv].map(x => clean(x.innerText)).join(', ');
+      else if (__selectLike(el)) value = __sv(el);
       else if (!ctl) { const own = clean(el.tagName === 'INPUT' ? el.value : el.innerText); value = placeholder(own) ? '' : own; }
     } else if (kind === 'select') {
       const blank = o => o.value === '' || /^-+.*-+$|^(select|choose|please select|no answer|none selected)\\b/i.test(clean(o.text));
@@ -430,6 +448,7 @@ const PAGE_COLLECT = `(() => {
       value = box && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(box.innerText) ? clean(box.innerText).slice(0, 80) : '';
     } else { value = clean(el.value); }
     let label = lab;
+    if (kind === 'combobox' && __selectLike(el)) { if (value && label.endsWith(value) && label.length > value.length) label = clean(label.slice(0, -value.length)); label = label.replace(/\\s+(select|choose)( an?| one)?( [\\w ]{0,20})?\\.{0,3}$/i, ''); }
     if (kind === 'file') {
       const byId = /resume|\\bcv\\b/i.test(el.id + ' ' + el.name) ? 'Resume/CV' : /cover/i.test(el.id + ' ' + el.name) ? 'Cover Letter' : '';
       // else the nearest text around the box that names the document ("Resume", "Cover letter")
@@ -440,8 +459,8 @@ const PAGE_COLLECT = `(() => {
       label = byId || (lab && !/^(attach|choose file|upload|browse|drop or select)/i.test(lab) && /resume|cv|cover|document/i.test(lab) ? lab : '') || near || lab || el.id;
     }
     const req = el.required || el.getAttribute('aria-required') === 'true' || /\\*/.test(lab);
-    const aria = kind === 'combobox' && (el.hasAttribute('aria-expanded') || el.getAttribute('aria-haspopup') === 'listbox' || el.hasAttribute('aria-controls'));
-    out.push({ key: id, id: el.id || el.name, kind, inputType: t, label: label.replace(/\\s*\\*\\s*$/, ''), required: !!req, value, options, aria, placeholder: clean(el.placeholder || '').slice(0, 40) });
+    const aria = kind === 'combobox' && (__selectLike(el) || el.hasAttribute('aria-expanded') || el.getAttribute('aria-haspopup') === 'listbox' || el.hasAttribute('aria-controls'));
+    out.push({ key: id, id: el.id || el.name, kind, inputType: t, label: label.replace(/\\s*\\*\\s*$/, ''), required: !!req, value, options, aria, placeholder: clean(el.placeholder || '').slice(0, 40), section: sectionOf(el) });
   });
   return out;
 })()`
@@ -469,7 +488,7 @@ function pageOptions (key) {
     ${AF_DEEP}
     const host = __one('[data-iris-af="${key}"]'); if (!host) return null;
     const lb = host.getAttribute('aria-controls') && document.getElementById(host.getAttribute('aria-controls'));
-    const opts = [...(lb || document).querySelectorAll('[role="option"]')];
+    const opts = [...(lb || document).querySelectorAll('[role="option"]')].filter(o => { const r = o.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
     return opts.map((o, i) => { const r = o.getBoundingClientRect(); return { i, text: String(o.innerText || '').replace(/\\s+/g, ' ').trim(), x: Math.round(r.left + Math.min(r.width / 2, 120)), y: Math.round(r.top + r.height / 2), h: Math.round(r.height), inView: r.top >= 0 && r.bottom <= innerHeight }; });
   })()`
 }
@@ -480,7 +499,7 @@ function pageOptionRect (key, index) {
     ${AF_DEEP}
     const host = __one('[data-iris-af="${key}"]'); if (!host) return null;
     const lb = host.getAttribute('aria-controls') && document.getElementById(host.getAttribute('aria-controls'));
-    const o = [...(lb || document).querySelectorAll('[role="option"]')][${Number(index) || 0}]; if (!o) return null;
+    const o = [...(lb || document).querySelectorAll('[role="option"]')].filter(o => { const r = o.getBoundingClientRect(); return r.width > 0 && r.height > 0; })[${Number(index) || 0}]; if (!o) return null;
     o.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     const r = o.getBoundingClientRect();
     return { x: Math.round(r.left + Math.min(r.width / 2, 120)), y: Math.round(r.top + r.height / 2) };
@@ -498,6 +517,7 @@ function pageValue (key, name) {
     if (!el && nm) { const same = __deep('input[name="' + CSS.escape(nm) + '"]'); if (same.length) { el = same[0].parentElement; while (el && !same.every(b => el.contains(b))) el = el.parentElement; } }
     if (!el) { const box = __one('[data-iris-afbox="${key}"]'); return box && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(box.innerText || '') ? 'attached' : null; }
     const clean = s => String(s || '').replace(/\\s+/g, ' ').trim();
+    if (__selectLike(el)) return __sv(el);
     if (el.getAttribute('role') === 'combobox') { const ctl = el.closest('.select__control') || el.closest('[class*="control"]'); const sv = ctl && ctl.querySelectorAll('[class*="single-value"], [class*="multi-value__label"]'); if (sv && sv.length) return [...sv].map(x => clean(x.innerText)).join(', '); if (ctl) return ''; const own = clean(el.tagName === 'INPUT' ? el.value : el.innerText); return /^(select( an option| one)?\\.{0,3}|search|choose\\.{0,3}|--+|please select)$/i.test(own) ? '' : own; }
     if (el.tagName === 'SELECT') { const o = el.selectedIndex >= 0 ? el.options[el.selectedIndex] : null; return o && o.value !== '' && !/^-+.*-+$|^(select|choose|please select|no answer|none selected)\\b/i.test(clean(o.text)) ? clean(o.text) : ''; }
     if (el.tagName === 'FIELDSET' || el.querySelector) { const boxes = el.querySelectorAll ? [...el.querySelectorAll('input[type=checkbox], input[type=radio]')] : []; if (boxes.length) return boxes.filter(__on).map(b => { const l = __labelFor(b) || b.closest('label'); if (l && clean(l.innerText)) return clean(l.innerText); const bl = b.getAttribute('aria-labelledby'); const bt = bl ? clean(bl.split(' ').map(i => __byId(b, i)).filter(Boolean).map(x => x.innerText).join(' ')) : ''; return bt || clean(b.getAttribute('aria-label') || b.value); }).join(', '); }
