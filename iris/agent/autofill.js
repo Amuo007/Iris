@@ -513,7 +513,9 @@ const PAGE_COLLECT = `(() => {
       for (let k = 0; k < 8 && a && !near; k++) { a = a.parentElement || (a.getRootNode && a.getRootNode().host) || null; const tx = a ? clean(a.innerText || '') : ''; if (/autofill|auto-?complete|easy apply|import|pars(e|ing)|apply with (your )?(resume|linkedin)/i.test(tx) && tx.length < 600) importer = true; const m = tx.match(/(resume|r\u00e9sum\u00e9|\\bcv\\b|curriculum vitae|cover letter)/i); if (m && tx.length < 400) near = /cover/i.test(m[1]) ? 'Cover Letter' : 'Resume/CV'; }
       // a box that reads a resume to fill the form for you is the site's own autofill: not the resume field
       if (importer) near = 'Resume import (the site autofill)';
-      label = byId || (lab && !/^(attach|choose file|upload|browse|drop or select)/i.test(lab) && /resume|cv|cover|document/i.test(lab) ? lab : '') || near || lab || el.id;
+      // (before its own words, which name the resume too: Ashby's "Autofill from resume" box redraws the whole form
+      // when a file lands in it, and the boxes autofill is filling lose their marks)
+      label = byId || (importer ? near : '') || (lab && !/^(attach|choose file|upload|browse|drop or select)/i.test(lab) && /resume|cv|cover|document/i.test(lab) ? lab : '') || near || lab || el.id;
     }
     const req = el.required || el.getAttribute('aria-required') === 'true' || /\\*/.test(lab);
     const aria = kind === 'combobox' && (__selectLike(el) || el.hasAttribute('aria-expanded') || el.getAttribute('aria-haspopup') === 'listbox' || el.hasAttribute('aria-controls'));
