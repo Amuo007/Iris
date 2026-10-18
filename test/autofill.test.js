@@ -122,8 +122,14 @@ test('saved self-ID answers are said plainly, never "decline"', () => {
   assert.strictEqual(p2('What is your sexual orientation?', 'select', ['Heterosexual', 'Gay', 'Decline to self-identify'], { required: false }).do, 'leave')
 })
 
-test('SMS / WhatsApp opt-ins: no', () => {
+test('SMS / WhatsApp opt-ins: no — even when the question mentions email', () => {
   assert.strictEqual(plan('Would you like to receive communications via SMS and/or WhatsApp to the number provided?', 'select', ['Yes', 'No']).option, 'No')
+  const long = 'Would you like to receive communications via SMS and/or WhatsApp to the number provided [above or during the application process] about your application process? Message & data rates may apply and message frequency may vary. If you select no, we will only communicate with you via email and/or telephone calls.'
+  assert.strictEqual(plan(long, 'select', ['Yes', 'No']).option, 'No')
+  assert.strictEqual(plan(long, 'combobox').do, 'choose')
+  assert.strictEqual(plan('How did you hear about us? (LinkedIn, a friend, our website …)', 'select', ['LinkedIn', 'Company website', 'Other']).option, 'Company website')
+  assert.deepStrictEqual(plan('Email address'), { do: 'text', value: 'a@example.com' })
+  assert.deepStrictEqual(plan('LinkedIn Profile URL'), { do: 'text', value: 'https://www.linkedin.com/in/x/' })
 })
 
 test('unknown and optional self-ID questions are left to the agent', () => {

@@ -161,11 +161,11 @@ function rulesFor (f) {
     { test: /^(legal |preferred )?first name|^given name/i, text: f.firstName },
     { test: /^(legal )?last name|^surname|^family name/i, text: f.lastName },
     { test: /^(full |legal |your )?(full )?(legal )?name\b(?!.*(company|school|employer|reference|manager|recruiter|referr))|full legal name/i, text: f.fullName },
-    { test: /e-?mail/i, skip: /referr|manager|reference/i, text: f.email },
+    { test: /^(your )?e-?mail( address)?\b/i, skip: /referr|manager|reference/i, text: f.email, short: true },
     { test: /^(mobile |cell |primary )?phone( number)?\b/i, text: f.phone },
-    { test: /linkedin/i, text: f.linkedin },
-    { test: /github/i, text: f.github },
-    { test: /^(personal )?(website|portfolio|blog)|portfolio|personal (site|website)/i, skip: /linkedin|github/i, text: f.website },
+    { test: /^(your )?linkedin\b|linkedin (profile|url)/i, text: f.linkedin, short: true },
+    { test: /^(your )?github\b|github (profile|url)/i, text: f.github, short: true },
+    { test: /^(your |personal )?(website|portfolio|blog)\b|personal (site|website)/i, skip: /linkedin|github/i, text: f.website, short: true },
     // ---- place
     { test: /^country\b/i, choose: [/^united states( of america)?(\s*\+1)?$/i, /^united states\b(?!.*(minor|islands))/i, /^usa?$/i], text: f.country },
     { test: /^(location|current location|city)\b|location \(city\)|^where are you (currently )?(located|based)/i, place: true, text: f.city && f.state ? f.city + ', ' + f.state : '' },
@@ -239,7 +239,8 @@ function planField (field, facts, mode) {
   }
   if (field.value) return { do: 'leave', why: 'already filled' }
   if (!label) return { do: 'leave', why: 'no label' }
-  const rule = rulesFor(facts).find(function (r) { return r.test.test(label) && !(r.skip && r.skip.test(label)) })
+  // contact boxes have short labels: a long question that merely mentions "email" or "LinkedIn" is not one
+  const rule = rulesFor(facts).find(function (r) { return r.test.test(label) && !(r.skip && r.skip.test(label)) && !(r.short && label.length > 60) })
   if (!rule) return { do: 'leave', why: 'not a standard question' }
   if (rule.leave) return { do: 'leave', why: rule.leave }
   if (rule.requires === false) return { do: 'leave', why: 'no fact for it' }

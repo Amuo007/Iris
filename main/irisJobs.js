@@ -519,6 +519,7 @@ function irisJobsPrompt (task, mode) {
     '   self-identification (gender, race, Hispanic/Latino, veteran, disability): use the saved answer when there is one',
     '   (a race answer that names no Hispanic or Latino origin is No to "Are you Hispanic/Latino?"); with none, leave it',
     '   empty unless required, then "Decline to self-identify".',
+    '   SMS / WhatsApp / text-message opt-ins: No (the company still writes by email and calls).',
     '   "How did you hear about us?": where you found the posting (the company\'s own site → Company Website; a job board →',
     '   that board, or Job Board); if none fits, Other.',
     '   Cover letter optional: skip it. Required as a file: cover_letter {"company":str,"title":str,"requirements":str} makes',
