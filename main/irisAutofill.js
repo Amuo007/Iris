@@ -261,7 +261,7 @@ async function irisAutofillRun (computer, wc) {
     lines.push('Left empty (optional):')
     optional.forEach(function (l) { lines.push('  • ' + short(l.field) + ' — ' + l.why) })
   }
-  lines.push('Now CHECK: the page is back at the top of the form. Scroll down through ALL of it and compare every box with this list; fix anything wrong or empty by hand (normal clicks), answer the questions left to you, then Submit. Do not call autofill again on this form.')
+  lines.push('Now CHECK: the page is back at the top of the form. Scroll down through ALL of it and compare every box with this list; fix anything wrong or empty by hand (normal clicks), answer the questions left to you, then Submit (or Next, and autofill again on the next step).')
   DBUG('autofill: set ' + set.length + ', left ' + left.length + ' in ' + (Date.now() - started) + ' ms')
   try {
     fs.appendFileSync(path.join(userDataPath, 'iris-autofill-log.jsonl'), JSON.stringify({ at: started, ms: Date.now() - started, sessionId: computer.sessionId || null,

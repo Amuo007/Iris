@@ -1372,10 +1372,14 @@ IrisComputer.prototype.act = async function (action) {
     case 'autofill': {
       // a Simplify-like fill of the standard fields (Greenhouse forms; never LinkedIn) — the agent checks it all after
       if (!this.jobsMode) return { ok: false, error: 'autofill is only for job application forms' }
-      if (this.autofilledUrl === String(wc.getURL()).split('#')[0]) return { ok: false, error: 'autofill already ran on this form: check it and fill the rest by hand' }
+      // once per form page — a multi-step form (Step 2 of 4 …) may run it again on each new step: it only fills
+      // empty boxes, so a second run on the same step changes nothing
+      const here = String(wc.getURL()).split('#')[0]
+      this.autofillRuns = this.autofillRuns && this.autofillRuns.url === here ? this.autofillRuns : { url: here, n: 0 }
+      if (this.autofillRuns.n >= 4) return { ok: false, error: 'autofill already ran on this form: check it and fill the rest by hand' }
       const r = await irisAutofillRun(this, wc)
       if (!r.ok) return r
-      this.autofilledUrl = String(wc.getURL()).split('#')[0]
+      this.autofillRuns.n++
       this.notes = (this.notes || []).concat(r.report)
       return { ok: true, pageChanged: true }
     }
