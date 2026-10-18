@@ -263,7 +263,27 @@ function parseBoardJobs (ats, json) {
 }
 
 /* the best matches for the words, by how many of them appear in the title, team and place */
+/* Whether a posting's location is in the United States: a US state (name or code), "United States" / "USA", a
+   Workday "US-…" place, or Remote without another country. The user applies in the US only, so a posting abroad, or
+   with no location at all, is not shown. */
+const US_STATES = ['alabama', 'alaska', 'arizona', 'arkansas', 'california', 'colorado', 'connecticut', 'delaware', 'florida', 'georgia', 'hawaii', 'idaho', 'illinois', 'indiana', 'iowa', 'kansas', 'kentucky', 'louisiana', 'maine', 'maryland', 'massachusetts', 'michigan', 'minnesota', 'mississippi', 'missouri', 'montana', 'nebraska', 'nevada', 'new hampshire', 'new jersey', 'new mexico', 'new york', 'north carolina', 'north dakota', 'ohio', 'oklahoma', 'oregon', 'pennsylvania', 'rhode island', 'south carolina', 'south dakota', 'tennessee', 'texas', 'utah', 'vermont', 'virginia', 'washington', 'west virginia', 'wisconsin', 'wyoming', 'district of columbia']
+const US_CODES = 'AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC'
+const US_CITIES = /\b(san francisco|seattle|boston|austin|houston|dallas|chicago|los angeles|new york|nyc|brooklyn|denver|atlanta|miami|phoenix|san diego|san jose|palo alto|mountain view|menlo park|sunnyvale|redmond|bellevue|cambridge, ma|pittsburgh|philadelphia|detroit|minneapolis|salt lake city|portland, or|raleigh|nashville|irvine|santa clara|bay area)\b/i
+const NOT_US = /\b(canada|toronto|vancouver|montreal|ontario|london|united kingdom|\buk\b|england|ireland|dublin|germany|berlin|munich|france|paris|spain|madrid|barcelona|netherlands|amsterdam|poland|warsaw|india|bangalore|bengaluru|hyderabad|pune|mumbai|delhi|singapore|japan|tokyo|china|shanghai|beijing|hong kong|australia|sydney|melbourne|brazil|mexico|israel|tel aviv|turkey|türkiye|istanbul|ukraine|romania|tbilisi|portugal|lisbon|sweden|stockholm|switzerland|zurich|italy|milan|emea|apac|latam|europe)\b/i
+function isUSLocation (loc) {
+  const t = String(loc || '').trim()
+  if (!t) return false
+  if (/\b(united states|u\.s\.a?\.?|usa)\b|^us[\s,-]|[\s(,-]us\)?$|\(us\)/i.test(t)) return true
+  if (new RegExp('(^|[\\s,(-])(' + US_CODES + ')([\\s,)]|$)').test(t)) return true
+  const low = t.toLowerCase()
+  if (US_STATES.some(function (st) { return new RegExp('\\b' + st + '\\b').test(low) }) && !NOT_US.test(t)) return true
+  if (US_CITIES.test(t) && !NOT_US.test(t)) return true
+  if (/\bremote\b|\banywhere\b/i.test(t) && !NOT_US.test(t)) return true
+  return false
+}
+
 function filterBoardJobs (jobs, words, max) {
+  jobs = jobs.filter(function (j) { return isUSLocation(j.location) })
   if (!words.length) return jobs.slice(0, max)
   return jobs.map(function (j) {
     const hay = (j.title + ' ' + j.team + ' ' + j.location).toLowerCase()
@@ -418,7 +438,8 @@ function createLookup (opts) {
         return { title: clip(j.title, 120), location: clip(j.locationsText, 80), team: '', url: 'https://' + board.host + '/' + board.site + j.externalPath }
       })
       const score = function (j) { const hay = (j.title + ' ' + j.location).toLowerCase(); return dropped.filter(function (w) { return hay.indexOf(w) !== -1 }).length }
-      const items = dropped.length ? all.slice().sort(function (a, b) { return score(b) - score(a) }) : all
+      const us = all.filter(function (j) { return isUSLocation(j.location) })
+      const items = dropped.length ? us.slice().sort(function (a, b) { return score(b) - score(a) }) : us
       return { source: board.company + ' on workday, ' + (data.total || all.length) + ' matching "' + words.join(' ') + '"' + (dropped.length ? ' (ranked by: ' + dropped.join(' ') + ')' : ''), items: items.slice(0, 15) }
     }
     const r = await get(boardApiUrl(board), 'application/json')
@@ -566,4 +587,4 @@ function parseLookups (text, max) {
 }
 
 module.exports = {
-  parseHackerNews, createLookup, parseJobBoardQuery, parseBoardJobs, filterBoardJobs, parseLookups, firstJsonWith, parseDuckDuckGo, parseBing, parseOpenAlex, parseArxiv, readableText, looksBlocked, isNever, KINDS, NEVER }
+  parseHackerNews, createLookup, parseJobBoardQuery, parseBoardJobs, filterBoardJobs, isUSLocation, parseLookups, firstJsonWith, parseDuckDuckGo, parseBing, parseOpenAlex, parseArxiv, readableText, looksBlocked, isNever, KINDS, NEVER }

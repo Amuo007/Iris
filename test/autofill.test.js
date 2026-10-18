@@ -289,3 +289,10 @@ test('Smart look-ups and questions are read from tool-call markup and repeated J
   const q = P.parseQuestions('<tool_call>{"questions":[{"q":"Which city?","options":["Houston","Remote"]}]}</tool_call>{"questions":[]}')
   assert.strictEqual(q[0].q, 'Which city?')
 })
+
+test('job look-ups keep US postings only', () => {
+  const L = require('../iris/agent/lookup')
+  for (const loc of ['New York, NY', 'US-VA-Arlington', 'Remote - US', 'Houston, TX', 'Sunnyvale, California']) assert.strictEqual(L.isUSLocation(loc), true, loc)
+  for (const loc of ['Istanbul', '', 'London, United Kingdom', 'Toronto, ON', 'Bangalore, India', 'Tbilisi, Georgia']) assert.strictEqual(L.isUSLocation(loc), false, loc)
+  assert.deepStrictEqual(L.filterBoardJobs([{ title: 'SWE New Grad', team: '', location: 'Istanbul' }, { title: 'SWE New Grad', team: '', location: 'Austin, TX' }], [], 5).map(j => j.location), ['Austin, TX'])
+})

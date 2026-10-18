@@ -171,14 +171,16 @@ test('job boards: the address picks the board, words pick the openings', async (
   const board = { jobs: [
     { title: 'Security Engineer', location: 'New York', secondaryLocations: [{ location: 'Remote (Canada)' }], department: 'Engineering', jobUrl: 'https://jobs.ashbyhq.com/ramp/1', isRemote: true },
     { title: 'Account Executive', location: 'Toronto', department: 'Sales', jobUrl: 'https://jobs.ashbyhq.com/ramp/2' },
-    { title: 'Software Engineer, Backend', location: 'Remote (Canada)', department: 'Engineering', jobUrl: 'https://jobs.ashbyhq.com/ramp/3' }
+    { title: 'Software Engineer, Backend', location: 'Remote (US)', department: 'Engineering', jobUrl: 'https://jobs.ashbyhq.com/ramp/3' },
+    { title: 'Software Engineer, Payments', location: 'Toronto', department: 'Engineering', jobUrl: 'https://jobs.ashbyhq.com/ramp/4' }
   ] }
   const lk = createLookup({ fetch: async (url) => ({ status: 200, url, text: async () => JSON.stringify(board), headers: { get: () => 'application/json' } }), delay: async () => {}, now: () => 0 })
-  const r = await lk.lookup({ kind: 'jobs', query: 'jobs.ashbyhq.com/ramp software engineer canada' })
+  const r = await lk.lookup({ kind: 'jobs', query: 'jobs.ashbyhq.com/ramp software engineer remote' })
   assert.ok(r.ok)
-  assert.match(r.text, /Openings for .*\(ramp on ashby, 3 open\)/)
+  assert.match(r.text, /Openings for .*\(ramp on ashby, 4 open\)/)
   assert.match(r.text.split('\n')[1], /Software Engineer, Backend/, 'the best match comes first')
   assert.ok(!/Account Executive/.test(r.text))
+  assert.ok(!/Payments/.test(r.text), 'a posting outside the US is not shown')
 })
 
 test('a job posting can be read further than a usual page, so its requirements are not cut off', async () => {
@@ -222,15 +224,17 @@ test('a Workday board is searched on its side; with no hits the last words (a pl
     asked.push(body.searchText)
     const hits = body.searchText === 'firmware' ? [
       { title: 'Firmware Engineer', locationsText: 'US, Santa Clara', externalPath: '/job/US/Firmware-Engineer_JR1' },
-      { title: 'Firmware Engineer II', locationsText: 'Canada, Toronto', externalPath: '/job/Canada-Toronto/Firmware-Engineer-II_JR2' }
+      { title: 'Firmware Engineer II', locationsText: 'US, Austin', externalPath: '/job/US-Austin/Firmware-Engineer-II_JR2' },
+      { title: 'Firmware Engineer III', locationsText: 'Canada, Toronto', externalPath: '/job/Canada-Toronto/Firmware-Engineer-III_JR3' }
     ] : []
     return { status: 200, url, text: async () => JSON.stringify({ total: hits.length, jobPostings: hits }), headers: { get: () => 'application/json' } }
   }
   const lk = createLookup(Object.assign({ fetch }, instant))
-  const r = await lk.lookup({ kind: 'jobs', query: 'acme.wd5.myworkdayjobs.com/en-US/External firmware toronto' })
-  assert.deepStrictEqual(asked, ['firmware toronto', 'firmware'])
-  assert.strictEqual(r.items[0].title, 'Firmware Engineer II', 'the one in Toronto first')
-  assert.strictEqual(r.items[0].url, 'https://acme.wd5.myworkdayjobs.com/External/job/Canada-Toronto/Firmware-Engineer-II_JR2')
+  const r = await lk.lookup({ kind: 'jobs', query: 'acme.wd5.myworkdayjobs.com/en-US/External firmware austin' })
+  assert.deepStrictEqual(asked, ['firmware austin', 'firmware'])
+  assert.strictEqual(r.items[0].title, 'Firmware Engineer II', 'the one in Austin first')
+  assert.strictEqual(r.items[0].url, 'https://acme.wd5.myworkdayjobs.com/External/job/US-Austin/Firmware-Engineer-II_JR2')
+  assert.ok(!r.items.some(j => /Toronto/.test(j.location)), 'a posting outside the US is not shown')
 })
 
 test('Hacker News discussions come from its public search, with entities decoded', () => {

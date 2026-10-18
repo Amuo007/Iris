@@ -424,7 +424,7 @@ function irisJobsPrompt (task, mode) {
   const ownName = own ? path.basename(own) : ''
   const lines = ['JOBS — the user keeps a career profile in Iris (Settings → Jobs). Applying for one job:',
     '1. Find postings that match' + (p.roles ? ': ' + p.roles : ' the profile') + (p.locations ? '; places: ' + p.locations : '') + (p.workplace !== 'any' ? '; ' + p.workplace + ' only' : '') + '.',
-    p.locations ? '   PLACES ARE A HARD LIMIT: apply only when the posting shows a location in ' + p.locations + ' (a city/state there, the country, or "Remote" within it). A posting elsewhere — or one with no location where the company is based abroad (check its careers page or a look-up) — is skipped: do not apply, do not log it, do not contact its people.' : '',
+    '   PLACES ARE A HARD LIMIT: apply only when the posting shows a location in ' + (p.locations || 'the United States') + ' (a city/state there, the country, or "Remote" within it). A posting elsewhere — or one with no location where the company is based abroad (check its careers page or a look-up) — is skipped: do not apply, do not log it, do not contact its people.',
     '   Company boards that need no account (boards.greenhouse.io, jobs.lever.co, jobs.ashbyhq.com) are quickest; Workday',
     '   boards (<company>.wd5.myworkdayjobs.com) usually need an account to apply but can be searched. To find',
     '   companies, search the web in the browser (navigate with words like "site:jobs.lever.co software engineer Toronto")',
