@@ -2567,7 +2567,9 @@ function startAgent (task, options) {
       noAsk: computer.jobsMode ? 'Decide as the JOBS rules say for questions the profile does not cover, or log_application needs_you with the reason and go on to the next job.' : '',
       planThinking: cfg.thinking === 'full' ? 'full' : 'medium',
       thinking: cfg.thinking, // 'auto': the loop decides per step
-      runLookups: cfg.lookups === false ? 0 : (Number(cfg.runLookups) >= 0 ? Number(cfg.runLookups) : 6)
+      // a non-stop job run finds its jobs with look-ups (text, fast): six ran out in minutes and it fell back to guessing
+      // board addresses — give it plenty (they stay slow and polite per site, and cached)
+      runLookups: cfg.lookups === false ? 0 : Math.max(Number(cfg.runLookups) >= 0 ? Number(cfg.runLookups) : 6, computer.jobsMode && unlimited ? 80 : 0)
     },
     safety: {
       maxSteps: unlimited ? 0 : cfg.maxSteps * budgetScale,
