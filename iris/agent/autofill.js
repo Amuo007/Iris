@@ -246,6 +246,9 @@ function rulesFor (f) {
     // export control (ITAR, EAR, "U.S. person"): a question about being a U.S. citizen or permanent resident, even when it
     // opens with "Are you legally authorized to work…" (real Impulse Space form) — a visa holder is not one: No
     { test: /\bitar\b|\bear\b|export (control|regulation|administration)|\bu\.?s\.? persons?\b|lawful permanent resident|green card holder|protected individual|deemed export/i, yesNoOnly: true, choose: f.visaStatus ? NO : null },
+    // "…authorized to work … WITHOUT restriction / sponsorship / limitation": a visa holder's work (F-1 CPT/OPT) is
+    // restricted — No (the user's own correction; a real run answered Yes on Inversion Space)
+    { test: /(authori[sz]ed|eligible|able|permitted|legally allowed) to work[^?]{0,80}\b(without|w\/o)\b[^?]{0,50}(restriction|limitation|sponsor|visa|condition|need)|unrestricted (right|authori[sz]ation|work)|without (any )?(restriction|limitation)s? (on|to) (your )?(right|authori[sz]ation) to work/i, yesNoOnly: true, choose: f.visaStatus ? NO : null },
     { test: /(legally )?(authori[sz]ed|eligible) to work|work authori[sz]ation|right to work/i, skip: /sponsor/i, choose: f.workAuthorized ? YES : null, yesNoOnly: true },
     { test: /sponsor/i, yesNoOnly: true, choose: sponsorChoice(f) },
     { test: /willing to relocate|open to relocat|consider relocat|able to relocate/i, yesNoOnly: true, choose: f.relocate ? YES : null, text: f.relocate ? 'Yes' : '' },

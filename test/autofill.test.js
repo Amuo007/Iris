@@ -332,6 +332,15 @@ test('a school asked as "Name of School" (Lever, real Belvedere form); a high sc
   assert.strictEqual(plan('Name of High School', 'select', opts).do, 'leave')
 })
 
+test('authorized to work WITHOUT restriction / sponsorship: No for a visa holder; plain authorized: Yes', () => {
+  const f3 = af.buildFacts(Object.assign({}, bank, { answers: bank.answers.concat([{ label: 'Work authorization', value: 'Yes - F-1 student (CPT now, OPT after graduation)' }]) }), info)
+  const p = l => af.planField({ key: 'f1', kind: 'radios', label: l, required: true, value: '', options: ['Yes', 'No'] }, f3).option
+  assert.strictEqual(p('Are you authorized to work in the United States without sponsorship?'), 'No')
+  assert.strictEqual(p('Are you legally authorized to work in the US without restriction?'), 'No')
+  assert.strictEqual(p('Do you have unrestricted work authorization in the US?'), 'No')
+  assert.strictEqual(p('Are you legally authorized to work in the United States?'), 'Yes')
+})
+
 test('field matching ignores filler words', () => {
   const fields = [{ key: 'a', kind: 'select', label: 'What is your age range?' }, { key: 'b', kind: 'select', label: 'U.S. Export Compliance: are you a U.S. person? ✱' }]
   assert.strictEqual(af.findField(fields, 'What is your location?', ['select']), null)
