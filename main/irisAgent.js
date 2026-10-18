@@ -937,6 +937,30 @@ const IRIS_CONFIRM_PEEK = `(function () {
   })
   return { text: String(document.body && document.body.innerText || '').slice(0, 6000), submit: submit }
 })()`
+/* The boxes of a form, by id or name: a new step of a multi-step form at the same address shows a new set */
+const IRIS_FORM_IDS = `(function () {
+  return [].slice.call(document.querySelectorAll('input, select, textarea')).filter(function (e) {
+    var t = String(e.type || '').toLowerCase(); if (t === 'hidden' || t === 'submit' || t === 'button') return false
+    var r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0
+  }).map(function (e) { return e.id || e.name || '' }).filter(Boolean).slice(0, 200)
+})()`
+/* A real run (Tesla, 4 steps at one address) autofilled step 1 and filled steps 2 and 3 by hand: once the form shows
+   a mostly new set of boxes after an autofill there, a note to autofill first. */
+IrisComputer.prototype.noteNewFormStep = async function (wc, url) {
+  const runs = this.autofillRuns
+  if (!this.jobsMode || !runs || !runs.ids || runs.n >= 4 || runs.url !== String(url).split('#')[0]) return
+  try {
+    const ids = await withTimeout(wc.executeJavaScript(IRIS_FORM_IDS), 1000, 'form ids')
+    if (!Array.isArray(ids)) return
+    const fresh = ids.filter(function (i) { return runs.ids.indexOf(i) < 0 })
+    const key = fresh.join('|')
+    if (fresh.length >= 3 && fresh.length >= ids.length / 2 && runs.nudged !== key) {
+      runs.nudged = key
+      this.notes = (this.notes || []).concat('This is a new step of the form (its boxes changed): your first action here is {"type":"autofill"}.')
+    }
+  } catch (e) { /* only a hint */ }
+}
+
 IrisComputer.prototype.noteConfirmation = async function (wc, url) {
   if (!this.jobsMode || !url || /linkedin\.com/i.test(url)) return
   try {
@@ -961,6 +985,7 @@ IrisComputer.prototype.screenshot = async function () {
 
   this.watch(wc)
   await this.noteConfirmation(wc, url)
+  await this.noteNewFormStep(wc, url)
   const info = irisTabInfo(this.tabId)
   const tabNote = this.tabNote
   this.tabNote = null
@@ -1406,6 +1431,8 @@ IrisComputer.prototype.act = async function (action) {
       const r = await irisAutofillRun(this, wc)
       if (!r.ok) return r
       this.autofillRuns.n++
+      // the boxes it saw: a later step of the form shows others (see noteNewFormStep)
+      try { this.autofillRuns.ids = await withTimeout(wc.executeJavaScript(IRIS_FORM_IDS), 1000, 'form ids') } catch (e) {}
       this.notes = (this.notes || []).concat(r.report)
       return { ok: true, pageChanged: true }
     }
