@@ -221,7 +221,7 @@ function rulesFor (f) {
     // marketing texts: no — the site still writes by email and phone calls
     { test: /\bsms\b|text messag|whatsapp/i, choose: [/^no\b/i, /do not consent|don'?t consent|opt out/i], avoid: /^yes\b|i consent to/i },
     // ---- this company
-    { test: /(have you|did you)( ever)? (been )?(previously )?(worked|employed|been employed|been engaged)|(current|former) .*(employee|intern|contractor)|do you currently work (for|at)|ever worked (for|at)/i,
+    { test: /(have you|did you)( ever)? (been )?(previously )?(worked|employed|been employed|been engaged)|were you (ever )?(previously )?(employed|working) (by|at|for|with)|previously employed (by|at|with)|(current|former) [^?.]{0,40}(employee|intern|contractor)|do you currently work (for|at)|ever worked (for|at)/i,
       choose: [/never/i, /^no\b/i, /have not|haven'?t/i, /not (worked|been)/i], avoid: /yes/i, text: 'No' },
     // a privacy notice to acknowledge (not an agreement that binds the user: those the agent reads)
     { test: /privacy (policy|notice|acknowledg)|personal (information|data) (policy|notice)|candidate privacy|applicant privacy/i, skip: /arbitration|non-?compete|agreement to|waive/i,
@@ -238,7 +238,7 @@ function rulesFor (f) {
     { test: /hispanic|latin[oax]/i, choose: f.race ? (/hispanic|latin/i.test(f.race) ? [/^yes\b/i] : [/^no\b/i, /not hispanic/i]) : null },
     { test: /\brace\b|ethnicity|racial/i, choose: raceAsianIndian ? [/^south asian\b/i, /\bsouth asian\b/i, /^asian\b(?!.*(east|pacific))/i, /^asian$/i] : (/asian/i.test(f.race) ? [/^asian$/i, /^asian\b/i] : null), avoid: /east asian|pacific|two or more|^hispanic/i },
     { test: /^gender\b|gender identity|^sex\b|identify your sex|^what is your gender/i, choose: f.gender ? (genderMale ? [/^male$/i, /^man$/i, /^cisgender man$/i, /^male\b/i, /^man\b/i] : [/^female$/i, /^woman$/i, /^cisgender woman$/i]) : null, avoid: genderMale ? /female|woman|trans/i : /trans/i },
-    { test: /veteran|military/i, choose: f.veteran ? (notVet ? [/i am not a protected veteran/i, /not a (protected )?veteran/i, /never served/i, /^no\b/i, /\bi am not\b/i] : null) : null, avoid: notVet ? /^yes|i identify as (a )?(protected|non-protected|one or more)|active duty|reserve|national guard/i : null },
+    { test: /veteran|military (status|spouse|member|background|experience)|member of the (u\.?s\.? )?(military|armed forces)|(served|serving|serve) (in|with) the (u\.?s\.? )?(military|armed forces|uniformed services)|armed forces|uniformed services|^military( service)?\??$/i, choose: f.veteran ? (notVet ? [/i am not a protected veteran/i, /not a (protected )?veteran/i, /never served/i, /^no\b/i, /\bi am not\b/i] : null) : null, avoid: notVet ? /^yes|i identify as (a )?(protected|non-protected|one or more)|active duty|reserve|national guard/i : null },
     { test: /disabilit/i, choose: f.disability ? (noDis ? [/^no,? i (don'?t|do not) have a disability/i, /^no\b/i, /do not have a disability|don'?t have a disability/i] : null) : null, avoid: noDis ? /^yes/i : null }
   ]
 }

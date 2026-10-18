@@ -98,6 +98,10 @@ test('dropdowns with known options pick by meaning', () => {
   assert.strictEqual(plan('Race', 'select', ['Hispanic or Latino', 'Asian (Not Hispanic or Latino)', 'Two or More Races']).option, 'Asian (Not Hispanic or Latino)')
   assert.strictEqual(plan('What is your military status?', 'select', ['I am on active duty', 'I have never served in the military', 'I identify as a protected veteran']).option, 'I have never served in the military')
   assert.strictEqual(plan('Veteran Status', 'select', ['I am a veteran', 'I am not a protected veteran', 'I identify as one or more of the classifications of protected veteran']).option, 'I am not a protected veteran')
+  assert.strictEqual(plan('Have you served in the U.S. Armed Forces?', 'select', ['Yes', 'No']).option, 'No')
+  // "military service" in a list inside some other question is not the veteran question
+  assert.strictEqual(plan('Did you provide completed information for all previous employers, during at least the last 84 months, including self-employment, military service, summer, and part-time jobs.', 'radios', ['YES', 'NO']).do, 'leave')
+  assert.strictEqual(plan('Were you ever employed by TMEIC (including previous company names), Toshiba, Mitsubishi, or affiliated business?', 'select', ['Yes', 'No']).option, 'No')
   assert.strictEqual(plan('Disability Status', 'select', ['Yes, I have a disability', "No, I don't have a disability", "I don't wish to answer"]).option, "No, I don't have a disability")
   assert.strictEqual(plan('Are you Hispanic/Latino?', 'select', ['Yes', 'No', 'Decline']).option, 'No')
   assert.strictEqual(plan('How did you hear about this job?', 'select', ['LinkedIn', 'Employee Referral', 'Company Website', 'Other']).option, 'Company Website')
