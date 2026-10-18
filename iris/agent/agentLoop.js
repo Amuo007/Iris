@@ -625,15 +625,15 @@ function createAgent (opts) {
         stuckWarned = 0
       }
 
-      // one page (an application) for a long time: rethink at 30 minutes, leave it at 60
+      // one page (an application) for a long time: rethink at 10 minutes, leave it at 20 (most take 2–7)
       const onPage = pageSince ? now() - pageSince : 0
-      if (onPage > 60 * 60000 && pageTimeWarned < 2) {
+      if (onPage > 20 * 60000 && pageTimeWarned < 2) {
         pageTimeWarned = 2
-        history.addSystemNote('TIME: you have been on this page for over an hour. Leave it now: if it is a job application, log_application ' +
+        history.addSystemNote('TIME: you have been on this page for over 20 minutes. Leave it now: if it is a job application, log_application ' +
           '{"status":"needs_you","note":"<what blocked it>"}; then go on with the rest of the task.')
-      } else if (onPage > 30 * 60000 && pageTimeWarned < 1) {
+      } else if (onPage > 10 * 60000 && pageTimeWarned < 1) {
         pageTimeWarned = 1
-        history.addSystemNote(prompts.rethinkNote('You have been on this page for over 30 minutes.'))
+        history.addSystemNote(prompts.rethinkNote('You have been on this page for over 10 minutes.'))
       }
 
       if (stopRequested) return finish('stopped', stopRequested)

@@ -1387,7 +1387,15 @@ IrisComputer.prototype.act = async function (action) {
     case 'fill': {
       // a field found by the label the agent read, filled or picked by code and read back (a dropdown, a date box)
       if (/(^|\.)linkedin\.com$/i.test(irisSiteOf(wc.getURL()) || '')) return { ok: false, error: 'on LinkedIn, click and type yourself' }
-      const r = action.type === 'choose' ? await irisChooseField(this, wc, action.field, action.option) : await irisFillField(this, wc, action.field, action.text)
+      // its clicks and keys are Iris's own, not the user's (else Iris pauses for a "human" touch)
+      let r
+      this.injecting = true
+      try {
+        r = action.type === 'choose' ? await irisChooseField(this, wc, action.field, action.option) : await irisFillField(this, wc, action.field, action.text)
+      } finally {
+        this.injecting = false
+        this.injectingUntil = Date.now() + 400
+      }
       if (!r.ok) return r
       this.notes = (this.notes || []).concat(r.note)
       return { ok: true }
