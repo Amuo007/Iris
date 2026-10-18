@@ -1432,7 +1432,10 @@ IrisComputer.prototype.act = async function (action) {
     case 'log_application': {
       // "applied" only for an application whose confirmation page was seen (a real run: Skydio logged as submitted
       // while its form still sat there unsent). Asked again for the same job, it is taken — noted as unconfirmed.
-      if (action.status === 'applied' && this.jobsMode) {
+      // (a job already logged "applied" — logged again to add its LinkedIn names — is no new claim: no check. A real run
+      // was told to go back and submit AgZen again after a restart had cleared the confirmations seen.)
+      const loggedBefore = action.status === 'applied' && this.jobsMode ? irisApplicationFind({ url: action.url || '', company: action.company, title: action.title }) : null
+      if (action.status === 'applied' && this.jobsMode && !(loggedBefore && loggedBefore.status === 'applied')) {
         const squash = function (v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '') }
         const want = irisJobKey(action.url || '').replace(/\/(thanks|thank-you|confirmation|submitted|success)$/, '')
         const co = squash(action.company).slice(0, 6)
