@@ -458,6 +458,8 @@ function irisJobsPrompt (task, mode) {
     '   Work authorization, visa, sponsorship, citizenship, criminal record or other legal questions: read every option',
     '   first and pick the one that matches the answers below word for word in meaning — never "the first option" — and',
     '   write the option\'s own words in your thought (e.g. picked "Yes, I am authorized but will need sponsorship").',
+    '   A question that says which statuses count (e.g. "require sponsorship? (F-1 CPT/OPT, J-1, H1-B …)") is answered by',
+    '   its own words: a status it lists is a Yes, whatever the saved answer says in general.',
     '   City / location boxes that suggest places: type only the city name (e.g. "Houston", no Enter), and in the list',
     '   that appears CLICK the suggestion with the right state and country (e.g. "Houston, Texas, United States") — the',
     '   first one is often another place (North Houston, Houston in Scotland). No list? Click the box and type it again.',
