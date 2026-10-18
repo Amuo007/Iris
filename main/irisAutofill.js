@@ -366,89 +366,108 @@ async function irisAutofillRun (computer, wc) {
   const record = []
   computer.injecting = true
   try {
-    for (const field of fields) {
-      if (Date.now() - started > 120000) { left.push({ field: field, why: 'autofill ran out of time' }); continue }
-      const plan = irisAutofillLib.planField(field, facts, allowed.mode)
-      let result = null
-      try {
-        if (plan.do === 'text') {
-          await irisAfEval(wc, irisAutofillLib.pageSetText(field.key, plan.value))
-          await sleep(60)
-          let shown = await irisAfEval(wc, irisAutofillLib.pageValue(field.key))
-          if (irisAfNorm(shown) !== irisAfNorm(plan.value)) {
-            // the page did not take it that way (a box that rewrites itself): click in and type it with real keys
-            const at = await irisAfEval(wc, irisAutofillLib.pageRect(field.key, ''))
-            if (at) {
-              await irisAfClick(computer, wc, at.x, at.y)
-              await sleep(120)
-              wc.selectAll()
-              await irisAfType(computer, wc, plan.value)
-              await sleep(150)
-              shown = await irisAfEval(wc, irisAutofillLib.pageValue(field.key))
+    // one pass over {list}: the rules, then the rest in one model call
+    const fillPass = async function (list) {
+      const leftFrom = left.length
+      const recFrom = record.length
+      for (const field of list) {
+        if (Date.now() - started > 120000) { left.push({ field: field, why: 'autofill ran out of time' }); continue }
+        const plan = irisAutofillLib.planField(field, facts, allowed.mode)
+        let result = null
+        try {
+          if (plan.do === 'text') {
+            await irisAfEval(wc, irisAutofillLib.pageSetText(field.key, plan.value))
+            await sleep(60)
+            let shown = await irisAfEval(wc, irisAutofillLib.pageValue(field.key))
+            if (irisAfNorm(shown) !== irisAfNorm(plan.value)) {
+              // the page did not take it that way (a box that rewrites itself): click in and type it with real keys
+              const at = await irisAfEval(wc, irisAutofillLib.pageRect(field.key, ''))
+              if (at) {
+                await irisAfClick(computer, wc, at.x, at.y)
+                await sleep(120)
+                wc.selectAll()
+                await irisAfType(computer, wc, plan.value)
+                await sleep(150)
+                shown = await irisAfEval(wc, irisAutofillLib.pageValue(field.key))
+              }
+            }
+            // a phone box may reformat the digits: same digits count as the same value
+            const digits = function (v) { return String(v || '').replace(/\D/g, '') }
+            const same = irisAfNorm(shown) === irisAfNorm(plan.value) || (/^[\d\s()+.-]+$/.test(plan.value) && digits(shown) && digits(shown).slice(-10) === digits(plan.value).slice(-10))
+            result = same ? { set: plan.value } : { left: 'typed it but the box shows "' + (shown || 'nothing') + '"' }
+          } else if (plan.do === 'choose' && field.kind === 'combobox') {
+            result = await irisAfChoose(computer, wc, field, plan, facts)
+          } else if (plan.do === 'choose' && field.kind === 'select') {
+            const ok = await irisAfEval(wc, irisAutofillLib.pageSetSelect(field.key, plan.option))
+            result = ok ? { set: plan.option } : { left: 'could not pick "' + plan.option + '"' }
+          } else if (plan.do === 'choose' && (field.kind === 'checkboxes' || field.kind === 'radios')) {
+            const i = (field.options || []).indexOf(plan.option)
+            result = i < 0 ? { left: 'its option is gone' } : await irisAfTick(computer, wc, field, i, plan.option)
+          } else if (plan.do === 'upload') {
+            result = await irisAfUpload(computer, wc, field)
+          } else {
+            result = { left: plan.why, quiet: true }
+          }
+        } catch (e) {
+          result = { left: 'failed (' + e.message + ')' }
+        }
+        if (result.set !== undefined && plan.replace) result.set = result.set + ' (was "' + String(plan.replace).slice(0, 40) + '")'
+        if (result.set !== undefined) set.push({ field: field, value: result.set })
+        // a box already filled is not "to do", required or not (a second run after a blocked Submit lists only the empty ones)
+        else left.push({ field: field, why: result.left, quiet: (result.quiet && !field.required) || plan.why === 'already filled' })
+        // for the hybrid dataset: what the tool saw and decided, field by field
+        record.push({ key: field.key, id: field.id, kind: field.kind, label: String(field.label || '').slice(0, 400), required: !!field.required,
+          before: field.value || '', options: (result.seen || field.options || null), plan: plan.do, planned: plan.value || plan.option || plan.search || null,
+          why: plan.why || null, set: result.set !== undefined ? result.set : null, left: result.set === undefined ? (result.left || null) : null,
+          section: field.section || undefined, shape: field.shape || undefined })
+      }
+      // the rest — custom questions, written answers — in one text-only model call, filled by code
+      const rest = left.slice(leftFrom).filter(function (l) { return !l.quiet && l.field.label && l.field.kind !== 'file' && !/already filled|section:|optional box|resume import|a document other/i.test(l.why || '') })
+      if (rest.length && Date.now() - started < 120000) {
+        let asked = null
+        try { asked = await irisAfAnswerRest(computer, wc, rest.map(function (l) { return l.field }), wc.getTitle()) } catch (e) { DBUG('autofill: model answers failed: ' + e.message) }
+        const answers = (asked && asked.answers) || {}
+        for (const l of rest) {
+          const a = answers[l.field.key]
+          if (a === undefined || a === null || String(a).trim() === '') continue
+          const val = String(a).trim()
+          if (val.length > 150 && (l.field.kind === 'text' || l.field.kind === 'textarea')) {
+            const chk = await irisVerifyAnswer(val)
+            if (!chk.ok) {
+              const rec0 = record.slice(recFrom).find(function (x) { return x.key === l.field.key })
+              if (rec0) { rec0.plan = 'llm'; rec0.planned = val; rec0.llmLeft = 'not supported by the profile: ' + chk.unsupported.join('; ') }
+              continue
             }
           }
-          // a phone box may reformat the digits: same digits count as the same value
-          const digits = function (v) { return String(v || '').replace(/\D/g, '') }
-          const same = irisAfNorm(shown) === irisAfNorm(plan.value) || (/^[\d\s()+.-]+$/.test(plan.value) && digits(shown) && digits(shown).slice(-10) === digits(plan.value).slice(-10))
-          result = same ? { set: plan.value } : { left: 'typed it but the box shows "' + (shown || 'nothing') + '"' }
-        } else if (plan.do === 'choose' && field.kind === 'combobox') {
-          result = await irisAfChoose(computer, wc, field, plan, facts)
-        } else if (plan.do === 'choose' && field.kind === 'select') {
-          const ok = await irisAfEval(wc, irisAutofillLib.pageSetSelect(field.key, plan.option))
-          result = ok ? { set: plan.option } : { left: 'could not pick "' + plan.option + '"' }
-        } else if (plan.do === 'choose' && (field.kind === 'checkboxes' || field.kind === 'radios')) {
-          const i = (field.options || []).indexOf(plan.option)
-          result = i < 0 ? { left: 'its option is gone' } : await irisAfTick(computer, wc, field, i, plan.option)
-        } else if (plan.do === 'upload') {
-          result = await irisAfUpload(computer, wc, field)
-        } else {
-          result = { left: plan.why, quiet: true }
+          let r = {}
+          try {
+            if (l.field.kind === 'text' || l.field.kind === 'textarea') r = await irisAfFillOne(computer, wc, l.field, val)
+            else if (l.field.kind === 'checkboxes' && /\s\|\s/.test(val)) { for (const v of val.split(/\s\|\s/)) r = await irisAfChooseOne(computer, wc, l.field, v) }
+            else r = await irisAfChooseOne(computer, wc, l.field, val)
+          } catch (e) { r = { left: 'failed (' + e.message + ')' } }
+          const rec = record.slice(recFrom).find(function (x) { return x.key === l.field.key })
+          if (r.set !== undefined) {
+            set.push({ field: l.field, value: r.set + ' (AI)' })
+            left.splice(left.indexOf(l), 1)
+            if (rec) { rec.plan = 'llm'; rec.planned = val; rec.set = r.set; rec.left = null }
+          } else if (rec) { rec.plan = 'llm'; rec.planned = val; rec.llmLeft = r.left || r.error || 'did not take' }
         }
-      } catch (e) {
-        result = { left: 'failed (' + e.message + ')' }
+        if (asked && asked.skipped) DBUG('autofill: model answers skipped: ' + asked.skipped)
       }
-      if (result.set !== undefined && plan.replace) result.set = result.set + ' (was "' + String(plan.replace).slice(0, 40) + '")'
-      if (result.set !== undefined) set.push({ field: field, value: result.set })
-      // a box already filled is not "to do", required or not (a second run after a blocked Submit lists only the empty ones)
-      else left.push({ field: field, why: result.left, quiet: (result.quiet && !field.required) || plan.why === 'already filled' })
-      // for the hybrid dataset: what the tool saw and decided, field by field
-      record.push({ key: field.key, id: field.id, kind: field.kind, label: String(field.label || '').slice(0, 400), required: !!field.required,
-        before: field.value || '', options: (result.seen || field.options || null), plan: plan.do, planned: plan.value || plan.option || plan.search || null,
-        why: plan.why || null, set: result.set !== undefined ? result.set : null, left: result.set === undefined ? (result.left || null) : null,
-        section: field.section || undefined, shape: field.shape || undefined })
     }
-    // the rest — custom questions, written answers — in one text-only model call, filled by code
-    const rest = left.filter(function (l) { return !l.quiet && l.field.label && l.field.kind !== 'file' && !/already filled|section:|optional box|resume import|a document other/i.test(l.why || '') })
-    if (rest.length && Date.now() - started < 120000) {
-      let asked = null
-      try { asked = await irisAfAnswerRest(computer, wc, rest.map(function (l) { return l.field }), wc.getTitle()) } catch (e) { DBUG('autofill: model answers failed: ' + e.message) }
-      const answers = (asked && asked.answers) || {}
-      for (const l of rest) {
-        const a = answers[l.field.key]
-        if (a === undefined || a === null || String(a).trim() === '') continue
-        const val = String(a).trim()
-        if (val.length > 150 && (l.field.kind === 'text' || l.field.kind === 'textarea')) {
-          const chk = await irisVerifyAnswer(val)
-          if (!chk.ok) {
-            const rec0 = record.find(function (x) { return x.key === l.field.key })
-            if (rec0) { rec0.plan = 'llm'; rec0.planned = val; rec0.llmLeft = 'not supported by the profile: ' + chk.unsupported.join('; ') }
-            continue
-          }
-        }
-        let r = {}
-        try {
-          if (l.field.kind === 'text' || l.field.kind === 'textarea') r = await irisAfFillOne(computer, wc, l.field, val)
-          else if (l.field.kind === 'checkboxes' && /\s\|\s/.test(val)) { for (const v of val.split(/\s\|\s/)) r = await irisAfChooseOne(computer, wc, l.field, v) }
-          else r = await irisAfChooseOne(computer, wc, l.field, val)
-        } catch (e) { r = { left: 'failed (' + e.message + ')' } }
-        const rec = record.find(function (x) { return x.key === l.field.key })
-        if (r.set !== undefined) {
-          set.push({ field: l.field, value: r.set + ' (AI)' })
-          left.splice(left.indexOf(l), 1)
-          if (rec) { rec.plan = 'llm'; rec.planned = val; rec.set = r.set; rec.left = null }
-        } else if (rec) { rec.plan = 'llm'; rec.planned = val; rec.llmLeft = r.left || r.error || 'did not take' }
+    await fillPass(fields)
+    // questions that appear only after an answer (Ashby: School and Graduation Date once Degree is picked; a real
+    // Quora form left them to the model, 8 steps by hand): look again and do the new ones
+    if (Date.now() - started < 90000) {
+      const again = await irisAfEval(wc, irisAutofillLib.PAGE_COLLECT)
+      const sig = function (f) { return f.kind + '|' + String(f.label || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() }
+      const before = new Set(fields.map(sig))
+      const fresh = Array.isArray(again) ? again.filter(function (f) { return f.label && !before.has(sig(f)) }) : []
+      if (fresh.length) {
+        DBUG('autofill: ' + fresh.length + ' new fields after the first pass')
+        fields.push.apply(fields, fresh)
+        await fillPass(fresh)
       }
-      if (asked && asked.skipped) DBUG('autofill: model answers skipped: ' + asked.skipped)
     }
   } finally {
     computer.injecting = false
