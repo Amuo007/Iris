@@ -202,7 +202,7 @@ function rulesFor (f) {
     // ---- contact
     { test: /^(legal |preferred )?first name|^given name/i, text: f.firstName, sure: true, self: true },
     { test: /^(legal )?last name|^surname|^family name/i, text: f.lastName, sure: true, self: true },
-    { test: /^(full |legal |your )?(full )?(legal )?name\b(?!.*(company|school|employer|reference|manager|recruiter|referr))|full legal name/i, text: f.fullName, self: true },
+    { test: /^(full |legal |your )?(full )?(legal )?name\b(?!.*(company|school|employer|reference|manager|recruiter|referr))|full legal name/i, skip: /pronounc|pronoun|preferred|nick/i, text: f.fullName, self: true },
     { test: /^(your )?e-?mail( address)?\b|^(confirm|re-?enter|repeat|verify|retype) (your )?e-?mail/i, skip: /referr|manager|reference/i, text: f.email, short: true, sure: true, self: true },
     { test: /^(mobile |cell |primary )?phone( number)?\b|^mobile( number)?\b/i, skip: /extension|\bext\b|device|type|code|country/i, text: f.phone, sure: true, self: true },
     { test: /^(your )?linkedin\b|linkedin (profile|url)/i, text: f.linkedin, short: true },

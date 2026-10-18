@@ -310,3 +310,8 @@ test('the agent names a field by the label it reads; Iris finds that field', () 
   assert.strictEqual(af.findField(fields, 'Favourite colour', ['combobox', 'select']), null)
 })
 
+
+test('a name pronunciation box is not the full name', () => {
+  assert.strictEqual(plan('Name Pronunciation | How do you pronounce your name?', 'text').do, 'leave')
+  assert.deepStrictEqual(plan('Full name ✱', 'text'), { do: 'text', value: 'Amrinder Singh' })
+})

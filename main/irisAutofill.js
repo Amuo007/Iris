@@ -252,7 +252,11 @@ async function irisAfAnswerRest (computer, wc, fields, title) {
   if (!labelled.length) return { answers: {} }
   const bank = irisCareerLoad()
   const cfg = irisSettings()
-  const list = labelled.slice(0, 40).map(function (f) { return { key: f.key, kind: f.kind, label: String(f.label).slice(0, 300), required: !!f.required, options: (f.options || []).slice(0, 40) } })
+  // a long list (hundreds of schools): no options sent — the model names its answer and code matches it in the full list
+  const list = labelled.slice(0, 40).map(function (f) {
+    const o = f.options || []
+    return Object.assign({ key: f.key, kind: f.kind, label: String(f.label).slice(0, 300), required: !!f.required }, o.length > 40 ? { options: 'a long list (' + o.length + ' options): answer with the text you want, it is matched' } : { options: o })
+  })
   const messages = [
     { role: 'system', content: 'You fill in a job application form for the user, truthfully, from their profile and saved answers below. ' +
       'For each field you can answer, give the answer; leave out any field you cannot answer from these facts (an optional one), and any ' +
