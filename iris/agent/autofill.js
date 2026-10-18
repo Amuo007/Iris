@@ -198,8 +198,8 @@ function rulesFor (f) {
     { test: /^start date (month|year)|^start (month|year)/i, leave: 'not in the profile' },
     { test: /\bgpa\b|grade point/i, text: f.gpa },
     // ---- work
-    { test: /current (company|employer)|most recent (company|employer)|^(company|employer)( name)?$/i, text: f.company },
-    { test: /current (job )?title|most recent (job )?title|^(job )?title$/i, text: f.title },
+    { test: /(current|most recent|present)\b[^?]{0,25}\b(company|employer)|^(company|employer)( name)?$/i, skip: /previous|former|ever|before/i, text: f.company },
+    { test: /(current|most recent|present)\b[^?]{0,25}\b(job )?(title|position|role)\b|^(job )?title$/i, skip: /previous|former|desired|applying/i, text: f.title },
     // ---- authorization and sponsorship (plain yes/no boxes only; long option lists go to the agent)
     { test: /(legally )?(authori[sz]ed|eligible) to work|work authori[sz]ation|right to work/i, skip: /sponsor/i, choose: f.workAuthorized ? YES : null, yesNoOnly: true },
     { test: /sponsor/i, yesNoOnly: true, choose: sponsorChoice(f) },
@@ -225,7 +225,8 @@ function rulesFor (f) {
     { test: /privacy (policy|notice|acknowledg)|personal (information|data) (policy|notice)|candidate privacy|applicant privacy/i, skip: /arbitration|non-?compete|agreement to|waive/i,
       choose: [/^yes\b/i, /acknowledge/i, /^i (have read|agree|accept|understand)/i, /agree/i], avoid: /^no\b|do not|don'?t/i },
     { test: /how did you (hear|learn|find)|where did you (hear|find|learn)|source of (your )?application|referral source/i,
-      choose: [/company'?s? (web)?site|careers? (page|site|website)|company careers/i, /job board/i, /^other$/i], avoid: /linkedin|referr|employee|recruiter|event|agency/i },
+      // the postings come from a job-board list (the user's n8n digest of new-grad boards): "job board" is the truth
+      choose: [/job board|online job|job (site|posting site)|internet job/i, /company'?s? (web)?site|careers? (page|site|website)|company careers/i, /^other$/i], avoid: /linkedin|referr|employee|recruiter|event|agency/i, text: 'Job board' },
     // ---- voluntary self-identification (saved answers only)
     // a saved answer is said plainly (the user: no "I don't wish to answer" when there is a real answer); the
     // decline option only for a required question with nothing saved
