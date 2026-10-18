@@ -251,3 +251,11 @@ test('a City box that searches as you type looks up the home city', () => {
   assert.strictEqual(p.place, true)
   assert.deepStrictEqual(plan('City', 'text'), { do: 'text', value: 'Houston' })
 })
+
+test('a lone required privacy box is ticked; optional and talent-community boxes are not', () => {
+  const t1 = 'I have read and agree to the privacy notice of North Star Staffing Solutions.'
+  assert.deepStrictEqual(af.planField({ label: t1, kind: 'checkboxes', options: [t1], required: true }, facts).option, t1)
+  assert.strictEqual(af.planField({ label: t1, kind: 'checkboxes', options: [t1], required: false }, facts).do, 'leave')
+  const t2 = 'You declare that you have read and agree to the privacy notice of Anton Paar and agree to be part of communities for future career opportunities.'
+  assert.strictEqual(af.planField({ label: t2, kind: 'checkboxes', options: [t2], required: true }, facts).do, 'leave')
+})

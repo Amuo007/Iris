@@ -228,7 +228,7 @@ function rulesFor (f) {
     { test: /(have you|did you)( ever)? (been )?(previously )?(worked|employed|been employed|been engaged)|were you (ever )?(previously )?(employed|working) (by|at|for|with)|previously employed (by|at|with)|(current|former) [^?.]{0,40}(employee|intern|contractor)|do you currently work (for|at)|ever worked (for|at)/i,
       choose: [/never/i, /^no\b/i, /have not|haven'?t/i, /not (worked|been)/i], avoid: /yes/i, text: 'No' },
     // a privacy notice to acknowledge (not an agreement that binds the user: those the agent reads)
-    { test: /privacy (policy|notice|acknowledg)|personal (information|data) (policy|notice)|candidate privacy|applicant privacy/i, skip: /arbitration|non-?compete|agreement to|waive/i,
+    { test: /privacy (policy|notice|acknowledg)|personal (information|data) (policy|notice)|candidate privacy|applicant privacy/i, skip: /arbitration|non-?compete|agreement to|waive|communit|future (job|career|role|opportunit)|talent (pool|network|communit)|marketing|newsletter|job alert/i,
       choose: [/^yes\b/i, /acknowledge/i, /^i (have read|agree|accept|understand)/i, /agree/i], avoid: /^no\b|do not|don'?t/i },
     { test: /how did you (hear|learn|find)|where did you (hear|find|learn)|source of (your )?application|referral source/i,
       // the postings come from a job-board list (the user's n8n digest of new-grad boards): "job board" is the truth
@@ -303,6 +303,8 @@ function planField (field, facts, mode) {
     return { do: 'choose', pick: rule.pick, patterns: [] }
   }
   if (isChoice && rule.pick === null && rule.test.test(label) && rulesFor.length) return { do: 'leave', why: 'no saved answer' }
+  // a lone optional box (a consent, an opt-in): never ticked for the user
+  if (field.kind === 'checkboxes' && (field.options || []).length === 1 && !field.required) return { do: 'leave', why: 'an optional box: left unticked' }
   if (isChoice) {
     if (!choose) {
       // a box that searches as you type (School, a city): the text is what to search for
@@ -368,7 +370,10 @@ const AF_DEEP = "const __deep = (sel, root) => { const out = []; const walk = r 
   // a pick-from-list box drawn by the page (an input with aria-autocomplete=list inside a "select" widget): what it
   // shows as picked sits beside the input (react-select's single-value), and its own text is only the search typed
   " const __selectLike = el => { if (!/^(list|both)$/i.test(el.getAttribute('aria-autocomplete') || '')) return false; let a = el; for (let k = 0; k < 4 && a; k++) { a = a.parentElement; if (!a) break; if (typeof a.className === 'string' && /select/i.test(a.className)) return true; } return false; };" +
-  " const __sv = el => { let a = el; for (let k = 0; k < 4 && a; k++) { a = a.parentElement; if (!a) break; if ([...a.querySelectorAll('input, select, textarea')].some(x => x !== el && x.type !== 'hidden')) break; const sv = a.querySelectorAll('[class*=\"single-value\" i], [class*=\"singlevalue\" i], [class*=\"multi-value__label\" i]'); if (sv.length) return [...sv].map(x => String(x.innerText || '').replace(/\\s+/g, ' ').trim()).filter(t => t && !/^(select|choose|search|please select)\\b|^-+$/i.test(t)).join(', '); } return null; };"
+  " const __sv = el => { let a = el; for (let k = 0; k < 4 && a; k++) { a = a.parentElement; if (!a) break; if ([...a.querySelectorAll('input, select, textarea')].some(x => x !== el && x.type !== 'hidden')) break; const sv = a.querySelectorAll('[class*=\"single-value\" i], [class*=\"singlevalue\" i], [class*=\"multi-value__label\" i]'); if (sv.length) return [...sv].map(x => String(x.innerText || '').replace(/\\s+/g, ' ').trim()).filter(t => t && !/^(select|choose|search|please select)\\b|^-+$/i.test(t)).join(', '); } return null; };" +
+  // the options a dropdown's open list shows: in its own listbox (aria-controls / aria-owns, looked up in the
+  // dropdown's own shadow root too), else any drawn on the page, shadow roots included
+  " const __opts = host => { const id = host.getAttribute('aria-controls') || host.getAttribute('aria-owns'); const lb = id && __byId(host, id); const all = lb ? [...lb.querySelectorAll('[role=option]')] : __deep('[role=option]'); return all.filter(o => { const r = o.getBoundingClientRect(); return r.width > 0 && r.height > 0; }); };"
 
 
 /*
@@ -420,12 +425,17 @@ const PAGE_COLLECT = `(() => {
       const legend = grp.querySelector('legend');
       const by = grp.getAttribute('aria-labelledby');
       const byText = by ? clean(by.split(' ').map(i => __byId(grp, i)).filter(Boolean).map(n => n.innerText).join(' ')) : '';
-      const optText = b => { const l = __labelFor(b) || b.closest('label'); if (l && clean(l.innerText)) return clean(l.innerText); const bl = b.getAttribute('aria-labelledby'); const bt = bl ? clean(bl.split(' ').map(i => __byId(b, i)).filter(Boolean).map(x => x.innerText).join(' ')) : ''; return bt || clean(b.getAttribute('aria-label') || b.value); };
+      // a lone box with no label of its own (a consent box drawn in a shadow root): the text right around it, up
+      // through shadow hosts
+      const nearText = x => { let a = x; for (let k = 0; k < 5 && a; k++) { a = a.parentElement || (a.getRootNode && a.getRootNode().host) || null; const tx = a ? clean(String(a.innerText || '').replace(/\\*/g, ' ')) : ''; if (tx.length >= 3) return tx.length <= 300 ? tx : ''; } return ''; };
+      const lone = t === 'checkbox' && boxes.length === 1;
+      const optText = b => { const l = __labelFor(b) || b.closest('label'); if (l && clean(String(l.innerText).replace(/\\*/g, ' '))) return clean(l.innerText); const bl = b.getAttribute('aria-labelledby'); const bt = bl ? clean(bl.split(' ').map(i => __byId(b, i)).filter(Boolean).map(x => x.innerText).join(' ')) : ''; return bt || clean(b.getAttribute('aria-label') || '') || (lone ? nearText(b) : '') || clean(b.value); };
       const opts = boxes.map(optText);
       // the question: the legend, the group's own label, else the group's first line of text that is not an option
       const firstLine = clean(String(grp.innerText || '').split('\\n').map(x => x.trim()).find(x => x && !opts.some(o => o && (x === o || x.indexOf(o) === 0))) || '');
-      const gl = legend ? clean(legend.innerText) : (byText || (same.length > 1 ? firstLine : '') || labelOf(el));
-      out.push({ key: id, id: grp.id || el.name, kind: t === 'checkbox' ? 'checkboxes' : 'radios', label: gl, required: grp.getAttribute('aria-required') === 'true' || boxes.some(b => b.required) || /\\*/.test(gl),
+      const gl0 = legend ? clean(legend.innerText) : (byText || (same.length > 1 ? firstLine : '') || labelOf(el));
+      const gl = clean(gl0.replace(/\\*/g, '')).length >= 2 ? gl0 : (lone ? opts[0] : gl0);
+      out.push({ key: id, id: grp.id || el.name, kind: t === 'checkbox' ? 'checkboxes' : 'radios', label: gl, required: grp.getAttribute('aria-required') === 'true' || boxes.some(b => b.required) || /\\*/.test(gl0),
         name: el.name || '', options: opts, value: boxes.filter(__on).map(optText).join(', '), section: sectionOf(grp) });
       return;
     }
@@ -487,8 +497,7 @@ function pageOptions (key) {
   return `(() => {
     ${AF_DEEP}
     const host = __one('[data-iris-af="${key}"]'); if (!host) return null;
-    const lb = host.getAttribute('aria-controls') && document.getElementById(host.getAttribute('aria-controls'));
-    const opts = [...(lb || document).querySelectorAll('[role="option"]')].filter(o => { const r = o.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+    const opts = __opts(host);
     return opts.map((o, i) => { const r = o.getBoundingClientRect(); return { i, text: String(o.innerText || '').replace(/\\s+/g, ' ').trim(), x: Math.round(r.left + Math.min(r.width / 2, 120)), y: Math.round(r.top + r.height / 2), h: Math.round(r.height), inView: r.top >= 0 && r.bottom <= innerHeight }; });
   })()`
 }
@@ -498,8 +507,7 @@ function pageOptionRect (key, index) {
   return `(() => {
     ${AF_DEEP}
     const host = __one('[data-iris-af="${key}"]'); if (!host) return null;
-    const lb = host.getAttribute('aria-controls') && document.getElementById(host.getAttribute('aria-controls'));
-    const o = [...(lb || document).querySelectorAll('[role="option"]')].filter(o => { const r = o.getBoundingClientRect(); return r.width > 0 && r.height > 0; })[${Number(index) || 0}]; if (!o) return null;
+    const o = __opts(host)[${Number(index) || 0}]; if (!o) return null;
     o.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     const r = o.getBoundingClientRect();
     return { x: Math.round(r.left + Math.min(r.width / 2, 120)), y: Math.round(r.top + r.height / 2) };
