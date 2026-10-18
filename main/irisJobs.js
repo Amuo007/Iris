@@ -340,8 +340,13 @@ function irisApplicationsSave (items) {
 function irisJobKey (url) {
   try {
     const u = new URL(url)
-    ;['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'gh_src', 'source', 'ref', 'lever-origin', 'lever-source'].forEach(function (k) { u.searchParams.delete(k) })
-    return (u.hostname.replace(/^www\./, '') + u.pathname.replace(/\/(apply|application)\/?$/, '').replace(/\/+$/, '') + (u.search && u.search !== '?' ? u.search : '')).toLowerCase()
+    // only the parameters that name a job stay ("?gh_jid=…", Greenhouse's embed "?for=…&token=…"): "?embed=true" on an
+    // Ashby link made a real run see Quora, applied to an hour before, as a new job
+    const keep = new URLSearchParams()
+    u.searchParams.forEach(function (v, k) { if (/^(gh_jid|jid|jobid|job_id|job|id|req|reqid|requisitionid|token|for|posting_id|pid)$/i.test(k)) keep.append(k.toLowerCase(), v) })
+    keep.sort()
+    const q = keep.toString()
+    return (u.hostname.replace(/^www\./, '') + u.pathname.replace(/\/(apply|application|confirmation|thanks|thank-you|submitted|success)\/?$/, '').replace(/\/(apply|application)\/?$/, '').replace(/\/+$/, '') + (q ? '?' + q : '')).toLowerCase()
   } catch (e) { return '' }
 }
 
