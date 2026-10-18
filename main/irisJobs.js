@@ -538,6 +538,8 @@ function irisJobsPrompt (task, mode) {
     '   Say what you decided in log_application\'s note. Only what nobody but the user can supply (an access or referral',
     '   code, an invitation, a CAPTCHA that stays, a login with no account, an SMS code): log_application',
     '   {"status":"needs_you","note":"<what is missing>"} and go on to the next job. Do not wait.',
+    '   Submit that does nothing although autofill finds no empty required box, on a page with a reCAPTCHA badge or',
+    '   check: an invisible human check is holding it — treat it as one (below), do not keep clicking Submit.',
     '   A human check ("Verify you are human", a CAPTCHA) after Submit on a form you filled: log needs_you, then open',
     '   the next job with {"type":"new_tab","url":…} — not navigate — so that filled tab stays open for the user to',
     '   finish the check and submit it themselves.',
