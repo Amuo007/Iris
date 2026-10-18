@@ -122,6 +122,10 @@ test('saved self-ID answers are said plainly, never "decline"', () => {
   assert.strictEqual(p2('What is your sexual orientation?', 'select', ['Heterosexual', 'Gay', 'Decline to self-identify'], { required: false }).do, 'leave')
 })
 
+test('SMS / WhatsApp opt-ins: no', () => {
+  assert.strictEqual(plan('Would you like to receive communications via SMS and/or WhatsApp to the number provided?', 'select', ['Yes', 'No']).option, 'No')
+})
+
 test('unknown and optional self-ID questions are left to the agent', () => {
   assert.strictEqual(plan('Do you identify as transgender?', 'select', ['Yes', 'No', 'I don\'t wish to answer'], { required: false }).do, 'leave')
   assert.strictEqual(plan('Do you identify as transgender?', 'select', ['Yes', 'No', 'I don\'t wish to answer']).option, 'I don\'t wish to answer')
