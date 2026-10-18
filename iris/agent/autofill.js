@@ -210,7 +210,7 @@ function rulesFor (f) {
     { test: /(able|willing|comfortable|open) (to )?(work(ing)? |be(ing)? )?(on-?site|in(-| )office|in person|hybrid|from (the|our) office|commut\w*|relocat\w*)|work(ing)? (on-?site|in(-| )office|hybrid)\b.*\?|(days|times) (a|per) week in (the )?office/i,
       skip: /sponsor|authori|citizen|clearance/i, yesNoOnly: true, choose: f.relocate ? YES : null },
     { test: /(earliest|available) (start|to start)|start date|when can you start|availability to start/i, skip: /month|year/i, text: f.startDate ? f.startDate.replace(/\s*\(.*\)\s*$/, '') : '' },
-    { test: /years of (professional |relevant |industry |software |work )*(engineering |industry )?experience|how many years/i, pick: f.years !== null ? function (opts) { return pickYears(opts, f.years) } : null, text: f.years !== null ? String(f.years) : '' },
+    { test: /years of (professional |relevant |industry |software |work )*(engineering |industry )?experience|how many years/i, skip: /^(do|have|are|did) you\b|\d+\s*\+/i, pick: f.years !== null ? function (opts) { return pickYears(opts, f.years) } : null, text: f.years !== null ? String(f.years) : '' },
     // "Do you have 3+ years of …?" — a sure No when the profile has fewer years in all (a skill's years are never more)
     { test: /\b(\d+)\s*\+?\s*(or more )?years\b.*experience|experience.*\b(\d+)\s*\+?\s*(or more )?years\b/i, skip: /how many|what is|list|describe/i, yesNoOnly: true,
       choose: f.years !== null ? function (label) { const m = label.match(/\b(\d+)\s*\+?\s*(or more )?years\b/i); return m && +m[1] > f.years ? NO : null } : null },
