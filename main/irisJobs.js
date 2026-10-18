@@ -495,6 +495,8 @@ function irisJobsPrompt (task, mode) {
     '   if they are not there, decide as said below. What follows from the profile is not a question for the user: living',
     '   in the job\'s city already ("I already live there"), years of experience counted from the jobs\' dates, years',
     '   with one skill or tool from the list below.',
+    '   "Which of these locations would you consider / work from?" with a list of offices: the user is willing to',
+    '   relocate — tick every listed US location (never "None of the above" just because home is elsewhere).',
     '   Written answers (why us, a project, "anything else"): only facts in the profile\'s own bullet points — never',
     '   make up a class rank, award, number, reference, school or what an employer\'s product does.',
     '   A question that asks you to confirm you are a human, or says it is there to filter automated or AI applications:',
