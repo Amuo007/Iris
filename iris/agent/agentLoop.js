@@ -241,6 +241,8 @@ function createAgent (opts) {
     }
   }
 
+  let batchRest = [] // the actions after the current one in this step
+
   async function settleAfter (action) {
     if (typeof computer.settle === 'function') {
       try {
@@ -587,6 +589,7 @@ function createAgent (opts) {
       let outcome = null
       lastFailed = false
       for (let i = 0; i < batch.length; i++) {
+        batchRest = batch.slice(i + 1)
         outcome = await perform(batch[i], i, batch.length, mapping, obs, pageState, unchanged)
         if (outcome.finished) return outcome.finished
         if (outcome.failed) lastFailed = true
@@ -767,6 +770,9 @@ function createAgent (opts) {
     if (stopRequested) return { finished: finish('stopped', stopRequested) }
 
     // ---- 9. act ----------------------------------------------------------------
+    // later actions of this step aimed at a spot on the screen: they only hold while the screen stays as it was
+    const aimedLater = batchRest.some(function (a) { return a && (typeof a.x === 'number' || typeof a.fromX === 'number') })
+    if (aimedLater) mapped.watchChange = true
     let result
     try {
       result = await callComputer(computer.act, mapped)
@@ -790,9 +796,13 @@ function createAgent (opts) {
     if (PAGE_CHANGING.has(action.type) || (result && result.pageChanged)) return { stopBatch: true }
     // the page kept moving after this action (an "Apply" that slides down to its form): the rest of the step was
     // planned on the old positions, so look again first (real run: three values typed one box too high)
-    if (settled && settled.moved && index < total - 1) {
-      history.addSystemNote('The page moved after "' + describeAction(action) + '" (it scrolled or changed): the ' +
-        (total - 1 - index) + ' action(s) after it in your last step were NOT done. Plan them again from this screenshot.')
+    // the same when the click opened a list or panel over the spots the later actions aim at (real run: Robinhood's
+    // race list opened, and the click meant for the next box picked "East Asian"). Typing into the box that has the
+    // cursor needs no spot, so it goes on.
+    if (settled && (settled.moved || settled.changed) && aimedLater) {
+      history.addSystemNote('The page ' + (settled.changed ? 'changed' : 'moved') + ' after "' + describeAction(action) + '" (' +
+        (settled.changed ? 'a list or panel opened, or the form moved' : 'it scrolled') + '): the ' + (total - 1 - index) +
+        ' action(s) after it in your last step were NOT done. Plan them again from this screenshot.')
       return { stopBatch: true }
     }
     return {}

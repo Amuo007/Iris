@@ -1478,6 +1478,8 @@ IrisComputer.prototype.act = async function (action) {
     }
   }
 
+  // a click with more aimed actions after it in this step: remember the screen first, to tell whether it changed
+  this.preClickThumb = action.type === 'click' && action.watchChange ? await irisThumb(wc) : null
   // a click that lands just beside a link, button or field moves onto it, like a hand finding the target
   if ((action.type === 'click' || action.type === 'double_click' || (action.type === 'type' && action.x !== undefined)) && this.config.snapClicks !== false) {
     const snapped = await this.snapToTarget(wc, action)
@@ -1802,42 +1804,54 @@ IrisComputer.prototype.settle = async function (action) {
   // layout: wait until two quick looks agree, so the next screenshot shows where things really are
   // (real run: Point72's form was still sliding up when Iris looked; three values went one box too high)
   if (action && (action.type === 'click' || action.type === 'key' || action.type === 'scroll')) {
-    return { moved: await irisWaitStill(wc) }
+    const still = await irisWaitStill(wc)
+    // a click that opened a list or a panel, or moved the form: the step's later clicks were aimed at the old screen
+    // (real run: Robinhood's race list opened over the next box, and the click meant for "military status" picked
+    // "East Asian")
+    const before = action.type === 'click' ? this.preClickThumb : null
+    this.preClickThumb = null
+    return { moved: still.moved, changed: !!before && irisThumbChange(before, still.last) > 0.012 }
   }
-  return { moved: false }
+  return { moved: false, changed: false }
 }
 
-/* Small grey thumbnails of the tab, ~200 ms apart, until they agree (at most ~1.6 s); true when the page moved. */
+/* A small grey thumbnail of the tab (128×80 cells), for telling whether the page moved or changed. */
+async function irisThumb (wc) {
+  try {
+    if (wc.isDestroyed()) return null
+    const img = await withTimeout(wc.capturePage(), 1500, 'look timed out')
+    if (!img || img.isEmpty()) return null
+    const bmp = img.resize({ width: 128, height: 80, quality: 'good' }).toBitmap()
+    const lum = new Float32Array(bmp.length / 4)
+    for (let i = 0, j = 0; i + 3 < bmp.length; i += 4, j++) lum[j] = bmp[i] * 0.114 + bmp[i + 1] * 0.587 + bmp[i + 2] * 0.299
+    return lum
+  } catch (e) { return null }
+}
+
+/* The share of cells that changed between two thumbnails (0…1). A blinking caret or a field's focus ring changes a
+   few cells; a scroll changes most of the text on screen; a dropdown list that opens changes 2–20% of them (measured
+   on real forms: lists 239+ cells of 10240, focus rings, toggles and checkboxes 60 or fewer). */
+function irisThumbChange (a, b) {
+  if (!a || !b || a.length !== b.length) return 0
+  let n = 0
+  for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > 24) n++
+  return n / a.length
+}
+
+/* Thumbnails ~200 ms apart until they agree (at most ~1.6 s). moved: the page was still moving; last: the final look. */
 async function irisWaitStill (wc) {
-  const look = async function () {
-    try {
-      if (wc.isDestroyed()) return null
-      const img = await withTimeout(wc.capturePage(), 1500, 'look timed out')
-      if (!img || img.isEmpty()) return null
-      const bmp = img.resize({ width: 64, height: 40, quality: 'good' }).toBitmap()
-      const lum = new Float32Array(bmp.length / 4)
-      for (let i = 0, j = 0; i + 3 < bmp.length; i += 4, j++) lum[j] = bmp[i] * 0.114 + bmp[i + 1] * 0.587 + bmp[i + 2] * 0.299
-      return lum
-    } catch (e) { return null }
-  }
-  // a blinking caret or a field's focus ring changes a few cells; a scroll changes most of the text on screen
-  const differ = function (a, b) {
-    let n = 0
-    for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > 20) n++
-    return n > Math.max(12, a.length * 0.03)
-  }
-  let prev = await look()
-  if (!prev) return false
+  let prev = await irisThumb(wc)
+  if (!prev) return { moved: false, last: null }
   let moved = false
   const started = Date.now()
   while (Date.now() - started < 1600) {
     await sleep(200)
-    const now = await look()
-    if (!now || now.length !== prev.length || !differ(prev, now)) break
+    const now = await irisThumb(wc)
+    if (!now || irisThumbChange(prev, now) <= 0.03) break
     moved = true
     prev = now
   }
-  return moved
+  return { moved: moved, last: prev }
 }
 
 IrisComputer.prototype.state = function () {

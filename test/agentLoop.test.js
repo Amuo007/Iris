@@ -417,6 +417,21 @@ test('a page that moved after the last action of a batch needs no note', async (
   assert.doesNotMatch(h.msgs, /page moved after/)
 })
 
+test('a click that opened a list stops the later aimed clicks, but typing into the focused box goes on', async () => {
+  const h = harness([
+    JSON.stringify({ thought: 'open race, then military', actions: [{ type: 'click', x: 200, y: 200 }, { type: 'click', x: 200, y: 300 }] }),
+    JSON.stringify({ thought: 'open school, search', actions: [{ type: 'click', x: 200, y: 200 }, { type: 'type', text: 'University of Houston' }] }),
+    (ctx) => { h.msgs = JSON.stringify(ctx.messages); return json('done', { type: 'done', answer: 'ok' }) }
+  ])
+  const seen = []
+  h.computer.settle = (a) => { seen.push(!!a.watchChange); return { moved: false, changed: a.type === 'click' } }
+  await h.agent.run('fill')
+  assert.deepStrictEqual(h.computer.actions.map(a => a.type), ['click', 'click', 'type'])
+  assert.match(h.msgs, /page changed after .*a list or panel opened/)
+  // only a click with an aimed action after it asks the computer to watch for a change
+  assert.deepStrictEqual(seen.slice(0, 2), [true, false])
+})
+
 test('a follow-up keeps the conversation and starts a fresh step budget', async () => {
   const h = harness([json('first', { type: 'done', answer: 'A' }), (ctx) => { h.msgs = ctx.messages; return json('second', { type: 'done', answer: 'B' }) }], null, { safety: { maxSteps: 1 } })
   assert.strictEqual((await h.agent.run('first question')).answer, 'A')
