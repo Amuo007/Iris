@@ -2264,6 +2264,16 @@ function irisSessionList () {
 
 /* when the model last read that LinkedIn's free invitation notes are used up (they come back monthly) */
 let irisLinkedinNotesOutAt = 0
+// kept on disk: the app restarts between runs, and the notes stay used up
+function irisLinkedinNotesPath () { return path.join(userDataPath, 'iris-linkedin-notes.json') }
+let irisLinkedinNotesRead = false
+function irisLinkedinNotesOut () {
+  if (!irisLinkedinNotesRead) {
+    irisLinkedinNotesRead = true
+    try { irisLinkedinNotesOutAt = Math.max(irisLinkedinNotesOutAt, JSON.parse(fs.readFileSync(irisLinkedinNotesPath(), 'utf8')).outAt || 0) } catch (e) {}
+  }
+  return Date.now() - irisLinkedinNotesOutAt < 24 * 3600000
+}
 
 /* thoughts in a row that say a field "still has an error" (see irisRecord) */
 var irisStaleErrors = 0
@@ -2738,8 +2748,11 @@ function startAgent (task, options) {
       if (type === 'thought') { session.lastThought = String(payload.thought || ''); session.loggedThisStep = false }
       // LinkedIn's free notes used up (the model read it in the invitation dialog): from then on a hint on each LinkedIn
       // visit, so it clicks "Send without a note" at once (a real run: "Add a note", then closing it cancelled the invitation)
-      if (type === 'thought' && /\bno (free |more )?(custom |personali[sz]ed )?(notes?|invitations? with a note)\b[^.]{0,30}\b(left|remaining|available)|\bno (free |more )?personali[sz]ed (invitations?|messages?)\b[^.]{0,20}\b(left|remaining)|out of (free )?(custom |personali[sz]ed )?notes|(notes?|personali[sz]ed invitations?)[^.]{0,20}\b(used up|limit reached|run out)/i.test(payload.thought || '')) irisLinkedinNotesOutAt = Date.now()
-      if (type === 'action' && payload.action && computer.jobsMode && Date.now() - irisLinkedinNotesOutAt < 24 * 3600000 &&
+      if (type === 'thought' && /\bno (free |more )?(custom |personali[sz]ed )?(notes?|invitations? with a note)\b[^.]{0,30}\b(left|remaining|available)|\bno (free |more )?personali[sz]ed (invitations?|messages?)\b[^.]{0,20}\b(left|remaining)|out of (free )?(custom |personali[sz]ed )?notes|(notes?|personali[sz]ed invitations?)[^.]{0,20}\b(used up|limit reached|run out)/i.test(payload.thought || '')) {
+        irisLinkedinNotesOutAt = Date.now()
+        try { fs.writeFileSync(irisLinkedinNotesPath(), JSON.stringify({ outAt: irisLinkedinNotesOutAt })) } catch (e) {}
+      }
+      if (type === 'action' && payload.action && computer.jobsMode && irisLinkedinNotesOut() &&
         (payload.action.type === 'navigate' || payload.action.type === 'new_tab') && /linkedin\.com/i.test(payload.action.url || '')) {
         computer.notes = (computer.notes || []).concat('LinkedIn\'s free notes are used up: after Connect, click "Send without a note" straight away (opening "Add a note" and closing it cancels the invitation).')
       }
