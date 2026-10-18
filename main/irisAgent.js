@@ -935,7 +935,8 @@ const IRIS_CONFIRM_PEEK = `(function () {
     var r = b.getBoundingClientRect(); var s = String(b.innerText || b.value || b.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim()
     return r.width > 0 && r.height > 0 && !b.disabled && /^(submit( (my |your )?application)?|send application)$/i.test(s)
   })
-  return { text: String(document.body && document.body.innerText || '').slice(0, 6000), submit: submit }
+  var heads = [].slice.call(document.querySelectorAll('h1, h2, h3, [role=heading], [role=alert], [role=status]')).map(function (h) { return h.innerText || '' }).join('\\n').slice(0, 3000)
+  return { text: String(document.body && document.body.innerText || '').slice(0, 20000), heads: heads, submit: submit }
 })()`
 /* What is at a click point, when it is a human check: its frame's address or title, else '' */
 const IRIS_HUMAN_CHECK_AT = function (x, y) {
@@ -974,7 +975,9 @@ IrisComputer.prototype.noteConfirmation = async function (wc, url) {
   try {
     let hit = /\/(thanks|thank-you|confirmation|submitted|success)(\/|$|\?)/i.test(url)
     // by its words only when no Submit button is left on the page ("once your application is submitted…" on a form is no confirmation)
-    if (!hit) hit = await withTimeout(wc.executeJavaScript(IRIS_CONFIRM_PEEK), 1200, 'confirm check').then(function (r) { return !!r && !r.submit && IRIS_CONFIRM_TEXT.test(String(r.text || '')) })
+    // a heading that says so counts at once (Eightfold: "Thank you for your application, Amrinder!" above a profile-review
+    // step with its own buttons); the page's text only when no Submit is left on it
+    if (!hit) hit = await withTimeout(wc.executeJavaScript(IRIS_CONFIRM_PEEK), 2500, 'confirm check').then(function (r) { return !!r && (IRIS_CONFIRM_TEXT.test(String(r.heads || '')) || (!r.submit && IRIS_CONFIRM_TEXT.test(String(r.text || '')))) })
     if (this.unconfirmedLog && (!this.unconfirmedLog.co || String(url).toLowerCase().replace(/[^a-z0-9]/g, '').indexOf(this.unconfirmedLog.co) >= 0)) this.unconfirmedLog.looks++
     if (hit) this.confirmations = (this.confirmations || []).filter(function (c) { return Date.now() - c.at < 3600000 }).concat({ url: url, at: Date.now() })
   } catch (e) { /* only a check */ }
