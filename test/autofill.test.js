@@ -334,3 +334,8 @@ test('field matching ignores filler words', () => {
   assert.strictEqual(af.findField(fields, 'What is your location?', ['select']), null)
   assert.strictEqual(af.findField(fields, 'U.S. Export Compliance', ['select']).key, 'b')
 })
+
+test('a graduation date picker gets a full date (Ashby takes MM/DD/YYYY only); other graduation boxes keep the year', () => {
+  assert.match(plan('Graduation Date or Anticipated Graduation Date', 'text', null, { placeholder: 'Pick date...' }).value, /^\d{2}\/01\/\d{4}$/)
+  assert.match(plan('Graduation Date', 'text', null, { placeholder: '' }).value, /^\d{4}$/)
+})

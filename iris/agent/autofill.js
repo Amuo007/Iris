@@ -228,6 +228,10 @@ function rulesFor (f) {
     // a question for the month and the year together ("When will you graduate? (month & year)"): a short fact, even in
     // a large text box
     { test: /when (will|do) you (expect to )?graduat|graduat\w*[^?]{0,20}\(?month (&|and|\/) year/i, text: f.gradMonth && f.gradYear ? f.gradMonth + ' ' + f.gradYear : '', fact: true },
+    // a date picker for the graduation (Ashby's "Pick date...": takes MM/DD/YYYY only, "12/2026" is dropped) — the day is
+    // not known, so the 1st of the month
+    { test: /graduat\w*[^?]{0,40}\bdate\b|\bdate\b[^?]{0,40}graduat/i, dateBox: true, fact: true,
+      text: f.gradMonth && f.gradYear ? String(['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].indexOf(f.gradMonth.toLowerCase()) + 1).padStart(2, '0') + '/01/' + f.gradYear : '' },
     { test: /^end date month|graduation month|^end month/i, choose: f.gradMonth ? [new RegExp('^' + f.gradMonth, 'i')] : null, text: f.gradMonth },
     { test: /^end date year|graduation (date|year)|^end year|year of graduation|expected graduation/i, choose: f.gradYear ? [new RegExp('^' + f.gradYear + '$')] : null, text: f.gradYear },
     { test: /^start date (month|year)|^start (month|year)/i, leave: 'not in the profile' },
@@ -307,7 +311,7 @@ function planField (field, facts, mode) {
   }
   if (!label) return { do: 'leave', why: field.value ? 'already filled' : 'no label' }
   // contact boxes have short labels: a long question that merely mentions "email" or "LinkedIn" is not one
-  const rule = rulesFor(facts).find(function (r) { return r.test.test(label) && !(r.skip && r.skip.test(label)) && !(r.short && label.length > 60) })
+  const rule = rulesFor(facts).find(function (r) { return r.test.test(label) && !(r.skip && r.skip.test(label)) && !(r.short && label.length > 60) && !(r.dateBox && !(field.kind === 'text' && /\bdate\b|mm\s*\/\s*(dd|yy)/i.test(field.placeholder || ''))) })
   // the applicant's own name, phone and address go in their own section only: in a Work History, Education or
   // References block the same boxes belong to an employer, a school or another person
   if (rule && rule.self && field.section && OTHER_SECTION.test(clean(field.section))) return { do: 'leave', why: 'in the "' + clean(field.section).slice(0, 40) + '" section: not the applicant\'s own details' }
@@ -417,7 +421,7 @@ const PAGE_COLLECT = `(() => {
   ${AF_DEEP}
   const clean = s => String(s || '').replace(/\\s+/g, ' ').trim();
   const visible = el => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return (r.width > 0 && r.height > 0) || el.type === 'file' || cs.position === 'absolute'; };
-  const placeholder = s => /^(select( an option| one)?\\.{0,3}|search\\.{0,3}|choose\\.{0,3}|--+|please select|(type|enter|write|add) (your |an? )?(response|answer|text|here)\\.{0,3})$/i.test(s);
+  const placeholder = s => /^(select( an option| one)?\\.{0,3}|search( [a-z]+){0,2}\\.{0,3}|start typing\\.{0,3}|type to search\\.{0,3}|(pick|select|choose) (a )?date\\.{0,3}|choose\\.{0,3}|--+|please select|(type|enter|write|add) (your |an? )?(response|answer|text|here)\\.{0,3})$/i.test(s);
   // a label that is only the required mark ("*", ":") says nothing: look further
   const words = s => { const c = clean(s); const bare = clean(c.replace(/[*:✱]/g, '')); return bare.length >= 2 && !placeholder(bare) ? c : ''; };
   const labelOf = el => {
@@ -449,7 +453,8 @@ const PAGE_COLLECT = `(() => {
     const t = (el.type || '').toLowerCase();
     if (t === 'hidden' || t === 'submit' || t === 'button' || el.disabled) return;
     if (/recaptcha/i.test(el.name || el.id || '')) return;
-    if (!el.id && !el.name && t !== 'file' && t !== 'checkbox' && t !== 'radio') return;
+    // (a search list or date box with neither is still a question: Ashby's Location, School and Graduation Date)
+    if (!el.id && !el.name && t !== 'file' && t !== 'checkbox' && t !== 'radio' && el.getAttribute('role') !== 'combobox' && !el.hasAttribute('aria-autocomplete') && !el.placeholder) return;
     if (t === 'checkbox' || t === 'radio') {
       // one group per name (radios of one question can sit in separate wrappers); its box: the smallest element
       // holding all of them
