@@ -174,20 +174,21 @@ function rulesFor (f) {
   const noDis = /^\s*no\b/i.test(f.disability)
   return [
     // ---- contact
-    { test: /^(legal |preferred )?first name|^given name/i, text: f.firstName },
-    { test: /^(legal )?last name|^surname|^family name/i, text: f.lastName },
+    { test: /^(legal |preferred )?first name|^given name/i, text: f.firstName, sure: true },
+    { test: /^(legal )?last name|^surname|^family name/i, text: f.lastName, sure: true },
     { test: /^(full |legal |your )?(full )?(legal )?name\b(?!.*(company|school|employer|reference|manager|recruiter|referr))|full legal name/i, text: f.fullName },
-    { test: /^(your )?e-?mail( address)?\b|^(confirm|re-?enter|repeat|verify|retype) (your )?e-?mail/i, skip: /referr|manager|reference/i, text: f.email, short: true },
-    { test: /^(mobile |cell |primary )?phone( number)?\b/i, text: f.phone },
+    { test: /^(your )?e-?mail( address)?\b|^(confirm|re-?enter|repeat|verify|retype) (your )?e-?mail/i, skip: /referr|manager|reference/i, text: f.email, short: true, sure: true },
+    { test: /^(mobile |cell |primary )?phone( number)?\b|^mobile( number)?\b/i, text: f.phone, sure: true },
     { test: /^(your )?linkedin\b|linkedin (profile|url)/i, text: f.linkedin, short: true },
     { test: /^(your )?github\b|github (profile|url)/i, text: f.github, short: true },
     { test: /^(your |personal )?(website|portfolio|blog)\b|personal (site|website)/i, skip: /linkedin|github/i, text: f.website, short: true },
     // ---- place
     { test: /^country\b/i, choose: [/^united states( of america)?(\s*\+1)?$/i, /^united states\b(?!.*(minor|islands))/i, /^usa?$/i], text: f.country },
-    { test: /^(location|current location|city)\b|location \(city\)|^where are you (currently )?(located|based)/i, place: true, text: f.city && f.state ? f.city + ', ' + f.state : '' },
+    { test: /^(location|current location)\b|location \(city\)|^where are you (currently )?(located|based)/i, place: true, text: f.city && f.state ? f.city + ', ' + f.state : '' },
+    { test: /^city\b/i, text: f.city, sure: true },
     { test: /^(street )?address( line 1)?$|street address|home address/i, text: [f.street, f.city, f.stateCode, f.zip].filter(Boolean).join(', ').replace(/, (\d{5})$/, ' $1') },
     { test: /^state\b|^province\b|state\/province/i, choose: f.state ? [new RegExp('^' + f.state + '$', 'i'), new RegExp('^' + f.stateCode + '$', 'i')] : null, text: f.state },
-    { test: /^(zip|postal)( code)?\b/i, text: f.zip },
+    { test: /^(zip|postal)( code)?\b/i, text: f.zip, sure: true },
     // ---- education (Greenhouse's school--0 / degree--0 / discipline--0 boxes)
     { test: /^school\b|^university\b|^college\b|^institution\b/i, search: true, choose: f.school ? [new RegExp('^' + f.school + '$', 'i'), new RegExp('^' + f.school + '\\b', 'i')] : null, text: f.school },
     { test: /highest (level of )?(education|degree)|education level|level of education/i, choose: f.degreeDone ? null : [/high school/i, /secondary/i], requires: !f.degreeDone },
@@ -268,10 +269,15 @@ function planField (field, facts, mode) {
     if (/resume|cv\b/i.test(label) || /resume/i.test(field.id || '')) return field.value ? { do: 'leave', why: 'already attached' } : { do: 'upload', file: 'resume' }
     return { do: 'leave', why: 'a document other than the resume' }
   }
-  if (field.value) return { do: 'leave', why: 'already filled' }
-  if (!label) return { do: 'leave', why: 'no label' }
+  if (!label) return { do: 'leave', why: field.value ? 'already filled' : 'no label' }
   // contact boxes have short labels: a long question that merely mentions "email" or "LinkedIn" is not one
   const rule = rulesFor(facts).find(function (r) { return r.test.test(label) && !(r.skip && r.skip.test(label)) && !(r.short && label.length > 60) })
+  if (field.value) {
+    // a box already filled (the site's resume import, a browser's saved address): the profile is the truth for the
+    // sure facts — put it right when it differs, else leave it
+    if (rule && rule.sure && rule.text && field.kind === 'text' && !sameValue(field.value, rule.text)) return { do: 'text', value: rule.text, replace: field.value }
+    return { do: 'leave', why: 'already filled' }
+  }
   if (!rule) return { do: 'leave', why: 'not a standard question' }
   if (rule.leave) return { do: 'leave', why: rule.leave }
   if (rule.requires === false) return { do: 'leave', why: 'no fact for it' }
@@ -313,6 +319,17 @@ function planField (field, facts, mode) {
     return { do: 'text', value: value }
   }
   return { do: 'leave', why: 'unknown kind of field' }
+}
+
+/* The same fact written two ways: case and spaces, phone digits, a state and its code. */
+function sameValue (a, b) {
+  const n = function (x) { return clean(x).toLowerCase() }
+  if (n(a) === n(b)) return true
+  const d = function (x) { return String(x).replace(/\D/g, '') }
+  if (/^[\d\s()+.-]{7,}$/.test(a) && /^[\d\s()+.-]{7,}$/.test(b)) return d(a).slice(-10) === d(b).slice(-10)
+  const code = Object.keys(STATES).find(function (k) { return STATES[k].toLowerCase() === n(b) })
+  if (code && n(a) === code.toLowerCase()) return true
+  return false
 }
 
 function escapeRe (s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }

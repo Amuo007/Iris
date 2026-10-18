@@ -77,8 +77,12 @@ test('contact boxes', () => {
   assert.strictEqual(plan('School name').do !== 'text' || plan('School name').value !== 'Amrinder Singh', true)
 })
 
-test('a filled box is left alone; essays and number boxes go to the agent', () => {
+test('a filled box is left alone unless a sure fact differs; essays and number boxes go to the agent', () => {
   assert.strictEqual(plan('First Name', 'text', null, { value: 'Amrinder' }).do, 'leave')
+  assert.strictEqual(plan('Phone', 'text', null, { value: '8322634489' }).do, 'leave')
+  assert.deepStrictEqual(plan('City', 'text', null, { value: 'Katy' }), { do: 'text', value: 'Houston', replace: 'Katy' })
+  assert.deepStrictEqual(plan('Zip Code', 'text', null, { value: '77449' }), { do: 'text', value: '77084', replace: '77449' })
+  assert.strictEqual(plan('Current Company', 'text', null, { value: 'Acme' }).do, 'leave')
   assert.strictEqual(plan('Why do you want to work here?', 'textarea').do, 'leave')
   assert.strictEqual(plan('Expected salary', 'text', null, { inputType: 'number' }).do, 'leave')
   assert.deepStrictEqual(plan('End date year', 'text', null, { inputType: 'number' }), { do: 'text', value: '2026' })

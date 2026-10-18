@@ -234,6 +234,7 @@ async function irisAutofillRun (computer, wc) {
       } catch (e) {
         result = { left: 'failed (' + e.message + ')' }
       }
+      if (result.set !== undefined && plan.replace) result.set = result.set + ' (was "' + String(plan.replace).slice(0, 40) + '")'
       if (result.set !== undefined) set.push({ field: field, value: result.set })
       else left.push({ field: field, why: result.left, quiet: result.quiet && !field.required })
       // for the hybrid dataset: what the tool saw and decided, field by field
