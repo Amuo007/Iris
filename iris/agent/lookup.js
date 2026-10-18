@@ -529,11 +529,32 @@ function createLookup (opts) {
 }
 
 /** {"lookups":[{"kind":"web","query":"..."}]} from a planner reply, or null. */
+/* The first whole {…} object in {text} that parses and has {key} — a model may wrap it in tool-call markup or
+   repeat it ("<tool_call>{…}</parameter><parameter=arguments>{…}"), so one span from the first "{" to the last "}"
+   is not JSON. */
+function firstJsonWith (text, key) {
+  const s = String(text || '')
+  for (let i = s.indexOf('{'); i >= 0; i = s.indexOf('{', i + 1)) {
+    let depth = 0
+    let inStr = false
+    for (let j = i; j < s.length; j++) {
+      const c = s[j]
+      if (inStr) { if (c === '\\') j++; else if (c === '"') inStr = false; continue }
+      if (c === '"') inStr = true
+      else if (c === '{') depth++
+      else if (c === '}' && --depth === 0) {
+        try { const obj = JSON.parse(s.slice(i, j + 1)); if (obj && typeof obj === 'object' && key in obj) return obj } catch (e) {}
+        break
+      }
+    }
+  }
+  return null
+}
+
 function parseLookups (text, max) {
-  const m = /\{[\s\S]*"lookups"[\s\S]*\}/.exec(String(text || ''))
-  if (!m) return null
+  const obj = firstJsonWith(text, 'lookups')
+  if (!obj) return null
   try {
-    const obj = JSON.parse(m[0])
     const list = (obj.lookups || []).map(function (l) {
       if (typeof l === 'string') return { kind: 'web', query: l }
       return { kind: KINDS.includes(l.kind) ? l.kind : 'web', query: String(l.query || l.q || l.url || '').trim() }
@@ -545,4 +566,4 @@ function parseLookups (text, max) {
 }
 
 module.exports = {
-  parseHackerNews, createLookup, parseJobBoardQuery, parseBoardJobs, filterBoardJobs, parseLookups, parseDuckDuckGo, parseBing, parseOpenAlex, parseArxiv, readableText, looksBlocked, isNever, KINDS, NEVER }
+  parseHackerNews, createLookup, parseJobBoardQuery, parseBoardJobs, filterBoardJobs, parseLookups, firstJsonWith, parseDuckDuckGo, parseBing, parseOpenAlex, parseArxiv, readableText, looksBlocked, isNever, KINDS, NEVER }

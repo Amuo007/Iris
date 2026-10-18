@@ -279,3 +279,13 @@ test('a "--" placeholder does not make a Yes/No list "more than yes/no"; a State
   assert.strictEqual(st.typeAhead, 'TX')
   assert.strictEqual(af.pickOption(['TN', 'TX', 'UT'], st.patterns), 1)
 })
+
+test('Smart look-ups and questions are read from tool-call markup and repeated JSON', () => {
+  const L = require('../iris/agent/lookup')
+  const P = require('../iris/agent/prompts')
+  const wrapped = '<tool_call>\n{"lookups":[{"kind":"jobs","query":"software engineer new grad"}]}\n</parameter>\n<parameter=arguments>\n{"lookups":[{"kind":"jobs","query":"software engineer new grad"}]}\n</parameter>\n</function>\n</tool_call>'
+  assert.deepStrictEqual(L.parseLookups(wrapped, 4), [{ kind: 'jobs', query: 'software engineer new grad' }])
+  assert.strictEqual(L.parseLookups('Plan: open Greenhouse {not json} and apply'), null)
+  const q = P.parseQuestions('<tool_call>{"questions":[{"q":"Which city?","options":["Houston","Remote"]}]}</tool_call>{"questions":[]}')
+  assert.strictEqual(q[0].q, 'Which city?')
+})

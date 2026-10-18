@@ -75,10 +75,9 @@ function planMessages (task, extra, opts) {
 
 /** {"questions":[...]} from a planner reply, cleaned up; null if it is a plan. */
 function parseQuestions (text) {
-  const m = /\{[\s\S]*"questions"[\s\S]*\}/.exec(String(text || ''))
-  if (!m) return null
+  const obj = require('./lookup.js').firstJsonWith(text, 'questions')
+  if (!obj) return null
   try {
-    const obj = JSON.parse(m[0])
     const qs = (obj.questions || []).slice(0, 4).map(function (q) {
       return { q: String(q.q || q.question || '').slice(0, 200), options: (q.options || []).slice(0, 4).map(function (x) { return String(x).slice(0, 120) }) }
     }).filter(function (q) { return q.q })

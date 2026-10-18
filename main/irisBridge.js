@@ -213,7 +213,9 @@ async function irisBridgeHandle (tool, args) {
       const task = String(args.task || '').trim()
       if (!task) throw new Error('task is required')
       const mode = args.mode === 'continuous' ? 'continuous' : 'once'
-      broadcast('iris-agent-scheduled-run', { task: task, mode: mode })
+      // plan: 'quick' | 'deep' runs it with Smart on (a run restarted the way the user started it)
+      const plan = args.plan === 'quick' || args.plan === 'deep' ? args.plan : undefined
+      broadcast('iris-agent-scheduled-run', { task: task, mode: mode, plan: plan })
       const started = Date.now()
       while (!irisIsBusy() && Date.now() - started < 10000) await sleep(200)
       if (!irisIsBusy()) throw new Error('Iris did not start (is the browser window open?)')

@@ -1349,7 +1349,7 @@ function initialize () {
     currentSessionId = null
     streamEl.innerHTML = ''
     setTimeout(function () {
-      submitTask(data.task, { tabId: id, mode: data.mode || 'once', newSession: true })
+      submitTask(data.task, Object.assign({ tabId: id, mode: data.mode || 'once', newSession: true }, data.plan ? { plan: data.plan } : {}))
     }, 400)
   })
 
