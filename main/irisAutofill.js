@@ -157,6 +157,7 @@ async function irisAfUpload (computer, wc, field) {
   if (!file || !fs.existsSync(file)) return { left: 'no resume file is set in Settings → Jobs' }
   try {
     if (!wc.debugger.isAttached()) return { left: 'cannot reach the file box: use Attach' }
+    await irisAfEval(wc, irisAutofillLib.pageMarkBox(field.key))
     const found = await wc.debugger.sendCommand('Runtime.evaluate', { expression: 'document.querySelector(\'[data-iris-af="' + field.key + '"]\')' })
     const objectId = found && found.result && found.result.objectId
     if (!objectId) return { left: 'cannot reach the file box: use Attach' }
