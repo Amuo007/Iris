@@ -323,6 +323,12 @@ test('a school among its campuses: the main campus, not the first branch', () =>
   assert.strictEqual(plan('School', 'select', ['University of Houston', 'University of Houston - Clear Lake']).option, 'University of Houston')
 })
 
+test('a school asked as "Name of School" (Lever, real Belvedere form); a high school is not the school', () => {
+  const opts = ['Houston Baptist University', 'University of Houston', 'University of Houston - Clear Lake', 'University of Houston - Downtown']
+  assert.strictEqual(plan('Name of School ✱', 'select', opts).option, 'University of Houston')
+  assert.strictEqual(plan('Name of High School', 'select', opts).do, 'leave')
+})
+
 test('field matching ignores filler words', () => {
   const fields = [{ key: 'a', kind: 'select', label: 'What is your age range?' }, { key: 'b', kind: 'select', label: 'U.S. Export Compliance: are you a U.S. person? ✱' }]
   assert.strictEqual(af.findField(fields, 'What is your location?', ['select']), null)
