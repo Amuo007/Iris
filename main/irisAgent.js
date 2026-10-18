@@ -1798,6 +1798,46 @@ IrisComputer.prototype.settle = async function (action) {
   const dlStarted = Date.now()
   while ((this.downloadsPending || 0) > 0 && Date.now() - dlStarted < 5000) await sleep(150)
   await sleep(120)
+  // a click or key can start a smooth scroll (an "Apply" that slides down to its form) or a late shift of the
+  // layout: wait until two quick looks agree, so the next screenshot shows where things really are
+  // (real run: Point72's form was still sliding up when Iris looked; three values went one box too high)
+  if (action && (action.type === 'click' || action.type === 'key' || action.type === 'scroll')) {
+    return { moved: await irisWaitStill(wc) }
+  }
+  return { moved: false }
+}
+
+/* Small grey thumbnails of the tab, ~200 ms apart, until they agree (at most ~1.6 s); true when the page moved. */
+async function irisWaitStill (wc) {
+  const look = async function () {
+    try {
+      if (wc.isDestroyed()) return null
+      const img = await withTimeout(wc.capturePage(), 1500, 'look timed out')
+      if (!img || img.isEmpty()) return null
+      const bmp = img.resize({ width: 64, height: 40, quality: 'good' }).toBitmap()
+      const lum = new Float32Array(bmp.length / 4)
+      for (let i = 0, j = 0; i + 3 < bmp.length; i += 4, j++) lum[j] = bmp[i] * 0.114 + bmp[i + 1] * 0.587 + bmp[i + 2] * 0.299
+      return lum
+    } catch (e) { return null }
+  }
+  // a blinking caret or a field's focus ring changes a few cells; a scroll changes most of the text on screen
+  const differ = function (a, b) {
+    let n = 0
+    for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > 20) n++
+    return n > Math.max(12, a.length * 0.03)
+  }
+  let prev = await look()
+  if (!prev) return false
+  let moved = false
+  const started = Date.now()
+  while (Date.now() - started < 1600) {
+    await sleep(200)
+    const now = await look()
+    if (!now || now.length !== prev.length || !differ(prev, now)) break
+    moved = true
+    prev = now
+  }
+  return moved
 }
 
 IrisComputer.prototype.state = function () {

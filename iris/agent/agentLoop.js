@@ -244,13 +244,14 @@ function createAgent (opts) {
   async function settleAfter (action) {
     if (typeof computer.settle === 'function') {
       try {
-        await callComputer(computer.settle, action)
+        return await callComputer(computer.settle, action)
       } catch (err) {
         log('settle failed: ' + (err && err.message))
       }
     } else if (cfg.settleDelayMs > 0) {
       await delay(cfg.settleDelayMs)
     }
+    return null
   }
 
   async function run (task, runOptions) {
@@ -784,9 +785,16 @@ function createAgent (opts) {
     emit('action:result', { step: state.step, index, ok: true })
 
     // ---- 10. settle -------------------------------------------------------------
-    await settleAfter(mapped)
+    const settled = await settleAfter(mapped)
     if (stopRequested) return { finished: finish('stopped', stopRequested) }
     if (PAGE_CHANGING.has(action.type) || (result && result.pageChanged)) return { stopBatch: true }
+    // the page kept moving after this action (an "Apply" that slides down to its form): the rest of the step was
+    // planned on the old positions, so look again first (real run: three values typed one box too high)
+    if (settled && settled.moved && index < total - 1) {
+      history.addSystemNote('The page moved after "' + describeAction(action) + '" (it scrolled or changed): the ' +
+        (total - 1 - index) + ' action(s) after it in your last step were NOT done. Plan them again from this screenshot.')
+      return { stopBatch: true }
+    }
     return {}
   }
 

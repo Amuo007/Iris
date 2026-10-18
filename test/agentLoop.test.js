@@ -391,6 +391,32 @@ test('a batch runs every action from one screenshot with one model call', async 
   assert.deepStrictEqual(h.computer.actions.map(a => [a.text, a.x, a.y]), [['me@x.com', 100, 100], ['{{Password}}', 100, 150]])
 })
 
+test('a page that moved after a click stops the batch and says which actions were not done', async () => {
+  const h = harness([
+    JSON.stringify({ thought: 'apply, then fill', actions: [
+      { type: 'click', x: 200, y: 200 },
+      { type: 'type', text: 'Amrinder', x: 200, y: 300 },
+      { type: 'type', text: 'Singh', x: 200, y: 400 }
+    ] }),
+    (ctx) => { h.msgs = JSON.stringify(ctx.messages); return json('done', { type: 'done', answer: 'ok' }) }
+  ])
+  h.computer.settle = (a) => ({ moved: a.type === 'click' })
+  await h.agent.run('apply')
+  assert.deepStrictEqual(h.computer.actions.map(a => a.type), ['click'])
+  assert.match(h.msgs, /page moved after .*2 action\(s\) after it in your last step were NOT done/)
+})
+
+test('a page that moved after the last action of a batch needs no note', async () => {
+  const h = harness([
+    JSON.stringify({ thought: 'fill, then apply', actions: [{ type: 'type', text: 'A', x: 200, y: 300 }, { type: 'click', x: 200, y: 200 }] }),
+    (ctx) => { h.msgs = JSON.stringify(ctx.messages); return json('done', { type: 'done', answer: 'ok' }) }
+  ])
+  h.computer.settle = (a) => ({ moved: a.type === 'click' })
+  await h.agent.run('apply')
+  assert.deepStrictEqual(h.computer.actions.map(a => a.type), ['type', 'click'])
+  assert.doesNotMatch(h.msgs, /page moved after/)
+})
+
 test('a follow-up keeps the conversation and starts a fresh step budget', async () => {
   const h = harness([json('first', { type: 'done', answer: 'A' }), (ctx) => { h.msgs = ctx.messages; return json('second', { type: 'done', answer: 'B' }) }], null, { safety: { maxSteps: 1 } })
   assert.strictEqual((await h.agent.run('first question')).answer, 'A')
