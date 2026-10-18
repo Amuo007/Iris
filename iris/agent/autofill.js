@@ -393,7 +393,7 @@ const PAGE_COLLECT = `(() => {
   ${AF_DEEP}
   const clean = s => String(s || '').replace(/\\s+/g, ' ').trim();
   const visible = el => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return (r.width > 0 && r.height > 0) || el.type === 'file' || cs.position === 'absolute'; };
-  const placeholder = s => /^(select( an option| one)?\\.{0,3}|search\\.{0,3}|choose\\.{0,3}|--+|please select)$/i.test(s);
+  const placeholder = s => /^(select( an option| one)?\\.{0,3}|search\\.{0,3}|choose\\.{0,3}|--+|please select|(type|enter|write|add) (your |an? )?(response|answer|text|here)\\.{0,3})$/i.test(s);
   // a label that is only the required mark ("*", ":") says nothing: look further
   const words = s => { const c = clean(s); return clean(c.replace(/[*:]/g, '')).length >= 2 ? c : ''; };
   const labelOf = el => {
@@ -406,7 +406,7 @@ const PAGE_COLLECT = `(() => {
     if (el.placeholder && !placeholder(clean(el.placeholder)) && clean(el.placeholder).length <= 40 && !/^(e\\.?g\\.?|ex\\.?|example)\\b/i.test(clean(el.placeholder))) return clean(el.placeholder);
     // no label element: the question is the text around the box — walk up (through shadow hosts: a form drawn in
     // web components) until there is more than the box's own text and placeholder
-    { const own = clean(el.tagName === 'INPUT' ? el.value : (el.getAttribute('role') === 'combobox' ? el.innerText : '')); const ph = clean(el.placeholder || ''); let up = el; for (let k = 0; k < 8 && up; k++) { up = up.parentElement || (up.getRootNode && up.getRootNode().host) || null; if (!up) break; let t = clean(up.innerText || ''); up.querySelectorAll('[role=listbox], [role=status], [role=alert], [aria-live]').forEach(x => { const xt = clean(x.innerText); if (xt) t = clean(t.split(xt).join(' ')); }); let rest = clean(own ? t.split(own).join(' ') : t); if (ph) rest = clean(rest.split(ph).join(' ')); if (clean(rest.replace(/\\*/g, '')).length >= 3) return rest.length <= 300 ? rest : ''; } }
+    { const own = clean(el.tagName === 'INPUT' ? el.value : el.innerText); const ph = clean(el.placeholder || ''); let up = el; for (let k = 0; k < 8 && up; k++) { up = up.parentElement || (up.getRootNode && up.getRootNode().host) || null; if (!up) break; let t = clean(up.innerText || ''); up.querySelectorAll('[role=listbox], [role=status], [role=alert], [aria-live]').forEach(x => { const xt = clean(x.innerText); if (xt) t = clean(t.split(xt).join(' ')); }); let rest = clean(own ? t.split(own).join(' ') : t); if (ph) rest = clean(rest.split(ph).join(' ')); if (clean(rest.replace(/\\*/g, '')).length >= 3) return rest.length <= 300 ? rest : ''; } }
     return '';
   };
   const form = document.querySelector('form#application-form, form#application_form, form.application--form, form') || document;
@@ -447,7 +447,8 @@ const PAGE_COLLECT = `(() => {
       const opts = boxes.map(optText);
       // the question: the legend, the group's own label, else the group's first line of text that is not an option
       const firstLine = clean(String(grp.innerText || '').split('\\n').map(x => x.trim()).find(x => x && !opts.some(o => o && (x === o || x.indexOf(o) === 0))) || '');
-      const gl0 = legend ? clean(legend.innerText) : (byText || (same.length > 1 ? firstLine : '') || labelOf(el));
+      const around = () => { const own = clean(grp.innerText || ''); let a = grp; for (let k = 0; k < 4 && a; k++) { a = a.parentElement || (a.getRootNode && a.getRootNode().host) || null; if (!a) break; const rest = clean(clean(a.innerText || '').split(own).join(' ')); if (words(rest)) return rest.length <= 300 ? rest : ''; } return ''; };
+      const gl0 = legend ? clean(legend.innerText) : (byText || (same.length > 1 ? firstLine : '') || (boxes.length > 1 || !lone ? around() : '') || labelOf(el));
       const gl = clean(gl0.replace(/\\*/g, '')).length >= 2 ? gl0 : (lone ? opts[0] : gl0);
       out.push({ key: id, id: grp.id || el.name, kind: t === 'checkbox' ? 'checkboxes' : 'radios', label: gl, required: grp.getAttribute('aria-required') === 'true' || boxes.some(b => b.required) || /\\*/.test(gl0),
         name: el.name || '', options: opts, value: boxes.filter(__on).map(optText).join(', '), section: sectionOf(grp) });
