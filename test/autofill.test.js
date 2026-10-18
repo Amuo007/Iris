@@ -127,6 +127,7 @@ test('SMS / WhatsApp opt-ins: no — even when the question mentions email', () 
   const long = 'Would you like to receive communications via SMS and/or WhatsApp to the number provided [above or during the application process] about your application process? Message & data rates may apply and message frequency may vary. If you select no, we will only communicate with you via email and/or telephone calls.'
   assert.strictEqual(plan(long, 'select', ['Yes', 'No']).option, 'No')
   assert.strictEqual(plan(long, 'combobox').do, 'choose')
+  assert.strictEqual(plan('Yes - I consent to receiving text messages', 'radios', ['Yes - I consent to receiving text messages', 'No - I do not consent to receiving text messages']).option, 'No - I do not consent to receiving text messages')
   assert.strictEqual(plan('How did you hear about us? (LinkedIn, a friend, our website …)', 'select', ['LinkedIn', 'Company website', 'Other']).option, 'Company website')
   assert.deepStrictEqual(plan('Email address'), { do: 'text', value: 'a@example.com' })
   assert.deepStrictEqual(plan('LinkedIn Profile URL'), { do: 'text', value: 'https://www.linkedin.com/in/x/' })

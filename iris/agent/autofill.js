@@ -217,7 +217,7 @@ function rulesFor (f) {
     { test: /security clearance/i, skip: /if (yes|so)|list|which|level/i, yesNoOnly: true, choose: NO },
     { test: /^(are you )?(a )?u\.?s\.? citizen\??$|are you a (united states|u\.?s\.?) citizen\??$/i, yesNoOnly: true, choose: f.visaStatus ? NO : null },
     // marketing texts: no — the site still writes by email and phone calls
-    { test: /\bsms\b|text messag|whatsapp/i, yesNoOnly: true, choose: NO },
+    { test: /\bsms\b|text messag|whatsapp/i, choose: [/^no\b/i, /do not consent|don'?t consent|opt out/i], avoid: /^yes\b|i consent to/i },
     // ---- this company
     { test: /(have you|did you)( ever)? (been )?(previously )?(worked|employed|been employed|been engaged)|(current|former) .*(employee|intern|contractor)|do you currently work (for|at)|ever worked (for|at)/i,
       choose: [/never/i, /^no\b/i, /have not|haven'?t/i, /not (worked|been)/i], avoid: /yes/i, text: 'No' },
@@ -338,18 +338,25 @@ const PAGE_COLLECT = `(() => {
     if (/recaptcha/i.test(el.name || el.id || '')) return;
     if (!el.id && !el.name && t !== 'file') return;
     if (t === 'checkbox' || t === 'radio') {
-      const grp = el.closest('fieldset') || el.parentElement.parentElement;
-      const key = (el.name || '') + '|' + (grp && grp.id || '');
+      // one group per name (radios of one question can sit in separate wrappers); its box: the smallest element
+      // holding all of them
+      const same = el.name ? [...form.querySelectorAll('input[type=' + t + '][name="' + CSS.escape(el.name) + '"]')] : [];
+      let grp = el.closest('fieldset') || el.parentElement.parentElement;
+      if (same.length > 1) { grp = el.parentElement; while (grp && !same.every(b => grp.contains(b))) grp = grp.parentElement; grp = grp || document.body; }
+      const key = (el.name || '') + '|' + (grp && grp.id || '') + '|' + (same.length > 1 ? 'name' : '');
       if (seenGroups.has(key)) return; seenGroups.add(key);
-      const boxes = [...grp.querySelectorAll('input[type=' + t + ']')];
+      const boxes = same.length > 1 ? same : [...grp.querySelectorAll('input[type=' + t + ']')];
       const id = 'f' + (++n); grp.setAttribute('data-iris-af', id);
       const legend = grp.querySelector('legend');
       const by = grp.getAttribute('aria-labelledby');
       const byText = by ? clean(by.split(' ').map(i => document.getElementById(i)).filter(Boolean).map(n => n.innerText).join(' ')) : '';
-      const gl = legend ? clean(legend.innerText) : (byText || labelOf(el));
-      const optText = b => { const l = (b.id && document.querySelector('label[for="' + CSS.escape(b.id) + '"]')) || b.closest('label'); return clean(l ? l.innerText : (b.getAttribute('aria-label') || b.value)); };
+      const optText = b => { const l = (b.id && document.querySelector('label[for="' + CSS.escape(b.id) + '"]')) || b.closest('label'); if (l && clean(l.innerText)) return clean(l.innerText); const bl = b.getAttribute('aria-labelledby'); const bt = bl ? clean(bl.split(' ').map(i => document.getElementById(i)).filter(Boolean).map(x => x.innerText).join(' ')) : ''; return bt || clean(b.getAttribute('aria-label') || b.value); };
+      const opts = boxes.map(optText);
+      // the question: the legend, the group's own label, else the group's first line of text that is not an option
+      const firstLine = clean(String(grp.innerText || '').split('\\n').map(x => x.trim()).find(x => x && !opts.some(o => o && (x === o || x.indexOf(o) === 0))) || '');
+      const gl = legend ? clean(legend.innerText) : (byText || (same.length > 1 ? firstLine : '') || labelOf(el));
       out.push({ key: id, id: grp.id || el.name, kind: t === 'checkbox' ? 'checkboxes' : 'radios', label: gl, required: grp.getAttribute('aria-required') === 'true' || boxes.some(b => b.required) || /\\*/.test(gl),
-        options: boxes.map(optText), value: boxes.filter(b => b.checked).map(optText).join(', ') });
+        options: opts, value: boxes.filter(b => b.checked).map(optText).join(', ') });
       return;
     }
     if (!visible(el) && t !== 'file') return;
@@ -365,10 +372,16 @@ const PAGE_COLLECT = `(() => {
       options = [...el.options].filter(o => o.value !== '').map(o => clean(o.text)); value = el.value ? clean(el.options[el.selectedIndex].text) : '';
     } else if (kind === 'file') {
       const box = el.closest('.file-upload, [class*="upload"], .field') || el.parentElement;
-      value = box && /\\.(pdf|docx?|txt|rtf)\\b/i.test(box.innerText) ? clean(box.innerText).slice(0, 80) : '';
+      value = box && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(box.innerText) ? clean(box.innerText).slice(0, 80) : '';
     } else { value = clean(el.value); }
     let label = lab;
-    if (kind === 'file') { const byId = /resume/i.test(el.id) ? 'Resume/CV' : /cover/i.test(el.id) ? 'Cover Letter' : ''; const box = el.closest('div[class*="upload"], .field, fieldset'); const l = !byId && box && box.querySelector('[id$="label"], .upload-label, legend'); label = byId || (lab && !/^(attach|choose file|upload|browse)$/i.test(lab) ? lab : '') || clean(l ? l.innerText : '') || el.id; }
+    if (kind === 'file') {
+      const byId = /resume|\\bcv\\b/i.test(el.id + ' ' + el.name) ? 'Resume/CV' : /cover/i.test(el.id + ' ' + el.name) ? 'Cover Letter' : '';
+      // else the nearest text around the box that names the document ("Resume", "Cover letter")
+      let near = ''; let a = el;
+      for (let k = 0; k < 6 && a && !near; k++) { a = a.parentElement; const tx = a ? clean(a.innerText || '') : ''; const m = tx.match(/(resume|r\u00e9sum\u00e9|\\bcv\\b|curriculum vitae|cover letter)/i); if (m && tx.length < 400) near = /cover/i.test(m[1]) ? 'Cover Letter' : 'Resume/CV'; }
+      label = byId || (lab && !/^(attach|choose file|upload|browse|drop or select)/i.test(lab) && /resume|cv|cover|document/i.test(lab) ? lab : '') || near || lab || el.id;
+    }
     const req = el.required || el.getAttribute('aria-required') === 'true' || /\\*/.test(lab);
     out.push({ key: id, id: el.id || el.name, kind, inputType: t, label: label.replace(/\\s*\\*\\s*$/, ''), required: !!req, value, options });
   });
@@ -418,12 +431,12 @@ function pageOptionRect (key, index) {
 function pageValue (key) {
   return `(() => {
     const el = document.querySelector('[data-iris-af="${key}"]');
-    if (!el) { const box = document.querySelector('[data-iris-afbox="${key}"]'); return box && /\\.(pdf|docx?|txt|rtf)\\b/i.test(box.innerText || '') ? 'attached' : null; }
+    if (!el) { const box = document.querySelector('[data-iris-afbox="${key}"]'); return box && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(box.innerText || '') ? 'attached' : null; }
     const clean = s => String(s || '').replace(/\\s+/g, ' ').trim();
     if (el.getAttribute('role') === 'combobox') { const ctl = el.closest('.select__control') || el.closest('[class*="control"]'); const sv = ctl && ctl.querySelectorAll('[class*="single-value"], [class*="multi-value__label"]'); return sv && sv.length ? [...sv].map(x => clean(x.innerText)).join(', ') : ''; }
     if (el.tagName === 'SELECT') return el.value ? clean(el.options[el.selectedIndex].text) : '';
     if (el.tagName === 'FIELDSET' || el.querySelector) { const boxes = el.querySelectorAll ? [...el.querySelectorAll('input[type=checkbox], input[type=radio]')] : []; if (boxes.length) return boxes.filter(b => b.checked).map(b => { const l = (b.id && document.querySelector('label[for="' + CSS.escape(b.id) + '"]')) || b.closest('label'); return clean(l ? l.innerText : (b.getAttribute('aria-label') || b.value)); }).join(', '); }
-    if (el.type === 'file') { if (el.files && el.files.length) return 'attached'; let n = el; for (let k = 0; k < 6 && n; k++) { n = n.parentElement; if (n && /\\.(pdf|docx?|txt|rtf)\\b/i.test(n.innerText || '')) return 'attached'; } return ''; }
+    if (el.type === 'file') { if (el.files && el.files.length) return 'attached'; let n = el; for (let k = 0; k < 6 && n; k++) { n = n.parentElement; if (n && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(n.innerText || '')) return 'attached'; } return ''; }
     return clean(el.value);
   })()`
 }
