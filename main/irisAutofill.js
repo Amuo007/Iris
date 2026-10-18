@@ -72,8 +72,19 @@ async function irisAfChoose (computer, wc, field, plan, facts) {
   const box = await irisAfEval(wc, irisAutofillLib.pageRect(field.key, 'control'))
   if (!box || box.y < 0 || box.y > box.vh) return { left: 'could not bring it into view' }
   await sleep(150)
+  // open it — and if no list shows: the Down arrow (a box that already had the focus closes on a click), then the
+  // arrow at its right end
+  const listShown = async function () { const o = await irisAfEval(wc, irisAutofillLib.pageOptions(field.key)); return !!(o && o.length) }
   await irisAfClick(computer, wc, box.x, box.y)
   await sleep(350)
+  if (!plan.search && !(await listShown())) {
+    await irisAfKey(wc, 'down')
+    await sleep(350)
+    if (!(await listShown()) && box.right) {
+      await irisAfClick(computer, wc, box.right - 18, box.y)
+      await sleep(350)
+    }
+  }
   let patterns = plan.patterns || []
   if (plan.place) {
     // Greenhouse's city box searches places: the right one names the state and the country
@@ -94,12 +105,23 @@ async function irisAfChoose (computer, wc, field, plan, facts) {
     await irisAfKey(wc, 'escape')
     return { left: 'its list did not open' }
   }
-  const texts = options.map(function (o) { return o.text })
+  let texts = options.map(function (o) { return o.text })
   if (plan.yesNoOnly && !texts.every(function (t) { return /^(yes|no)\b/i.test(t) && t.length <= 12 })) {
     await irisAfKey(wc, 'escape')
     return { left: 'its options are more than yes/no (' + texts.slice(0, 3).join(' / ') + '…): read them and pick' }
   }
-  const i = irisAutofillLib.pickOption(texts, patterns, plan.avoid)
+  let i = irisAutofillLib.pickOption(texts, patterns, plan.avoid)
+  if (i < 0 && plan.search && /\s/.test(plan.search)) {
+    // a search that found nothing that fits: try its first word alone ("University of Houston" → "Houston" lists it too)
+    wc.selectAll()
+    await irisAfType(computer, wc, plan.search.split(/[\s,]+/).filter(function (w) { return w.length > 3 && !/^(university|college|of|the)$/i.test(w) })[0] || plan.search)
+    await sleep(1200)
+    const again = await irisAfEval(wc, irisAutofillLib.pageOptions(field.key))
+    if (again && again.length) {
+      texts = again.map(function (o) { return o.text })
+      i = irisAutofillLib.pickOption(texts, patterns, plan.avoid)
+    }
+  }
   if (i < 0) {
     await irisAfKey(wc, 'escape')
     return { left: 'no option matches the saved answer (' + texts.slice(0, 4).join(' / ') + (texts.length > 4 ? ' …' : '') + ')' }
@@ -177,8 +199,23 @@ async function irisAutofillRun (computer, wc) {
         if (plan.do === 'text') {
           await irisAfEval(wc, irisAutofillLib.pageSetText(field.key, plan.value))
           await sleep(60)
-          const shown = await irisAfEval(wc, irisAutofillLib.pageValue(field.key))
-          result = irisAfNorm(shown) === irisAfNorm(plan.value) ? { set: plan.value } : { left: 'typed it but the box shows "' + (shown || 'nothing') + '"' }
+          let shown = await irisAfEval(wc, irisAutofillLib.pageValue(field.key))
+          if (irisAfNorm(shown) !== irisAfNorm(plan.value)) {
+            // the page did not take it that way (a box that rewrites itself): click in and type it with real keys
+            const at = await irisAfEval(wc, irisAutofillLib.pageRect(field.key, ''))
+            if (at) {
+              await irisAfClick(computer, wc, at.x, at.y)
+              await sleep(120)
+              wc.selectAll()
+              await irisAfType(computer, wc, plan.value)
+              await sleep(150)
+              shown = await irisAfEval(wc, irisAutofillLib.pageValue(field.key))
+            }
+          }
+          // a phone box may reformat the digits: same digits count as the same value
+          const digits = function (v) { return String(v || '').replace(/\D/g, '') }
+          const same = irisAfNorm(shown) === irisAfNorm(plan.value) || (/^[\d\s()+.-]+$/.test(plan.value) && digits(shown) && digits(shown).slice(-10) === digits(plan.value).slice(-10))
+          result = same ? { set: plan.value } : { left: 'typed it but the box shows "' + (shown || 'nothing') + '"' }
         } else if (plan.do === 'choose' && field.kind === 'combobox') {
           result = await irisAfChoose(computer, wc, field, plan, facts)
         } else if (plan.do === 'choose' && field.kind === 'select') {

@@ -323,7 +323,7 @@ function pageRect (key, part) {
     if (!el) return null;
     el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
     const r = el.getBoundingClientRect();
-    return { x: Math.round(r.left + Math.min(r.width / 2, 120)), y: Math.round(r.top + r.height / 2), w: Math.round(r.width), h: Math.round(r.height), vw: innerWidth, vh: innerHeight };
+    return { x: Math.round(r.left + Math.min(r.width / 2, 120)), y: Math.round(r.top + r.height / 2), w: Math.round(r.width), h: Math.round(r.height), left: Math.round(r.left), right: Math.round(r.right), vw: innerWidth, vh: innerHeight };
   })()`
 }
 
