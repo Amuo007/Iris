@@ -2702,6 +2702,28 @@ function startAgent (task, options) {
           session.loggedThisStep = true
         }
       }
+      // the task asks to connect with people on LinkedIn after each application: keep a list of the companies applied to
+      // that still need it, and remind before the next job (a real run: Notion applied, straight on to Skydio)
+      if (type === 'action' && payload.action && computer.jobsMode) {
+        const a1 = payload.action
+        const original1 = (session.items.find(function (it) { return it.kind === 'user' }) || {}).text || ''
+        if (/linkedin/i.test(original1) && /connect|connection|network/i.test(original1)) {
+          const squash = function (v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '') }
+          session.owedConnections = session.owedConnections || []
+          if (a1.type === 'log_application' && a1.status === 'applied' && a1.company) {
+            if (session.owedConnections.indexOf(a1.company) < 0) session.owedConnections.push(a1.company)
+          } else if ((a1.type === 'navigate' || a1.type === 'new_tab') && a1.url) {
+            const u = squash(a1.url)
+            if (/linkedin/.test(u)) {
+              session.owedConnections = session.owedConnections.filter(function (c) { const k = squash(c).slice(0, 8); return !(k && u.indexOf(k) >= 0) })
+            } else if (session.owedConnections.length && /lever|greenhouse|ashby|workday|smartrecruiters|workable|careers|jobs/.test(u)) {
+              computer.notes = (computer.notes || []).concat('Before this next job: your task asks you to connect on LinkedIn with people at each company you applied to — still to do for: ' +
+                session.owedConnections.join(', ') + '. Do that first (about ten steps per company), then come back to this job.')
+              session.owedConnections = []
+            }
+          }
+        }
+      }
       // a sign-up during this run is recorded even if the model forgets save_account
       if (type === 'thought' && payload.thought && /sign ?up|create (an |your |a new )?account|register|create one/i.test(payload.thought)) {
         session.signup = session.signup || { saved: false }
