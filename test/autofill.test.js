@@ -138,6 +138,21 @@ test('privacy notices are acknowledged; agreements are left to the agent', () =>
   assert.strictEqual(plan('By agreeing here I acknowledge the mutual Applicant Arbitration Agreement and the privacy notice', 'select', ['Yes', 'No']).do, 'leave')
 })
 
+test('common questions that follow from the profile', () => {
+  const f3 = af.buildFacts(Object.assign({}, bank, { answers: bank.answers.concat([{ label: 'Years of experience', value: '1 year' }, { label: 'Earliest start date', value: 'December 21, 2026 (subject to OPT approval)' }]) }), info)
+  const p3 = (label, kind, options) => af.planField({ label, kind: kind || 'text', options: options || null, required: true }, f3)
+  assert.strictEqual(p3('Are you able to work onsite 3 days a week?', 'select', ['Yes', 'No']).option, 'Yes')
+  assert.strictEqual(p3('Are you comfortable working in-office five days a week?', 'select', ['Yes', 'No']).option, 'Yes')
+  assert.deepStrictEqual(p3('Earliest start date'), { do: 'text', value: 'December 21, 2026' })
+  assert.strictEqual(p3('How many years of software engineering industry experience do you have (excluding internships)?', 'select', ['Less than 2 years', '2-5 years', '5+ years']).option, 'Less than 2 years')
+  assert.strictEqual(p3('Years of experience', 'select', ['0', '1-3', '3-5', '5+']).option, '1-3')
+  assert.strictEqual(p3('Do you hold an active security clearance?', 'select', ['Yes', 'No']).option, 'No')
+  assert.strictEqual(p3('Are you a U.S. citizen?', 'select', ['Yes', 'No']).option, 'No')
+  assert.strictEqual(p3('Are you a U.S. citizen or permanent resident?', 'select', ['Yes', 'No']).do, 'leave')
+  assert.strictEqual(af.pickYears(['None', 'Under 1 year', '1+ years'], 1), 2)
+  assert.strictEqual(af.pickYears(['0–1 years', '1–2 years'], 1), 0)
+})
+
 test('unknown and optional self-ID questions are left to the agent', () => {
   assert.strictEqual(plan('Do you identify as transgender?', 'select', ['Yes', 'No', 'I don\'t wish to answer'], { required: false }).do, 'leave')
   assert.strictEqual(plan('Do you identify as transgender?', 'select', ['Yes', 'No', 'I don\'t wish to answer']).option, 'I don\'t wish to answer')

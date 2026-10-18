@@ -114,6 +114,7 @@ function buildFacts (bank, info) {
     sponsorFuture: yes(answer(/needs visa sponsorship|future sponsorship/i)) || /future/i.test(answer(/needs visa sponsorship/i)),
     visaStatus: /f-?1/i.test(answer(/work authori[sz]ation|currently requires sponsorship/i)) ? 'F-1' : '',
     relocate: yes(answer(/relocat/i)),
+    years: (function () { const m = answer(/years of experience/i).match(/(\d+(\.\d+)?)/); return m ? parseFloat(m[1]) : null })(),
     startDate: answer(/start date/i),
     gender: answer(/^gender$/i),
     transgender: answer(/transgender/i),
@@ -136,6 +137,21 @@ function pickOption (options, patterns, avoid) {
     for (let i = 0; i < list.length; i++) {
       if (re.test(list[i]) && !(avoid && avoid.test(list[i]))) return i
     }
+  }
+  return -1
+}
+
+/* The option of a years-of-experience list whose range holds n ("0-1", "1-3 years", "Less than 2", "2+", "None"). */
+function pickYears (options, n) {
+  const list = (options || []).map(function (o) { return clean(typeof o === 'string' ? o : o.text) })
+  for (let i = 0; i < list.length; i++) {
+    const t = list[i].toLowerCase().replace(/[–—]/g, '-')
+    let m
+    if ((m = t.match(/(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)/))) { if (n >= +m[1] && n <= +m[2]) return i; continue }
+    if ((m = t.match(/(?:less than|under|fewer than|<)\s*(\d+(?:\.\d+)?)/))) { if (n < +m[1]) return i; continue }
+    if ((m = t.match(/(\d+(?:\.\d+)?)\s*(?:\+|or more|plus|years? or more)/))) { if (n >= +m[1]) return i; continue }
+    if ((m = t.match(/^(\d+(?:\.\d+)?)\s*(years?)?$/))) { if (n === +m[1]) return i; continue }
+    if (/^(none|no experience|0)$/.test(t) && n === 0) return i
   }
   return -1
 }
@@ -190,6 +206,13 @@ function rulesFor (f) {
     { test: /willing to relocate|open to relocat|consider relocat|able to relocate/i, yesNoOnly: true, choose: f.relocate ? YES : null, text: f.relocate ? 'Yes' : '' },
     { test: /salary|compensation|pay (expectation|requirement)|desired (pay|salary)/i, skip: /range for this|posted/i, text: f.salary },
     { test: /(18|eighteen) (years of age|years old)|at least 18|over (the age of )?18/i, yesNoOnly: true, choose: YES },
+    // availability that follows from "willing to relocate": on-site, hybrid, office days, commuting
+    { test: /(able|willing|comfortable|open) (to )?(work(ing)? |be(ing)? )?(on-?site|in(-| )office|in person|hybrid|from (the|our) office|commut\w*|relocat\w*)|work(ing)? (on-?site|in(-| )office|hybrid)\b.*\?|(days|times) (a|per) week in (the )?office/i,
+      skip: /sponsor|authori|citizen|clearance/i, yesNoOnly: true, choose: f.relocate ? YES : null },
+    { test: /(earliest|available) (start|to start)|start date|when can you start|availability to start/i, skip: /month|year/i, text: f.startDate ? f.startDate.replace(/\s*\(.*\)\s*$/, '') : '' },
+    { test: /years of (professional |relevant |industry |software |work )*(engineering |industry )?experience|how many years/i, pick: f.years !== null ? function (opts) { return pickYears(opts, f.years) } : null, text: f.years !== null ? String(f.years) : '' },
+    { test: /security clearance/i, skip: /if (yes|so)|list|which|level/i, yesNoOnly: true, choose: NO },
+    { test: /^(are you )?(a )?u\.?s\.? citizen\??$|are you a (united states|u\.?s\.?) citizen\??$/i, yesNoOnly: true, choose: f.visaStatus ? NO : null },
     // marketing texts: no — the site still writes by email and phone calls
     { test: /\bsms\b|text messag|whatsapp/i, yesNoOnly: true, choose: NO },
     // ---- this company
@@ -250,6 +273,15 @@ function planField (field, facts, mode) {
   if (rule.onlyIfRequired && !field.required) return { do: 'leave', why: 'optional, no saved answer' }
   const choose = typeof rule.choose === 'function' ? rule.choose(label) : rule.choose
   const isChoice = field.kind === 'combobox' || field.kind === 'select' || field.kind === 'radios' || field.kind === 'checkboxes'
+  if (isChoice && rule.pick) {
+    // a list judged by a function (years of experience ranges)
+    if (field.options && field.options.length) {
+      const i = rule.pick(field.options)
+      return i < 0 ? { do: 'leave', why: 'no option fits' } : { do: 'choose', option: clean(field.options[i]), pick: rule.pick }
+    }
+    return { do: 'choose', pick: rule.pick, patterns: [] }
+  }
+  if (isChoice && rule.pick === null && rule.test.test(label) && rulesFor.length) return { do: 'leave', why: 'no saved answer' }
   if (isChoice) {
     if (!choose) {
       // a box that searches as you type (School, a city): the text is what to search for
@@ -422,6 +454,7 @@ const PAGE_SCROLL_TOP = `(() => { const f = document.querySelector('[data-iris-a
 
 module.exports = {
   AUTOFILL_HOSTS,
+  pickYears,
   autofillAllowed,
   parseAddress,
   buildFacts,

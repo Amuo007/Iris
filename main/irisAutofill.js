@@ -110,7 +110,7 @@ async function irisAfChoose (computer, wc, field, plan, facts) {
     await irisAfKey(wc, 'escape')
     return { left: 'its options are more than yes/no (' + texts.slice(0, 3).join(' / ') + '…): read them and pick', seen: texts }
   }
-  let i = irisAutofillLib.pickOption(texts, patterns, plan.avoid)
+  let i = plan.pick ? plan.pick(texts) : irisAutofillLib.pickOption(texts, patterns, plan.avoid)
   if (i < 0 && plan.search && /\s/.test(plan.search)) {
     // a search that found nothing that fits: try its first word alone ("University of Houston" → "Houston" lists it too)
     wc.selectAll()
