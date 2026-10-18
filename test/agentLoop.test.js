@@ -944,3 +944,15 @@ test('working on the same spot again and again gets a nudge, then "leave this jo
   assert.match(h.msgs, /worked on the same spot \d+ times lately/)
   assert.match(h.msgs, /STUCK: you have worked on the same spot/)
 })
+
+test('the same look-up twice in a run is not run again', async () => {
+  let calls = 0
+  const h = harness([
+    JSON.stringify({ thought: 'search', action: { type: 'lookup', kind: 'web', query: 'site:jobs.lever.co software engineer intern' } }),
+    JSON.stringify({ thought: 'search again', action: { type: 'lookup', kind: 'web', query: 'site:jobs.lever.co  Software Engineer Intern' } }),
+    (ctx) => { h.msgs = JSON.stringify(ctx.messages); return json('done', { type: 'done', answer: 'ok' }) }
+  ], null, { lookup: async () => { calls++; return { ok: true, text: 'results', count: 1, items: [] } } })
+  await h.agent.run('find jobs')
+  assert.strictEqual(calls, 1)
+  assert.match(h.msgs, /already looked this up/)
+})

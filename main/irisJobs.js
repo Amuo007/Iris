@@ -441,6 +441,10 @@ function irisJobsPrompt (task, mode) {
     '   "query":"site:jobs.lever.co software engineer new grad 2027"}), a public new-grad list read as text (a page',
     '   look-up of its raw file), or one board\'s openings at once ({"kind":"jobs","query":"jobs.lever.co/<company> <role',
     '   words>"}). Open the browser to apply, or only when look-ups find nothing; never guess a company\'s board address.',
+    '   Rich sources of fresh US new-grad / intern openings with direct links: the public GitHub lists (e.g. SimplifyJobs',
+    '   New-Grad-Positions and Summer internship lists) — read one as a page look-up of its raw README, take the newest',
+    '   rows you have not handled, and work down them. Do not repeat the same search: if it shows only jobs you handled,',
+    '   change source.',
     '   When the user names boards or job links, work only on those: once every opening there is handled, finish',
     '   with done — do not go looking on other boards or sites you know.',
   ].concat(tailoring ? [

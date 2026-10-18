@@ -101,6 +101,7 @@ function createAgent (opts) {
   let lastAnswer = ''
   let finishChecked = false
   let runLookups = 0
+  let lookupsAsked = new Set() // queries already looked up in this run: the same one again finds the same
   let smartLevel = null
   let asking = false // paused on an ask_user question (may time out in a non-stop run)
   let strictNudgeAt = -100 // judgements counted when Iris was last told to be stricter
@@ -285,6 +286,7 @@ function createAgent (opts) {
     planActive = false
     finishChecked = false
     runLookups = 0
+    lookupsAsked = new Set()
     smartLevel = runOptions && runOptions.plan ? (runOptions.plan === 'deep' ? 'deep' : 'quick') : null
     if (runOptions && runOptions.plan) {
       emit('plan:start', { level: smartLevel })
@@ -785,6 +787,13 @@ function createAgent (opts) {
         history.addSystemNote('You have used all ' + cfg.runLookups + ' look-ups for this task. Use the browser.')
         return { stopBatch: true }
       }
+      const qKey = (action.kind || 'web') + ':' + String(action.query || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+      if (lookupsAsked.has(qKey)) {
+        history.addSystemNote('You already looked this up in this run ("' + action.query + '"): it finds the same. Act on its results — open one ' +
+          'you have not handled — or use a DIFFERENT source (another board, a public list of openings read as a page look-up).')
+        return { stopBatch: true }
+      }
+      lookupsAsked.add(qKey)
       runLookups++
       const req = { kind: action.kind || 'web', query: action.query }
       emit('lookup', { step: state.step, kind: req.kind, query: req.query })
