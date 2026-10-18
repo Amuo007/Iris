@@ -68,6 +68,23 @@ function irisAfShows (shown, option) {
 
 /* A react-select dropdown: open it with a real click, (type to search,) read its options, click the one the rule
    picks, read back what it shows. Returns the option chosen, or a reason it was left. */
+/* The options of a list that shows them only while open (Greenhouse's dropdowns): opened, read, closed. */
+async function irisAfPeekOptions (computer, wc, field) {
+  const box = await irisAfEval(wc, irisAutofillLib.pageRect(field.key, 'control'))
+  if (!box || box.y < 0 || box.y > box.vh) return null
+  await irisAfClick(computer, wc, box.x, box.y)
+  await sleep(350)
+  let options = await irisAfEval(wc, irisAutofillLib.pageOptions(field.key))
+  if (!options || !options.length) {
+    await irisAfKey(wc, 'down')
+    await sleep(350)
+    options = await irisAfEval(wc, irisAutofillLib.pageOptions(field.key))
+  }
+  await irisAfKey(wc, 'escape')
+  await sleep(150)
+  return options && options.length ? options.map(function (o) { return String(o.text || '').trim() }).filter(Boolean) : null
+}
+
 async function irisAfChoose (computer, wc, field, plan, facts) {
   const box = await irisAfEval(wc, irisAutofillLib.pageRect(field.key, 'control'))
   if (!box || box.y < 0 || box.y > box.vh) return { left: 'could not bring it into view' }
@@ -421,6 +438,15 @@ async function irisAutofillRun (computer, wc) {
     const rest = left.filter(function (l) { return !l.quiet && l.field.label && l.field.kind !== 'file' && !/already filled|section:|optional box|resume import|a document other/i.test(l.why || '') })
     if (rest.length && Date.now() - started < 120000) {
       let asked = null
+      // a dropdown whose options show only while open: read them first, so the answer is one of them (a real
+      // Greenhouse form: "Central Time (US & Canada)" for a list of "UTC-6: …", the user's name for a Yes / No)
+      for (const l of rest) {
+        if (l.field.kind !== 'combobox' || (l.field.options && l.field.options.length) || Date.now() - started > 90000) continue
+        try {
+          const seen = await irisAfPeekOptions(computer, wc, l.field)
+          if (seen) l.field.options = seen
+        } catch (e) { /* only a look */ }
+      }
       try { asked = await irisAfAnswerRest(computer, wc, rest.map(function (l) { return l.field }), wc.getTitle()) } catch (e) { DBUG('autofill: model answers failed: ' + e.message) }
       const answers = (asked && asked.answers) || {}
       // every number of 3+ digits in an answer must be the user's own (a real run wrote the university's zip, 77004, for
