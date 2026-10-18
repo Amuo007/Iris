@@ -438,6 +438,11 @@ function validateAction (obj, limits) {
     return n
   }
 
+  // the text under another name ("value", "content", "string"): it is still what to type
+  if (type === 'type' && obj.text === undefined) {
+    const named = ['value', 'content', 'string', 'input_text', 'inputText'].find(function (k) { return typeof obj[k] === 'string' })
+    if (named) obj = Object.assign({}, obj, { text: obj[named] })
+  }
   if (type === 'type' && obj.enter === undefined) {
     const alias = obj.submit !== undefined ? obj.submit : (obj.press_enter !== undefined ? obj.press_enter : obj.pressEnter)
     if (alias !== undefined) obj = Object.assign({}, obj, { enter: alias })
@@ -449,6 +454,8 @@ function validateAction (obj, limits) {
   for (const field of spec.required.concat(spec.optional)) {
     const value = get(field)
     const isRequired = spec.required.includes(field)
+    // typing nothing into a box at a spot clears it (a date box that took the digits wrong)
+    if (type === 'type' && field === 'text' && value === '' && get('x') !== undefined) { action.text = ''; continue }
     if (value === undefined || value === null || value === '') {
       if (isRequired) errors.push(`missing required field "${field}" for action "${type}"`)
       continue
@@ -801,7 +808,7 @@ const ACTION_SPEC_TEXT = [
   '  drag         {"fromX":int,"fromY":int,"toX":int,"toY":int}',
   '  type         {"text":str,"x":int?,"y":int?,"clear":bool?,"enter":bool?}',
   '               clicks (x,y) first when given, then REPLACES the text already in the field',
-  '               ("clear":false adds to it instead);',
+  '               ("clear":false adds to it instead); "text":"" with x,y empties the field;',
   '               enter:true presses Enter after typing (submits searches and forms)',
   '  key          {"key":"enter|tab|escape|backspace|delete|up|down|left|right|pagedown|pageup|home|end|a..z","modifiers":["command"|"shift"]?}',
   '               (command+a/c/v/x/z work: select all, copy, paste, cut, undo)',

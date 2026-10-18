@@ -172,3 +172,10 @@ test('typed letters keep their case (passwords!)', () => {
   const plan = planInputEvents({ type: 'type', text: 'Tq7-blue-HARBOR@x.test' })
   assert.strictEqual(plan.filter(p => p.event.type === 'char').map(p => p.event.keyCode).join(''), 'Tq7-blue-HARBOR@x.test')
 })
+
+test('typing nothing into a box selects all and deletes it', () => {
+  const plan = planInputEvents({ type: 'type', x: 10, y: 20, text: '' })
+  assert.ok(plan.some(s => s.command === 'selectAll'))
+  assert.ok(plan.some(s => s.event && s.event.type === 'keyDown' && s.event.keyCode === 'Backspace'))
+  assert.ok(!plan.some(s => s.event && s.event.type === 'char'))
+})

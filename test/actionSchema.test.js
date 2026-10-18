@@ -317,3 +317,13 @@ test('a list whose items are each wrapped as {"action":{…}} is read', () => {
   const f = parseAction('{"thought":"fill","actions":[{"action":{"type":"type","x":10,"y":20,"text":"Jordan"}},{"action":{"type":"type","x":10,"y":60,"text":"Lee"}}]}', LIMITS)
   assert.deepStrictEqual(f.actions.map(a => a.text), ['Jordan', 'Lee'])
 })
+
+test('typing nothing at a spot clears the box; text under another name is still typed', () => {
+  const cleared = validateAction({ type: 'type', x: 100, y: 200, text: '' }, LIMITS)
+  assert.strictEqual(cleared.ok, true)
+  assert.strictEqual(cleared.action.text, '')
+  assert.strictEqual(validateAction({ type: 'type', text: '' }, LIMITS).ok, false)
+  const named = validateAction({ type: 'type', x: 100, y: 200, value: '05/2026' }, LIMITS)
+  assert.strictEqual(named.ok, true)
+  assert.strictEqual(named.action.text, '05/2026')
+})

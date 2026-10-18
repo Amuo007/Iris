@@ -246,6 +246,11 @@ function planInputEvents (action, opts) {
       if (replace && (action.x !== undefined || action.clear === true)) {
         // Edit ▸ Select All, then the typed text replaces the selection
         add({ command: 'selectAll' }, 40)
+        // nothing to type: clear the box
+        if (action.text === '') {
+          add({ type: 'keyDown', keyCode: 'Backspace' })
+          add({ type: 'keyUp', keyCode: 'Backspace' }, 20)
+        }
       }
       for (const ch of action.text) {
         if (isWhitespaceChar(ch)) {
@@ -255,6 +260,13 @@ function planInputEvents (action, opts) {
           } else {
             enterEvents(add)
           }
+        } else if (/[0-9]/.test(ch) && !mods) {
+          // a digit is typed as a whole key press, a little slower: masked and split date boxes (Workday's MM/YYYY,
+          // Paylocity's MM/DD/YYYY) read key presses and jump to the next part after two digits — typed at 8 ms the
+          // digits during the jump were lost ("052026" became 05/0006 on a real Workday form)
+          add({ type: 'keyDown', keyCode: ch })
+          add({ type: 'char', keyCode: ch })
+          add({ type: 'keyUp', keyCode: ch }, 60)
         } else {
           // `char` is what actually inserts text into a focused field, and Electron inserts
           // its keyCode verbatim — so it must be the character itself. (A key name such as

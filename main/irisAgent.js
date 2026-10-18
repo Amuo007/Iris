@@ -2741,11 +2741,23 @@ function startAgent (task, options) {
     // a non-stop run that hit trouble overnight picks itself back up (only Stop ends it)
     if (mode === 'continuous' && result.status === 'failed' && (session.autoResumes || 0) < 50) {
       session.autoResumes = (session.autoResumes || 0) + 1
+      // where it failed: a page that failed the run twice in a row is a dead end — leave that job, do not walk
+      // back into it (a real night: 50 restarts on one Workday form)
+      const lastStep = session.items.slice().reverse().find(function (it) { return it.kind === 'step' && it.url })
+      const failUrl = lastStep ? String(lastStep.url).split('?')[0] : ''
+      session.sameFails = failUrl && failUrl === session.lastFailUrl ? (session.sameFails || 1) + 1 : 1
+      session.lastFailUrl = failUrl
+      const why = String(result.reason || '').slice(0, 160)
+      const leave = session.sameFails >= 2
+        ? ' That page (' + failUrl.slice(0, 160) + ') has now failed ' + session.sameFails + ' times: give up on that job — log_application ' +
+          '{"status":"needs_you","note":"' + why.replace(/"/g, '\'') + '"} for it — and go on to the next one; do not open that page again.'
+        : ''
       broadcastEvent({ type: 'repeat:scheduled', at: Date.now() + 60000, minutes: 1, sessionId: session.id, resume: true })
       irisRepeatTimer = setTimeout(function () {
         irisRepeatTimer = null
         const tabId = irisComputer ? irisComputer.tabId : options.tabId
-        const again = startAgent('Something went wrong (' + String(result.reason || '').slice(0, 160) + '). Continue the task from where you left off: ' + task,
+        // always the user's own words, never the previous restart's message (they nested 50 deep)
+        const again = startAgent('Something went wrong (' + why + ').' + leave + ' Continue the task from where you left off: ' + original.text,
           Object.assign({}, options, { tabId: tabId, sessionId: session.id }))
         if (!again.ok) DBUG('auto-resume failed: ' + again.error)
       }, 60000)
