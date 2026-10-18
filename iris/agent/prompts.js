@@ -257,6 +257,17 @@ function correctionMessage (error, limits) {
   ].join(' ')
 }
 
+/* Before giving up on something: stop, name what blocks it, think of other ways (a look-up of how others do it on
+   this site among them), pick one — and leave it if that fails too. */
+function rethinkNote (why) {
+  return why + ' Before you try again, stop and rethink, in your thought: 1) What exactly is not working (which box or ' +
+    'button, what it shows)? 2) Two or three DIFFERENT ways to get past it — the keyboard (click, type, Enter/Tab), ' +
+    '{"type":"choose"} or {"type":"fill"} by the field\'s label, another fitting option, a zoom to see it better, or a ' +
+    'look-up of how this is done on this site ({"type":"lookup","kind":"web","query":"<site> <what> how to"}). 3) Pick ' +
+    'the most promising one and do it. If that fails as well, skip it if it is optional, else leave this job (log ' +
+    'needs_you with the reason) and go on — do not keep trying.'
+}
+
 function failureMessage (error) {
   return 'The previous action failed: ' + error + '. Look at the newest screenshot and try a different approach.'
 }
@@ -307,6 +318,7 @@ module.exports = {
   loadingWarning,
   correctionMessage,
   failureMessage,
+  rethinkNote,
   takeoverMessage,
   finishReminder
 }

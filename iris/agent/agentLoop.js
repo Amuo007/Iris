@@ -387,6 +387,8 @@ function createAgent (opts) {
     let aims = []
     let stuckWarned = 0
     let aimsUrl = ''
+    let pageSince = 0
+    let pageTimeWarned = 0
     let lastFailed = false
     asking = false
 
@@ -603,7 +605,7 @@ function createAgent (opts) {
       lastActed = batch[batch.length - 1]
 
       const pageKey = String(obs.url || '').split('?')[0]
-      if (pageKey !== aimsUrl) { aims = []; stuckWarned = 0; aimsUrl = pageKey }
+      if (pageKey !== aimsUrl) { aims = []; stuckWarned = 0; aimsUrl = pageKey; pageSince = now(); pageTimeWarned = 0 }
       batch.forEach(function (a) {
         if (a && typeof a.x === 'number' && typeof a.y === 'number' && /^(click|double_click|type)$/.test(a.type)) aims.push(Math.round(a.x / 60) + ',' + Math.round(a.y / 45))
       })
@@ -618,11 +620,20 @@ function createAgent (opts) {
           'would not take what>"} — and go on to the next one. (Only if it is a Next/Continue button on a new page each time, carry on.)')
       } else if (in8 >= 4 && stuckWarned < 1) {
         stuckWarned = 1
-        history.addSystemNote('You have worked on the same spot ' + in8 + ' times lately without getting past it. Do not try it the same way ' +
-          'again. Do what a person would: use the keyboard (click it, type the value, press Enter or Tab), pick another fitting option, ' +
-          'leave it if it is optional, or if it is required and still will not take it, log needs_you for this job and go on.')
+        history.addSystemNote(prompts.rethinkNote('You have worked on the same spot ' + in8 + ' times lately without getting past it.'))
       } else if (in8 <= 2) {
         stuckWarned = 0
+      }
+
+      // one page (an application) for a long time: rethink at 30 minutes, leave it at 60
+      const onPage = pageSince ? now() - pageSince : 0
+      if (onPage > 60 * 60000 && pageTimeWarned < 2) {
+        pageTimeWarned = 2
+        history.addSystemNote('TIME: you have been on this page for over an hour. Leave it now: if it is a job application, log_application ' +
+          '{"status":"needs_you","note":"<what blocked it>"}; then go on with the rest of the task.')
+      } else if (onPage > 30 * 60000 && pageTimeWarned < 1) {
+        pageTimeWarned = 1
+        history.addSystemNote(prompts.rethinkNote('You have been on this page for over 30 minutes.'))
       }
 
       if (stopRequested) return finish('stopped', stopRequested)
