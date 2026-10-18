@@ -700,6 +700,10 @@ settings.listen('irisLookupNever', function () { irisLookupInstance = null })
 async function irisDoLookup (req) {
   const result = await irisLookup().lookup(req, {
     annotate: function (it) {
+      // a job in the applications log (any day, any status) is handled — the fresh job lists leave it out (a real run
+      // was sent to Faraday Future and Axon, applied to days before)
+      const app = it.url && /^https?:/.test(it.url) ? irisApplicationFind({ url: it.url }) : null
+      if (app) return 'you logged this job "' + app.status + '" on ' + new Date(app.updated || app.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
       const note = irisSeenNote(it.url || '', (it.id || '') + ' ' + (it.title || ''), irisSession && irisSession.id)
       return note ? 'you ' + note : null
     }
