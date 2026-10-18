@@ -2601,6 +2601,23 @@ function startAgent (task, options) {
     history: { keepImages: cfg.keepImages, maxMessages: unlimited ? 30 : 40 },
     log: DBUG,
     onEvent: function (type, payload) {
+      // training data: each step's model input (text, the screenshot as a marker) and raw answer, one line per step in
+      // <userData>/iris-train/<session>.jsonl; the long system prompt once per run in its own file, by hash
+      if (type === 'model:io') {
+        try {
+          const dir = path.join(userDataPath, 'iris-train')
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+          const sys = (payload.messages || []).filter(function (m) { return m.role === 'system' }).map(function (m) { return m.content }).join('\n\n')
+          const hash = require('crypto').createHash('sha1').update(sys).digest('hex').slice(0, 12)
+          const sysFile = path.join(dir, 'system-' + hash + '.txt')
+          if (sys && !fs.existsSync(sysFile)) fs.writeFileSync(sysFile, sys)
+          fs.appendFileSync(path.join(dir, session.id + '.jsonl'), JSON.stringify({
+            at: Date.now(), run: session.run || 1, step: payload.step, ok: payload.ok, system: hash,
+            messages: (payload.messages || []).filter(function (m) { return m.role !== 'system' }), reply: payload.raw
+          }) + '\n')
+        } catch (e) { DBUG('train record failed: ' + e.message) }
+        return
+      }
       if (type === 'run:start') { irisUsageRecord('task'); session.runUrls = []; session.runStartedAt = Date.now() }
       // a jobs run ends with the Applications list itself, so the summary cannot misremember a job or a reason
       if (type === 'run:end' && payload.status === 'done' && computer.jobsMode) {

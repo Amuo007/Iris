@@ -512,13 +512,15 @@ function createAgent (opts) {
       // ---- 4. think ----------------------------------------------------------
       const stepThinking = thinkingFor(obs, unchanged, lastActed, lastFailed)
       let raw
+      let sent = null
       safety.beforeModelCall()
       emit('model:start', { step: state.step })
       try {
         const extra = typeof cfg.systemExtra === 'function' ? cfg.systemExtra() : cfg.systemExtra
         // { stable, live }: the stable part opens the prompt (cached), the live part goes last
         const split = extra && typeof extra === 'object' ? extra : { stable: extra, live: '' }
-        raw = await modelNext(history.messages(split.stable || undefined, split.live || undefined), state.step, obs, stepThinking)
+        sent = history.messages(split.stable || undefined, split.live || undefined)
+        raw = await modelNext(sent, state.step, obs, stepThinking)
       } catch (err) {
         if (stopRequested) return finish('stopped', stopRequested)
         const message = err && err.message ? err.message : String(err)
@@ -565,6 +567,19 @@ function createAgent (opts) {
 
       // ---- 5. parse ----------------------------------------------------------
       const parsed = parseAction(text, { imageWidth: obs.width, imageHeight: obs.height })
+      // for training data: what the model was given (text; the screenshot as a marker) and what it answered
+      if (sent) {
+        emit('model:io', {
+          step: state.step,
+          ok: !!parsed.ok,
+          raw: text,
+          messages: sent.map(function (m) {
+            const c = typeof m.content === 'string' ? m.content
+              : Array.isArray(m.content) ? m.content.map(function (p) { return p && p.type === 'text' ? p.text : '[screenshot]' }).join('\n') : ''
+            return { role: m.role, content: c }
+          })
+        })
+      }
       if (!parsed.ok) {
         const gate = safety.noteRetry(parsed.error)
         emit('rejected', { step: state.step, error: parsed.error, raw: text })
