@@ -525,6 +525,8 @@ function irisJobsPrompt (task, mode) {
     '   self-identification (gender, race, Hispanic/Latino, veteran, disability): use the saved answer when there is one',
     '   (a race answer that names no Hispanic or Latino origin is No to "Are you Hispanic/Latino?"); with none, leave it',
     '   empty unless required, then "Decline to self-identify".',
+    '   Work history / employment / education sections: an employer\'s or school\'s address is ITS city and state (from the',
+    '   profile, e.g. Houston, TX) — never the user\'s home street address; leave a street box there empty if not known.',
     '   SMS / WhatsApp / text-message opt-ins: No (the company still writes by email and calls). Cookie banners: "Reject" /',
     '   "Necessary only" / close it; accept all only when nothing else lets you go on.',
     '   "How did you hear about us?": where you found the posting (the company\'s own site → Company Website; a job board →',
