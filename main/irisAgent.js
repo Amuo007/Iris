@@ -2262,6 +2262,9 @@ function irisSessionList () {
   return list.slice(0, 300)
 }
 
+/* when the model last read that LinkedIn's free invitation notes are used up (they come back monthly) */
+let irisLinkedinNotesOutAt = 0
+
 /* thoughts in a row that say a field "still has an error" (see irisRecord) */
 var irisStaleErrors = 0
 
@@ -2733,6 +2736,13 @@ function startAgent (task, options) {
       // "submitted — now log it and go on" with no log_application among the actions: remind it at once (real run:
       // Shield AI applied, then straight to LinkedIn — the application was never logged)
       if (type === 'thought') { session.lastThought = String(payload.thought || ''); session.loggedThisStep = false }
+      // LinkedIn's free notes used up (the model read it in the invitation dialog): from then on a hint on each LinkedIn
+      // visit, so it clicks "Send without a note" at once (a real run: "Add a note", then closing it cancelled the invitation)
+      if (type === 'thought' && /\bno (free |more )?(custom |personali[sz]ed )?(notes?|invitations? with a note)\b[^.]{0,30}\b(left|remaining|available)|\bno (free |more )?personali[sz]ed (invitations?|messages?)\b[^.]{0,20}\b(left|remaining)|out of (free )?(custom |personali[sz]ed )?notes|(notes?|personali[sz]ed invitations?)[^.]{0,20}\b(used up|limit reached|run out)/i.test(payload.thought || '')) irisLinkedinNotesOutAt = Date.now()
+      if (type === 'action' && payload.action && computer.jobsMode && Date.now() - irisLinkedinNotesOutAt < 24 * 3600000 &&
+        (payload.action.type === 'navigate' || payload.action.type === 'new_tab') && /linkedin\.com/i.test(payload.action.url || '')) {
+        computer.notes = (computer.notes || []).concat('LinkedIn\'s free notes are used up: after Connect, click "Send without a note" straight away (opening "Add a note" and closing it cancels the invitation).')
+      }
       if (type === 'action' && payload.action && computer.jobsMode) {
         const a0 = payload.action
         if (a0.type === 'log_application') session.loggedThisStep = true
