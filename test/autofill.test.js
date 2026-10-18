@@ -25,13 +25,26 @@ const info = [{ label: 'Address', value: '17723 quiet loch ln houston TX 77084' 
 const facts = af.buildFacts(bank, info)
 const plan = (label, kind, options, extra) => af.planField(Object.assign({ label, kind: kind || 'text', options: options || null, required: true }, extra || {}), facts)
 
-test('only Greenhouse forms, never LinkedIn', () => {
-  assert.strictEqual(af.autofillAllowed('https://job-boards.greenhouse.io/doordashusa/jobs/1').ok, true)
-  assert.strictEqual(af.autofillAllowed('https://job-boards.greenhouse.io/embed/job_app?for=x&token=1').ok, true)
+test('every site but LinkedIn; Greenhouse in full, the rest basic', () => {
+  assert.strictEqual(af.autofillAllowed('https://job-boards.greenhouse.io/doordashusa/jobs/1').mode, 'full')
+  assert.strictEqual(af.autofillAllowed('https://job-boards.greenhouse.io/embed/job_app?for=x&token=1').mode, 'full')
   assert.strictEqual(af.autofillAllowed('https://www.linkedin.com/jobs/view/1').ok, false)
+  assert.strictEqual(af.autofillAllowed('https://linkedin.com/jobs/view/1').ok, false)
   assert.match(af.autofillAllowed('https://www.linkedin.com/jobs/view/1').why, /LinkedIn/)
-  assert.strictEqual(af.autofillAllowed('https://jobs.lever.co/x/1/apply').ok, false)
-  assert.strictEqual(af.autofillAllowed('https://evil.example/greenhouse.io').ok, false)
+  assert.strictEqual(af.autofillAllowed('https://apply.workable.com/x/j/1/apply').mode, 'basic')
+  assert.strictEqual(af.autofillAllowed('https://jobs.lever.co/x/1/apply').mode, 'basic')
+  assert.strictEqual(af.autofillAllowed('https://acme.wd5.myworkdayjobs.com/x').mode, 'basic')
+  assert.strictEqual(af.autofillAllowed('https://evil.example/greenhouse.io').mode, 'basic')
+  assert.strictEqual(af.autofillAllowed('file:///etc/passwd').ok, false)
+})
+
+test('basic mode leaves custom dropdowns to the agent', () => {
+  assert.strictEqual(af.planField({ label: 'Gender', kind: 'combobox', required: true }, facts, 'basic').do, 'leave')
+  assert.strictEqual(af.planField({ label: 'First name', kind: 'text', required: true }, facts, 'basic').value, 'Amrinder')
+  assert.strictEqual(af.planField({ label: 'Will you need to relocate for this position?', kind: 'radios', options: ['Yes', 'No'], required: true }, facts, 'basic').do, 'leave')
+  assert.strictEqual(af.planField({ label: 'Are you willing to relocate?', kind: 'radios', options: ['Yes', 'No'], required: true }, facts, 'basic').option, 'Yes')
+  assert.strictEqual(af.planField({ label: 'Have you been previously employed by Sigma Defense, Solute, EWA, JUNO or Sub U?', kind: 'text', required: true }, facts, 'basic').value, 'No')
+  assert.strictEqual(af.planField({ label: 'What are your salary requirements?', kind: 'text', required: true }, facts, 'basic').value, 'Open to negotiation (entry level)')
 })
 
 test('facts come from the profile, the address from My info', () => {

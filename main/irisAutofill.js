@@ -193,7 +193,7 @@ async function irisAutofillRun (computer, wc) {
   try {
     for (const field of fields) {
       if (Date.now() - started > 120000) { left.push({ field: field, why: 'autofill ran out of time' }); continue }
-      const plan = irisAutofillLib.planField(field, facts)
+      const plan = irisAutofillLib.planField(field, facts, allowed.mode)
       let result = null
       try {
         if (plan.do === 'text') {

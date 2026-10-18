@@ -5,23 +5,35 @@
  * user's facts are, and which value or option each standard field gets. No Electron here (main/irisAutofill.js
  * runs it in the page), so all of it is tested with plain node.
  *
- * The user's rule (2026-10-17): a Simplify-like fill is fine on application sites, never on LinkedIn or a site
- * where the user is signed in. Only fields with a fact behind them are filled — a deterministic answer from the
+ * The user's rule (2026-10-17): a Simplify-like fill is fine on every site but LinkedIn (there Iris works only from
+ * screenshots, as before). Only fields with a fact behind them are filled — a deterministic answer from the
  * profile or the saved answers, never a guess; everything else (essays, agreements, odd questions) is left to
  * the agent, which also checks every filled value on the screenshot before it submits.
  */
 
-/* Application sites the tool knows. Greenhouse first: its forms share one layout (react-select dropdowns,
-   label[for] labels, fieldset groups, a hidden file input per document). */
-const AUTOFILL_HOSTS = [/(^|\.)greenhouse\.io$/i]
+/* Application sites the tool knows. Greenhouse in full: its forms share one layout (react-select dropdowns,
+   label[for] labels, fieldset groups, a hidden file input per document). The others in a basic mode: plain text
+   boxes, native dropdowns, radio/checkbox groups and the resume — their custom dropdowns are left to the agent. */
+const AUTOFILL_HOSTS = [
+  { re: /(^|\.)greenhouse\.io$/i, mode: 'full' },
+  { re: /^apply\.workable\.com$/i, mode: 'basic' },
+  { re: /(^|\.)smartrecruiters\.com$/i, mode: 'basic' },
+  { re: /^ats\.rippling\.com$/i, mode: 'basic' },
+  { re: /^recruiting\.paylocity\.com$/i, mode: 'basic' },
+  { re: /\.applytojob\.com$/i, mode: 'basic' },
+  { re: /^jobs\.ashbyhq\.com$/i, mode: 'basic' },
+  { re: /^jobs\.lever\.co$/i, mode: 'basic' }
+]
 const AUTOFILL_BLOCKED = [/(^|\.)linkedin\.com$/i, /linkedin/i]
 
 function autofillAllowed (url) {
   let host = ''
   try { host = new URL(url).hostname } catch (e) { return { ok: false, why: 'no page is open' } }
   if (AUTOFILL_BLOCKED.some(function (re) { return re.test(host) })) return { ok: false, why: 'autofill never runs on LinkedIn: fill this by hand' }
-  if (!AUTOFILL_HOSTS.some(function (re) { return re.test(host) })) return { ok: false, why: 'autofill only knows Greenhouse forms so far: fill this one by hand' }
-  return { ok: true, host: host }
+  // any other site: the basic mode (the user, 2026-10-17: everywhere but LinkedIn)
+  const site = AUTOFILL_HOSTS.find(function (h) { return h.re.test(host) }) || { mode: 'basic' }
+  if (!/^https?:$/.test(new URL(url).protocol)) return { ok: false, why: 'not a web page' }
+  return { ok: true, host: host, mode: site.mode }
 }
 
 /* ---------- the user's facts ---------- */
@@ -172,11 +184,12 @@ function rulesFor (f) {
     // ---- authorization and sponsorship (plain yes/no boxes only; long option lists go to the agent)
     { test: /(legally )?(authori[sz]ed|eligible) to work|work authori[sz]ation|right to work/i, skip: /sponsor/i, choose: f.workAuthorized ? YES : null, yesNoOnly: true },
     { test: /sponsor/i, yesNoOnly: true, choose: sponsorChoice(f) },
-    { test: /relocat/i, yesNoOnly: true, choose: f.relocate ? YES : null },
+    { test: /willing to relocate|open to relocat|consider relocat|able to relocate/i, yesNoOnly: true, choose: f.relocate ? YES : null, text: f.relocate ? 'Yes' : '' },
+    { test: /salary|compensation|pay (expectation|requirement)|desired (pay|salary)/i, skip: /range for this|posted/i, text: f.salary },
     { test: /(18|eighteen) (years of age|years old)|at least 18|over (the age of )?18/i, yesNoOnly: true, choose: YES },
     // ---- this company
-    { test: /(have you|did you)( ever)? (previously )?(worked|been employed|been engaged)|(current|former) .*(employee|intern|contractor)|do you currently work (for|at)|ever worked (for|at)/i,
-      choose: [/never/i, /^no\b/i, /have not|haven'?t/i, /not (worked|been)/i], avoid: /yes/i },
+    { test: /(have you|did you)( ever)? (been )?(previously )?(worked|employed|been employed|been engaged)|(current|former) .*(employee|intern|contractor)|do you currently work (for|at)|ever worked (for|at)/i,
+      choose: [/never/i, /^no\b/i, /have not|haven'?t/i, /not (worked|been)/i], avoid: /yes/i, text: 'No' },
     { test: /how did you (hear|learn|find)|where did you (hear|find|learn)|source of (your )?application|referral source/i,
       choose: [/company'?s? (web)?site|careers? (page|site|website)|company careers/i, /job board/i, /^other$/i], avoid: /linkedin|referr|employee|recruiter|event|agency/i },
     // ---- voluntary self-identification (saved answers only)
@@ -210,8 +223,9 @@ function sponsorChoice (f) {
  * What to do with one collected field: {do:'text', value} | {do:'choose', patterns, avoid, search} |
  * {do:'upload', file:'resume'} | {do:'leave', why}. Fields that already hold a value are left as they are.
  */
-function planField (field, facts) {
+function planField (field, facts, mode) {
   const label = clean(field.label).replace(/\s*\*\s*$/, '').replace(/\*/g, '').trim()
+  if (mode === 'basic' && field.kind === 'combobox') return { do: 'leave', why: 'a custom dropdown on this site: pick it by hand' }
   if (field.kind === 'file') {
     if (/resume|cv\b/i.test(label) || /resume/i.test(field.id || '')) return field.value ? { do: 'leave', why: 'already attached' } : { do: 'upload', file: 'resume' }
     return { do: 'leave', why: 'a document other than the resume' }
@@ -284,8 +298,12 @@ const PAGE_COLLECT = `(() => {
       const boxes = [...grp.querySelectorAll('input[type=' + t + ']')];
       const id = 'f' + (++n); grp.setAttribute('data-iris-af', id);
       const legend = grp.querySelector('legend');
-      out.push({ key: id, id: grp.id || el.name, kind: t === 'checkbox' ? 'checkboxes' : 'radios', label: clean(legend ? legend.innerText : labelOf(el)), required: grp.getAttribute('aria-required') === 'true' || /\\*/.test(legend ? legend.innerText : ''),
-        options: boxes.map(b => { const l = b.id && document.querySelector('label[for="' + CSS.escape(b.id) + '"]'); return clean(l ? l.innerText : b.value); }), value: boxes.filter(b => b.checked).map(b => b.value).join(', ') });
+      const by = grp.getAttribute('aria-labelledby');
+      const byText = by ? clean(by.split(' ').map(i => document.getElementById(i)).filter(Boolean).map(n => n.innerText).join(' ')) : '';
+      const gl = legend ? clean(legend.innerText) : (byText || labelOf(el));
+      const optText = b => { const l = (b.id && document.querySelector('label[for="' + CSS.escape(b.id) + '"]')) || b.closest('label'); return clean(l ? l.innerText : (b.getAttribute('aria-label') || b.value)); };
+      out.push({ key: id, id: grp.id || el.name, kind: t === 'checkbox' ? 'checkboxes' : 'radios', label: gl, required: grp.getAttribute('aria-required') === 'true' || boxes.some(b => b.required) || /\\*/.test(gl),
+        options: boxes.map(optText), value: boxes.filter(b => b.checked).map(optText).join(', ') });
       return;
     }
     if (!visible(el) && t !== 'file') return;
@@ -304,7 +322,7 @@ const PAGE_COLLECT = `(() => {
       value = box && /\\.(pdf|docx?|txt|rtf)\\b/i.test(box.innerText) ? clean(box.innerText).slice(0, 80) : '';
     } else { value = clean(el.value); }
     let label = lab;
-    if (kind === 'file') { const byId = /resume/i.test(el.id) ? 'Resume/CV' : /cover/i.test(el.id) ? 'Cover Letter' : ''; const box = el.closest('div[class*="upload"], .field, fieldset'); const l = !byId && box && box.querySelector('[id$="label"], .upload-label, legend'); label = byId || clean(l ? l.innerText : '') || el.id; }
+    if (kind === 'file') { const byId = /resume/i.test(el.id) ? 'Resume/CV' : /cover/i.test(el.id) ? 'Cover Letter' : ''; const box = el.closest('div[class*="upload"], .field, fieldset'); const l = !byId && box && box.querySelector('[id$="label"], .upload-label, legend'); label = byId || (lab && !/^(attach|choose file|upload|browse)$/i.test(lab) ? lab : '') || clean(l ? l.innerText : '') || el.id; }
     const req = el.required || el.getAttribute('aria-required') === 'true' || /\\*/.test(lab);
     out.push({ key: id, id: el.id || el.name, kind, inputType: t, label: label.replace(/\\s*\\*\\s*$/, ''), required: !!req, value, options });
   });
@@ -319,7 +337,7 @@ function pageRect (key, part) {
     let el = host;
     const part = ${JSON.stringify(part || '')};
     if (part === 'control') el = host.closest('.select__control') || host.closest('[class*="control"]') || host;
-    else if (part.indexOf('box:') === 0) { const i = +part.slice(4); el = host.querySelectorAll('input')[i]; const l = el && el.id && document.querySelector('label[for="' + CSS.escape(el.id) + '"]'); el = l || el; }
+    else if (part.indexOf('box:') === 0) { const i = +part.slice(4); el = host.querySelectorAll('input[type=checkbox], input[type=radio]')[i]; const l = el && ((el.id && document.querySelector('label[for="' + CSS.escape(el.id) + '"]')) || el.closest('label')); el = l || el; }
     if (!el) return null;
     el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
     const r = el.getBoundingClientRect();
@@ -356,7 +374,7 @@ function pageValue (key) {
     const clean = s => String(s || '').replace(/\\s+/g, ' ').trim();
     if (el.getAttribute('role') === 'combobox') { const ctl = el.closest('.select__control') || el.closest('[class*="control"]'); const sv = ctl && ctl.querySelectorAll('[class*="single-value"], [class*="multi-value__label"]'); return sv && sv.length ? [...sv].map(x => clean(x.innerText)).join(', ') : ''; }
     if (el.tagName === 'SELECT') return el.value ? clean(el.options[el.selectedIndex].text) : '';
-    if (el.tagName === 'FIELDSET' || el.querySelector) { const boxes = el.querySelectorAll ? [...el.querySelectorAll('input[type=checkbox], input[type=radio]')] : []; if (boxes.length) return boxes.filter(b => b.checked).map(b => { const l = b.id && document.querySelector('label[for="' + CSS.escape(b.id) + '"]'); return clean(l ? l.innerText : b.value); }).join(', '); }
+    if (el.tagName === 'FIELDSET' || el.querySelector) { const boxes = el.querySelectorAll ? [...el.querySelectorAll('input[type=checkbox], input[type=radio]')] : []; if (boxes.length) return boxes.filter(b => b.checked).map(b => { const l = (b.id && document.querySelector('label[for="' + CSS.escape(b.id) + '"]')) || b.closest('label'); return clean(l ? l.innerText : (b.getAttribute('aria-label') || b.value)); }).join(', '); }
     if (el.type === 'file') { const box = el.closest('.file-upload, [class*="upload"], .field') || el.parentElement; return box && /\\.(pdf|docx?|txt|rtf)\\b/i.test(box.innerText) ? 'attached' : ''; }
     return clean(el.value);
   })()`
