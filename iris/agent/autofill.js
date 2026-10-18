@@ -137,7 +137,8 @@ function findField (fields, label, kinds) {
   const norm = function (v) { return clean(v).toLowerCase().replace(/[*✱:?]/g, '').replace(/\s+/g, ' ').trim() }
   const want = norm(label)
   if (!want) return null
-  const words = function (v) { return norm(v).split(/[^a-z0-9]+/).filter(function (w) { return w.length > 2 }) }
+  const FILLER = /^(what|your|are|you|the|this|that|for|with|have|has|did|does|any|and|from|which|will|would|please|can|our|its|how|who|when|where|why|not|now|all)$/
+  const words = function (v) { return norm(v).split(/[^a-z0-9]+/).filter(function (w) { return w.length > 2 && !FILLER.test(w) }) }
   const ww = words(label)
   let best = null
   let top = 0
@@ -418,7 +419,7 @@ const PAGE_COLLECT = `(() => {
   const visible = el => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return (r.width > 0 && r.height > 0) || el.type === 'file' || cs.position === 'absolute'; };
   const placeholder = s => /^(select( an option| one)?\\.{0,3}|search\\.{0,3}|choose\\.{0,3}|--+|please select|(type|enter|write|add) (your |an? )?(response|answer|text|here)\\.{0,3})$/i.test(s);
   // a label that is only the required mark ("*", ":") says nothing: look further
-  const words = s => { const c = clean(s); return clean(c.replace(/[*:]/g, '')).length >= 2 ? c : ''; };
+  const words = s => { const c = clean(s); const bare = clean(c.replace(/[*:✱]/g, '')); return bare.length >= 2 && !placeholder(bare) ? c : ''; };
   const labelOf = el => {
     if (el.id) { const l = __labelFor(el); if (l && words(l.innerText)) return words(l.innerText); }
     const by = el.getAttribute('aria-labelledby'); if (by) { const t = by.split(' ').map(i => __byId(el, i)).filter(Boolean).map(n => n.innerText).join(' '); if (words(t)) return words(t); }
@@ -429,7 +430,7 @@ const PAGE_COLLECT = `(() => {
     if (el.placeholder && !placeholder(clean(el.placeholder)) && clean(el.placeholder).length <= 40 && !/^(e\\.?g\\.?|ex\\.?|example)\\b/i.test(clean(el.placeholder))) return clean(el.placeholder);
     // no label element: the question is the text around the box — walk up (through shadow hosts: a form drawn in
     // web components) until there is more than the box's own text and placeholder
-    { const own = clean(el.tagName === 'INPUT' ? el.value : el.innerText); const ph = clean(el.placeholder || ''); let up = el; for (let k = 0; k < 8 && up; k++) { up = up.parentElement || (up.getRootNode && up.getRootNode().host) || null; if (!up) break; let t = clean(up.innerText || ''); up.querySelectorAll('[role=listbox], [role=status], [role=alert], [aria-live]').forEach(x => { const xt = clean(x.innerText); if (xt) t = clean(t.split(xt).join(' ')); }); let rest = clean(own ? t.split(own).join(' ') : t); if (ph) rest = clean(rest.split(ph).join(' ')); if (clean(rest.replace(/\\*/g, '')).length >= 3) return rest.length <= 300 ? rest : ''; } }
+    { const own = clean(el.tagName === 'INPUT' ? el.value : el.innerText); const ph = clean(el.placeholder || ''); let up = el; for (let k = 0; k < 8 && up; k++) { up = up.parentElement || (up.getRootNode && up.getRootNode().host) || null; if (!up) break; let t = clean(up.innerText || ''); up.querySelectorAll('[role=listbox], [role=status], [role=alert], [aria-live]').forEach(x => { const xt = clean(x.innerText); if (xt) t = clean(t.split(xt).join(' ')); }); let rest = clean(own ? t.split(own).join(' ') : t); if (ph) rest = clean(rest.split(ph).join(' ')); if (clean(rest.replace(/\\*/g, '')).length >= 3) return rest.length <= 300 ? rest : rest.length <= 1500 ? rest.slice(0, 300) : ''; } }
     return '';
   };
   const form = document.querySelector('form#application-form, form#application_form, form.application--form, form') || document;
