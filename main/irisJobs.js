@@ -475,6 +475,7 @@ function irisJobsPrompt (task, mode) {
     '   A dropdown whose list opens wide across the page: find the option in the NEW screenshot and click its text there',
     '   (positions from before the list opened are stale). Typed a short answer and the list says "No options": its options',
     '   are worded otherwise ("I have never worked at …") — click the box to open the full list and click the matching one.',
+    '   A dropdown in the bottom fifth of the screen (or cut off by its edge): scroll down 3 first, so its list has room.',
     '   Answer every question truthfully from the profile and the answers; never claim a skill or',
     '   experience the profile does not show. "Do you have X?" for a professional credential (a security clearance, a',
     '   certification, a degree) the profile does not show: the true answer is No. Personal facts the profile cannot',
