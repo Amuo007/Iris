@@ -463,6 +463,7 @@ function irisJobsPrompt (task, mode) {
     '   City / location boxes that suggest places: type only the city name (e.g. "Houston", no Enter), and in the list',
     '   that appears CLICK the suggestion with the right state and country (e.g. "Houston, Texas, United States") — the',
     '   first one is often another place (North Houston, Houston in Scotland). No list? Click the box and type it again.',
+    '   The right one not in view (the list scrolled past it)? Do not scroll the list: type "City, State" (e.g. "Houston, Texas").',
     '   Enter (enter:true) only picks an option in a dropdown or search box — never press it in a plain text field of a',
     '   form: it sends the form half-filled. Red messages under fields can be left over from such an early send (sites',
     '   check again only on Submit): when a field shows the right value, move on; Submit at the end and fix what is',
