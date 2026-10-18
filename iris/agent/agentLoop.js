@@ -102,6 +102,7 @@ function createAgent (opts) {
   let finishChecked = false
   let runLookups = 0
   let lookupsAsked = new Set() // queries already looked up in this run: the same one again finds the same
+  let carriedNote = '' // a note that came with a look the model never saw (the page was still loading)
   let logsDone = 0 // jobs logged in this run: the fresh job lists change after each (handled jobs drop out)
   const freshAskedAt = new Map()
   let smartLevel = null
@@ -291,6 +292,7 @@ function createAgent (opts) {
     lookupsAsked = new Set()
     logsDone = 0
     freshAskedAt.clear()
+    carriedNote = ''
     smartLevel = runOptions && runOptions.plan ? (runOptions.plan === 'deep' ? 'deep' : 'quick') : null
     if (runOptions && runOptions.plan) {
       emit('plan:start', { level: smartLevel })
@@ -460,6 +462,10 @@ function createAgent (opts) {
       }
       captureFailures = 0
       const obs = shot.obs
+      // a reminder handed over with a look that only waited for loading goes with this one (a real run: "connect on
+      // LinkedIn for AgZen first" came with the loading Quora page and was never read)
+      if (carriedNote) { obs.note = carriedNote + (obs.note ? '\n' + obs.note : ''); carriedNote = '' }
+      const noteIn = obs.note || ''
       if (Array.isArray(obs.memos)) {
         obs.memos.forEach(function (m) {
           history.addNote(m)
@@ -493,6 +499,7 @@ function createAgent (opts) {
       // ---- 3. settle: never act on a page that is still painting ------------
       if (obs.loading && autoWaits < cfg.maxAutoWaits) {
         autoWaits++
+        if (noteIn) carriedNote = noteIn
         const ms = Math.min(2500, 500 * autoWaits)
         emit('action', {
           step: state.step,
