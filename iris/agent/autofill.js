@@ -388,12 +388,14 @@ const PAGE_COLLECT = `(() => {
   const clean = s => String(s || '').replace(/\\s+/g, ' ').trim();
   const visible = el => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return (r.width > 0 && r.height > 0) || el.type === 'file' || cs.position === 'absolute'; };
   const placeholder = s => /^(select( an option| one)?\\.{0,3}|search\\.{0,3}|choose\\.{0,3}|--+|please select)$/i.test(s);
+  // a label that is only the required mark ("*", ":") says nothing: look further
+  const words = s => { const c = clean(s); return clean(c.replace(/[*:]/g, '')).length >= 2 ? c : ''; };
   const labelOf = el => {
-    if (el.id) { const l = __labelFor(el); if (l && clean(l.innerText)) return clean(l.innerText); }
-    const by = el.getAttribute('aria-labelledby'); if (by) { const t = by.split(' ').map(i => __byId(el, i)).filter(Boolean).map(n => n.innerText).join(' '); if (clean(t)) return clean(t); }
-    const al = clean(el.getAttribute('aria-label')); if (al && !placeholder(al)) return al;
-    const fsx = el.closest('fieldset'); if (fsx && fsx.querySelector('legend')) return clean(fsx.querySelector('legend').innerText);
-    const wrap = el.closest('.field, .select, .text-input-wrapper, .input-wrapper, div'); const l2 = wrap && wrap.querySelector('label'); if (l2 && clean(l2.innerText)) return clean(l2.innerText);
+    if (el.id) { const l = __labelFor(el); if (l && words(l.innerText)) return words(l.innerText); }
+    const by = el.getAttribute('aria-labelledby'); if (by) { const t = by.split(' ').map(i => __byId(el, i)).filter(Boolean).map(n => n.innerText).join(' '); if (words(t)) return words(t); }
+    const al = words(el.getAttribute('aria-label')); if (al && !placeholder(al)) return al;
+    const fsx = el.closest('fieldset'); if (fsx && fsx.querySelector('legend') && words(fsx.querySelector('legend').innerText)) return words(fsx.querySelector('legend').innerText);
+    const wrap = el.closest('.field, .select, .text-input-wrapper, .input-wrapper, div'); const l2 = wrap && wrap.querySelector('label'); if (l2 && words(l2.innerText)) return words(l2.innerText);
     // a box whose only label is its placeholder ("City", "Postal code")
     if (el.placeholder && !placeholder(clean(el.placeholder)) && clean(el.placeholder).length <= 40 && !/^(e\\.?g\\.?|ex\\.?|example)\\b/i.test(clean(el.placeholder))) return clean(el.placeholder);
     // no label element: the question is the text around the box — walk up (through shadow hosts: a form drawn in
@@ -430,12 +432,12 @@ const PAGE_COLLECT = `(() => {
       const id = 'f' + (++n); grp.setAttribute('data-iris-af', id);
       const legend = grp.querySelector('legend');
       const by = grp.getAttribute('aria-labelledby');
-      const byText = by ? clean(by.split(' ').map(i => __byId(grp, i)).filter(Boolean).map(n => n.innerText).join(' ')) : '';
+      const byText = by ? words(by.split(' ').map(i => __byId(grp, i)).filter(Boolean).map(n => n.innerText).join(' ')) : '';
       // a lone box with no label of its own (a consent box drawn in a shadow root): the text right around it, up
       // through shadow hosts
       const nearText = x => { let a = x; for (let k = 0; k < 5 && a; k++) { a = a.parentElement || (a.getRootNode && a.getRootNode().host) || null; const tx = a ? clean(String(a.innerText || '').replace(/\\*/g, ' ')) : ''; if (tx.length >= 3) return tx.length <= 300 ? tx : ''; } return ''; };
       const lone = t === 'checkbox' && boxes.length === 1;
-      const optText = b => { const l = __labelFor(b) || b.closest('label'); if (l && clean(String(l.innerText).replace(/\\*/g, ' '))) return clean(l.innerText); const bl = b.getAttribute('aria-labelledby'); const bt = bl ? clean(bl.split(' ').map(i => __byId(b, i)).filter(Boolean).map(x => x.innerText).join(' ')) : ''; return bt || clean(b.getAttribute('aria-label') || '') || (lone ? nearText(b) : '') || clean(b.value); };
+      const optText = b => { const l = __labelFor(b) || b.closest('label'); if (l && words(l.innerText)) return words(l.innerText); const bl = b.getAttribute('aria-labelledby'); const bt = bl ? words(bl.split(' ').map(i => __byId(b, i)).filter(Boolean).map(x => x.innerText).join(' ')) : ''; return bt || words(b.getAttribute('aria-label') || '') || (lone ? nearText(b) : '') || clean(b.value); };
       const opts = boxes.map(optText);
       // the question: the legend, the group's own label, else the group's first line of text that is not an option
       const firstLine = clean(String(grp.innerText || '').split('\\n').map(x => x.trim()).find(x => x && !opts.some(o => o && (x === o || x.indexOf(o) === 0))) || '');
