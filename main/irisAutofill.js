@@ -282,7 +282,9 @@ async function irisAfAnswerRest (computer, wc, fields, title) {
       '("N/A" for an "if yes, explain" box that does not apply). A list, radio or dropdown: the EXACT text of one of its options (checkboxes: ' +
       'several, joined with " | "). A written answer (why us, a project, anything else): 2–4 plain sentences built only from facts in the ' +
       'profile — never invent a number, award, employer, school or skill, and never infer life events it does not state (moves, dates, ' +
-      'struggles). An optional personal or "not on your resume" question with no plain fact for it: leave it out. Dates as the box asks (e.g. MM/YYYY). Never tick optional ' +
+      'struggles). An optional personal or "not on your resume" question with no plain fact for it: leave it out. Dates as the box asks (e.g. MM/YYYY). ' +
+      'A date or length the facts do not give (an end date, how many months) is never made up: give what they say and that the rest is ' +
+      'flexible (e.g. "From December 21, 2026; flexible on the end date"). Never tick optional ' +
       'marketing, SMS or talent-community consents. Reply with JSON only: {"answers":{"<key>":"<answer>", ...}}' },
     { role: 'user', content: 'PROFILE:\n' + irisCareerLib.bankText(bank, 7000) + '\n\nSAVED ANSWERS:\n' + (bank.answers || []).map(function (a) { return a.label + ': ' + a.value }).join('\n') +
       '\n\nJOB PAGE: ' + String(title || '').slice(0, 160) + '\n\nFIELDS STILL EMPTY:\n' + JSON.stringify(list) }
