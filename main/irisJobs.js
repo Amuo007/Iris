@@ -340,6 +340,17 @@ function irisApplicationsSave (items) {
 function irisJobKey (url) {
   try {
     const u = new URL(url)
+    // Workday writes one posting many ways (with or without /en-US/, two career-site names, a "-1" ending, "%2C"):
+    // the company's host and the posting number at the end ("…_REQ-058508-1", "…_JR363678") name it (a real run
+    // re-opened Salesforce, Morningstar and Booz Allen as new after applying)
+    if (/(myworkdayjobs|myworkdaysite)\.com$/i.test(u.hostname)) {
+      const segs = u.pathname.split('/').filter(Boolean)
+      const at = segs.indexOf('job')
+      const rest = at >= 0 ? segs.slice(at + 1) : []
+      const end = rest.indexOf('apply') >= 0 ? rest.slice(0, rest.indexOf('apply')) : rest
+      const named = end.filter(function (x) { return x.indexOf('_') >= 0 }).pop()
+      if (named) return (u.hostname + '/job/' + named.split('_').pop().replace(/-\d+$/, '')).toLowerCase()
+    }
     // only the parameters that name a job stay ("?gh_jid=…", Greenhouse's embed "?for=…&token=…"): "?embed=true" on an
     // Ashby link made a real run see Quora, applied to an hour before, as a new job
     const keep = new URLSearchParams()
