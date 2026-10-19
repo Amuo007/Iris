@@ -1708,10 +1708,14 @@ IrisComputer.prototype.act = async function (action) {
       String(action.text).replace(/\D/g, '').length >= 2 && !/(^|\.)linkedin\.com$/i.test(irisSiteOf(wc.getURL()) || '')) {
     const num = String(action.text).trim()
     const year = /^\d{4}$/.test(num) && Math.abs(+num - new Date().getFullYear()) <= 12
+    // a date's parts are no claim to check here: a month or a day (01-31), or month (+ day) + a year near now ("012026")
+    const digits = num.replace(/\D/g, '')
+    const dm = digits.match(/^(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])?((19|20)\d\d)$/)
+    const datePart = (digits.length <= 2 && +digits >= 1 && +digits <= 31) || (!!dm && Math.abs(+dm[3] - new Date().getFullYear()) <= 12)
     const known = JSON.stringify([irisCareerLoad(), irisProfileLoad()])
     const inProfile = new RegExp('(^|[^0-9])' + num.replace(/[.,]/g, '[.,]?') + '([^0-9]|$)').test(known)
     const again = this.refusedNumber && this.refusedNumber.text === num && this.refusedNumber.url === wc.getURL()
-    if (!year && !inProfile && !again) {
+    if (!year && !datePart && !inProfile && !again) {
       this.refusedNumber = { text: num, url: wc.getURL() }
       return { ok: false, error: 'not typed — "' + num + '" is a number about you that your profile and saved answers do not give, and numbers about the user are never guessed. ' +
         'If this page or an email shows this exact number (a code, a value printed on the page), type it again. If a required box asks for it and the profile lacks it, log the job needs_you naming that question and go on to the next job.' }
