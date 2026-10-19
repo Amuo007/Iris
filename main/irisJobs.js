@@ -387,9 +387,19 @@ function irisAppliedToday () {
 }
 
 /* "STOP — you already applied …" when Iris lands on a posting it has handled before */
-function irisApplicationNote (url) {
+function irisApplicationNote (url, pageTitle) {
   if (!url || !/^https?:/.test(url)) return null
-  const hit = irisApplicationFind({ url: url })
+  let hit = irisApplicationFind({ url: url })
+  // the same role on another board or posting number: its page title names the role and the company ("Job Application
+  // for Data Scientist, Intern at Duolingo" — a real run applied to it on two Duolingo boards and again tonight)
+  if (!hit && pageTitle) {
+    const norm = function (v) { return ' ' + String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ' }
+    const page = norm(pageTitle)
+    hit = irisApplicationsLoad().slice().reverse().find(function (a) {
+      const t = norm(a.title); const c = norm(a.company)
+      return t.trim().length >= 8 && c.trim().length >= 3 && page.indexOf(t) >= 0 && page.indexOf(c) >= 0
+    }) || null
+  }
   if (!hit) return null
   const when = new Date(hit.updated || hit.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   const job = hit.title ? ' (' + hit.title + (hit.company ? ' at ' + hit.company : '') + ')' : ''

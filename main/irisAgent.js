@@ -1119,7 +1119,7 @@ IrisComputer.prototype.screenshot = async function () {
     const seen = irisSeenNote(obs.url, obs.title, this.sessionId)
     // first line, and blunt: a soft hint at the end of the notes was read past
     if (seen) obs.note = 'STOP — you already judged this before: you ' + seen + '. Do not judge or download it again; go back and pick something new.' + (obs.note ? '\n' + obs.note : '')
-    const applied = this.jobsMode && !(this.lastJob && irisJobKey(this.lastJob.url) === irisJobKey(obs.url)) ? irisApplicationNote(obs.url) : null
+    const applied = this.jobsMode && !(this.lastJob && irisJobKey(this.lastJob.url) === irisJobKey(obs.url)) ? irisApplicationNote(obs.url, obs.title) : null
     if (applied) obs.note = applied + (obs.note ? '\n' + obs.note : '')
   }
   // Iris's own PDF viewer: say where its download button is (it fades out until the mouse is near)
