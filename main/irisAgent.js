@@ -930,8 +930,8 @@ function imageSignature (image) {
 /* A page that says an application went through ("Thank you for applying", "Application submitted", a /thanks page):
    remembered, so "applied" is logged only for an application whose confirmation was really seen. */
 const IRIS_CONFIRM_TEXT = /thank(s| you)[^.\n]{0,60}(appl|submitt)|application (has been |was |is )?(submitted|received|sent|complete)|we('ve| have) (received|got) your application|successfully (submitted|applied)|congratulations[^.\n]{0,40}(appl|submitt)|your application is on its way|you('ve| have) already applied|already applied (for|to) this/i
-/* a pop-up's words count only in a firm form ("Application Submitted", "Thank you for applying"), never "once your application is submitted…" */
-const IRIS_CONFIRM_DIALOG = /(?<!(once|after|when|until|before|if) your )application (has been |was )?submitted|thank(s| you) for (your application|applying)|you('ve| have) already applied/i
+/* a pop-up's or the page title's words count only in a firm form ("Application Submitted", "Successfully Applied"), never "once your application is submitted…" */
+const IRIS_CONFIRM_DIALOG = /(?<!(once|after|when|until|before|if) your )application (has been |was )?(submitted|sent|received)|thank(s| you) for (your application|applying)|you('ve| have) already applied|successfully applied/i
 const IRIS_CONFIRM_PEEK = `(function () {
   var submit = [].slice.call(document.querySelectorAll('button, input[type=submit], [role=button]')).some(function (b) {
     var r = b.getBoundingClientRect(); var s = String(b.innerText || b.value || b.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim()
@@ -981,6 +981,8 @@ IrisComputer.prototype.noteConfirmation = async function (wc, url) {
     // by its words only when no Submit button is left on the page ("once your application is submitted…" on a form is no confirmation)
     // a heading that says so counts at once (Eightfold: "Thank you for your application, Amrinder!" above a profile-review
     // step with its own buttons); the page's text only when no Submit is left on it
+    // the page title (SuccessFactors: "Career Opportunities: Successfully Applied to …"), read without a page script
+    if (!hit) hit = IRIS_CONFIRM_DIALOG.test(String(wc.getTitle() || ''))
     if (!hit) hit = await withTimeout(wc.executeJavaScript(IRIS_CONFIRM_PEEK), 2500, 'confirm check').then(function (r) { return !!r && (IRIS_CONFIRM_TEXT.test(String(r.heads || '')) || IRIS_CONFIRM_DIALOG.test(String(r.dialog || '')) || (!r.submit && IRIS_CONFIRM_TEXT.test(String(r.text || '')))) })
     if (this.unconfirmedLog && (!this.unconfirmedLog.co || String(url).toLowerCase().replace(/[^a-z0-9]/g, '').indexOf(this.unconfirmedLog.co) >= 0)) this.unconfirmedLog.looks++
     if (hit) this.confirmations = (this.confirmations || []).filter(function (c) { return Date.now() - c.at < 3600000 }).concat({ url: url, at: Date.now() })
