@@ -374,6 +374,11 @@ function irisApplicationFind (rec) {
 function irisApplicationAdd (rec) {
   const items = irisApplicationsLoad()
   const existing = items.findIndex(function (a) { return irisSameJob(a, rec) })
+  // an application that went in stays "applied": a later skip of the same job (a duplicate posting) only adds a note
+  // (a real run turned Salesforce's applied record into "skipped — already applied")
+  if (existing !== -1 && items[existing].status === 'applied' && rec.status && rec.status !== 'applied') {
+    rec = Object.assign({}, rec, { status: 'applied', note: [items[existing].note, rec.note ? 'later: ' + rec.note : ''].filter(Boolean).join(' | ').slice(0, 600) })
+  }
   const item = Object.assign({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), at: Date.now() }, existing === -1 ? {} : items[existing], rec, { updated: Date.now() })
   // every address the job was seen at stays (a real run's update replaced Duolingo's careers.duolingo.com address with
   // another board's, and the job then looked new at the first address)
