@@ -350,8 +350,18 @@ function irisJobKey (url) {
   } catch (e) { return '' }
 }
 
+/* a posting's long number (8+ digits): the same job reached by two addresses keeps it (Duolingo 8888721002 at
+   careers.duolingo.com/jobs/… and at Greenhouse's embed ?token=…: a real run applied to it twice) */
+function irisJobIds (url) {
+  return irisJobKey(url).match(/\d{8,}/g) || [] // its path and job-naming parameters only, never a tracking id
+}
+
 function irisSameJob (a, b) {
   if (a.url && b.url && irisJobKey(a.url) && irisJobKey(a.url) === irisJobKey(b.url)) return true
+  if (a.url && b.url) {
+    const ids = irisJobIds(a.url)
+    if (ids.length && irisJobIds(b.url).some(function (x) { return ids.indexOf(x) >= 0 })) return true
+  }
   const norm = function (s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() }
   return !!(a.company && b.company && a.title && b.title && norm(a.company) === norm(b.company) && norm(a.title) === norm(b.title))
 }
