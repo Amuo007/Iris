@@ -389,6 +389,14 @@ function irisApplicationAdd (rec) {
   // (a real run turned Salesforce's applied record into "skipped — already applied")
   if (existing !== -1 && items[existing].status === 'applied' && rec.status && rec.status !== 'applied') {
     rec = Object.assign({}, rec, { status: 'applied', note: [items[existing].note, rec.note ? 'later: ' + rec.note : ''].filter(Boolean).join(' | ').slice(0, 600) })
+  } else if (existing !== -1 && items[existing].note && rec.status && rec.status !== items[existing].status && rec.note) {
+    // another status keeps what the earlier one said (a real run's "failed — site broke" wiped GE Vernova's
+    // needs_you note about the date box the user had to fix)
+    rec = Object.assign({}, rec, { note: (rec.note + ' | earlier ' + items[existing].status + ': ' + items[existing].note).slice(0, 600) })
+  }
+  // a cut-off copy of the address it already has ("…/job/USA-" for Boeing's full posting address) never replaces it
+  if (existing !== -1 && rec.url && items[existing].url && rec.url !== items[existing].url && items[existing].url.indexOf(rec.url) === 0) {
+    rec = Object.assign({}, rec, { url: items[existing].url })
   }
   const item = Object.assign({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), at: Date.now() }, existing === -1 ? {} : items[existing], rec, { updated: Date.now() })
   // every address the job was seen at stays (a real run's update replaced Duolingo's careers.duolingo.com address with
