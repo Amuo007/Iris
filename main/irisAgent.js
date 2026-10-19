@@ -200,7 +200,8 @@ function irisNewPassword () {
   const bytes = require('crypto').randomBytes(40)
   const chars = sets.map(function (set, i) { return set[bytes[i] % set.length] }) // one of each kind
   const all = sets.join('')
-  for (let i = 4; chars.length < 20; i++) chars.push(all[bytes[i] % all.length])
+  // 16: strong with all four kinds, and inside the 16-18 caps some sites keep (L3Harris refused 20)
+  for (let i = 4; chars.length < 16; i++) chars.push(all[bytes[i] % all.length])
   for (let i = chars.length - 1; i > 0; i--) { const j = bytes[20 + (i % 20)] % (i + 1); const t = chars[i]; chars[i] = chars[j]; chars[j] = t }
   return chars.join('')
 }
