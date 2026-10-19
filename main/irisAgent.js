@@ -973,6 +973,16 @@ IrisComputer.prototype.noteNewFormStep = async function (wc, url) {
   } catch (e) { /* only a hint */ }
 }
 
+/* today's date as an application list shows it ("October 19, 2026", "Oct 19, 2026", "10/19/2026", "2026-10-19") */
+function irisTodayRe () {
+  const d = new Date()
+  const long = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  const short = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const mm = String(d.getMonth() + 1).padStart(2, '0'); const dd = String(d.getDate()).padStart(2, '0')
+  const esc = function (t) { return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
+  return new RegExp([long, short, (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear(), mm + '/' + dd + '/' + d.getFullYear(), d.getFullYear() + '-' + mm + '-' + dd].map(esc).join('|'), 'i')
+}
+
 IrisComputer.prototype.noteConfirmation = async function (wc, url) {
   if (!this.jobsMode || !url || /linkedin\.com/i.test(url)) return
   try {
@@ -983,7 +993,9 @@ IrisComputer.prototype.noteConfirmation = async function (wc, url) {
     // step with its own buttons); the page's text only when no Submit is left on it
     // the page title (SuccessFactors: "Career Opportunities: Successfully Applied to …"), read without a page script
     if (!hit) hit = IRIS_CONFIRM_DIALOG.test(String(wc.getTitle() || ''))
-    if (!hit) hit = await withTimeout(wc.executeJavaScript(IRIS_CONFIRM_PEEK), 2500, 'confirm check').then(function (r) { return !!r && (IRIS_CONFIRM_TEXT.test(String(r.heads || '')) || IRIS_CONFIRM_DIALOG.test(String(r.dialog || '')) || (!r.submit && IRIS_CONFIRM_TEXT.test(String(r.text || '')))) })
+    if (!hit) hit = await withTimeout(wc.executeJavaScript(IRIS_CONFIRM_PEEK), 2500, 'confirm check').then(function (r) { return !!r && (IRIS_CONFIRM_TEXT.test(String(r.heads || '')) || IRIS_CONFIRM_DIALOG.test(String(r.dialog || '')) || (!r.submit && IRIS_CONFIRM_TEXT.test(String(r.text || ''))) ||
+      // Workday's Candidate Home right after Submit lists the application with today's date (American Family: no thank-you page)
+      (/\/userHome(\/|$|\?)/i.test(url) && /in process|submitted/i.test(String(r.text || '')) && irisTodayRe().test(String(r.text || '')))) })
     if (this.unconfirmedLog && (!this.unconfirmedLog.co || String(url).toLowerCase().replace(/[^a-z0-9]/g, '').indexOf(this.unconfirmedLog.co) >= 0)) this.unconfirmedLog.looks++
     if (hit) this.confirmations = (this.confirmations || []).filter(function (c) { return Date.now() - c.at < 3600000 }).concat({ url: url, at: Date.now() })
   } catch (e) { /* only a check */ }
