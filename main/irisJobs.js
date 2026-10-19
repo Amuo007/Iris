@@ -393,7 +393,7 @@ function irisApplicationAdd (rec) {
   const item = Object.assign({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), at: Date.now() }, existing === -1 ? {} : items[existing], rec, { updated: Date.now() })
   // every address the job was seen at stays (a real run's update replaced Duolingo's careers.duolingo.com address with
   // another board's, and the job then looked new at the first address)
-  const urls = [].concat(existing === -1 ? [] : (items[existing].urls || []), existing === -1 ? [] : [items[existing].url], [rec.url])
+  const urls = [].concat(existing === -1 ? [] : (items[existing].urls || []), existing === -1 ? [] : [items[existing].url], rec.urls || [], [rec.url])
     .filter(function (u, i, all) { return u && all.indexOf(u) === i })
   if (urls.length > 1) item.urls = urls.slice(-10)
   if (existing === -1) items.push(item)

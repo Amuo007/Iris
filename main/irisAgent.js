@@ -986,6 +986,8 @@ function irisTodayRe () {
 
 /* One company's site: a Workday / iCIMS / Avature host is the company's own; elsewhere the host and its first path part
    (Greenhouse, Lever and Ashby keep the company there). A confirmation there belongs to that company's application. */
+const IRIS_CONFIRM_PAGE = /\/(thanks|thank-you|confirmation|submitted|success)(\/|$|\?)|\/jobTasks\/completed\/|\/userHome(\/|$|\?)/i
+
 function irisSiteKey (u) {
   try {
     const x = new URL(u)
@@ -1120,6 +1122,11 @@ IrisComputer.prototype.screenshot = async function () {
     const seen = irisSeenNote(obs.url, obs.title, this.sessionId)
     // first line, and blunt: a soft hint at the end of the notes was read past
     if (seen) obs.note = 'STOP — you already judged this before: you ' + seen + '. Do not judge or download it again; go back and pick something new.' + (obs.note ? '\n' + obs.note : '')
+    // the last posting or form seen on each company site: a log sent from its thank-you page is filed under it
+    if (this.jobsMode && !IRIS_CONFIRM_PAGE.test(obs.url)) {
+      const site = irisSiteKey(obs.url)
+      if (site) { this.postingBySite = this.postingBySite || {}; this.postingBySite[site] = obs.url }
+    }
     const applied = this.jobsMode && !(this.lastJob && irisJobKey(this.lastJob.url) === irisJobKey(obs.url)) ? irisApplicationNote(obs.url, obs.title) : null
     if (applied) obs.note = applied + (obs.note ? '\n' + obs.note : '')
   }
@@ -1589,6 +1596,12 @@ IrisComputer.prototype.act = async function (action) {
         resume: (job && job.resume) || (action.status === 'applied' && irisOwnResume()) || '',
         fit: job && job.fit !== undefined ? job.fit : null,
         sessionId: this.sessionId || ''
+      }
+      // sent from a thank-you or candidate-home page: filed under the posting seen on that site (a real run logged Brown &
+      // Brown at '…/jobTasks/completed/application', and the posting itself then looked new and was applied to again)
+      if (rec.url && IRIS_CONFIRM_PAGE.test(rec.url) && this.postingBySite && this.postingBySite[irisSiteKey(rec.url)]) {
+        rec.urls = [rec.url]
+        rec.url = this.postingBySite[irisSiteKey(rec.url)]
       }
       if (rec.status === 'applied' && job && job.resume && !job.uploaded) {
         rec.note = (rec.note ? rec.note + ' ' : '') + '(The tailored resume was not uploaded in this run — the site may have kept an older one.)'
