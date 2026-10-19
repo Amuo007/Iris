@@ -983,6 +983,16 @@ function irisTodayRe () {
   return new RegExp([long, short, (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear(), mm + '/' + dd + '/' + d.getFullYear(), d.getFullYear() + '-' + mm + '-' + dd].map(esc).join('|'), 'i')
 }
 
+/* One company's site: a Workday / iCIMS / Avature host is the company's own; elsewhere the host and its first path part
+   (Greenhouse, Lever and Ashby keep the company there). A confirmation there belongs to that company's application. */
+function irisSiteKey (u) {
+  try {
+    const x = new URL(u)
+    if (/(myworkdayjobs\.com|myworkdaysite\.com|\.icims\.com|\.avature\.net)$/i.test(x.hostname)) return x.hostname.toLowerCase()
+    return x.hostname.toLowerCase() + '/' + (x.pathname.split('/').filter(Boolean)[0] || '').toLowerCase()
+  } catch (e) { return '' }
+}
+
 IrisComputer.prototype.noteConfirmation = async function (wc, url) {
   if (!this.jobsMode || !url || /linkedin\.com/i.test(url)) return
   try {
@@ -996,7 +1006,7 @@ IrisComputer.prototype.noteConfirmation = async function (wc, url) {
     if (!hit) hit = await withTimeout(wc.executeJavaScript(IRIS_CONFIRM_PEEK), 2500, 'confirm check').then(function (r) { return !!r && (IRIS_CONFIRM_TEXT.test(String(r.heads || '')) || IRIS_CONFIRM_DIALOG.test(String(r.dialog || '')) || (!r.submit && IRIS_CONFIRM_TEXT.test(String(r.text || ''))) ||
       // Workday's Candidate Home right after Submit lists the application with today's date (American Family: no thank-you page)
       (/\/userHome(\/|$|\?)/i.test(url) && /in process|submitted/i.test(String(r.text || '')) && irisTodayRe().test(String(r.text || '')))) })
-    if (this.unconfirmedLog && (!this.unconfirmedLog.co || String(url).toLowerCase().replace(/[^a-z0-9]/g, '').indexOf(this.unconfirmedLog.co) >= 0)) this.unconfirmedLog.looks++
+    if (this.unconfirmedLog && (!this.unconfirmedLog.co || String(url).toLowerCase().replace(/[^a-z0-9]/g, '').indexOf(this.unconfirmedLog.co) >= 0 || (this.unconfirmedLog.site && irisSiteKey(url) === this.unconfirmedLog.site))) this.unconfirmedLog.looks++
     if (hit) this.confirmations = (this.confirmations || []).filter(function (c) { return Date.now() - c.at < 3600000 }).concat({ url: url, at: Date.now() })
   } catch (e) { /* only a check */ }
 }
@@ -1533,14 +1543,16 @@ IrisComputer.prototype.act = async function (action) {
         const squash = function (v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '') }
         const want = irisJobKey(action.url || '').replace(/\/(thanks|thank-you|confirmation|submitted|success)$/, '')
         const co = squash(action.company).slice(0, 6)
+        // the company's own site counts too: Workday names it short ("bah", "amfam", "bbinsurance"), never "boozal…"
+        const site = action.url ? irisSiteKey(action.url) : ''
         const seen = (this.confirmations || []).some(function (c) {
           const k = irisJobKey(c.url).replace(/\/(thanks|thank-you|confirmation|submitted|success)$/, '')
-          return Date.now() - c.at < 45 * 60000 && ((want && (k === want || k.indexOf(want) === 0 || want.indexOf(k) === 0)) || (co && squash(c.url).indexOf(co) >= 0))
+          return Date.now() - c.at < 45 * 60000 && ((want && (k === want || k.indexOf(want) === 0 || want.indexOf(k) === 0)) || (co && squash(c.url).indexOf(co) >= 0) || (site && irisSiteKey(c.url) === site))
         })
         // asked again for the same job after a look at its page: taken
         const again = this.unconfirmedLog && this.unconfirmedLog.key === (action.company + '|' + action.title) && this.unconfirmedLog.looks > 0
         if (!seen && !again) {
-          if (!this.unconfirmedLog || this.unconfirmedLog.key !== (action.company + '|' + action.title)) this.unconfirmedLog = { key: action.company + '|' + action.title, co: co, looks: 0 }
+          if (!this.unconfirmedLog || this.unconfirmedLog.key !== (action.company + '|' + action.title)) this.unconfirmedLog = { key: action.company + '|' + action.title, co: co, site: site, looks: 0 }
           return { ok: false, error: 'not logged — no confirmation was seen for this application (no "thank you / application submitted" page after Submit), so it may not have gone through. Go back to its page and look: submit it if the form is still there, and log "applied" when the confirmation shows. If its page does show it went through, log it again after that look.' }
         }
         if (!seen && again) action = Object.assign({}, action, { note: ((action.note || '') + ' (no confirmation page recognised)').trim() })
