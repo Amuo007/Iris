@@ -1701,6 +1701,23 @@ IrisComputer.prototype.act = async function (action) {
         '. Rewrite it with only facts from the profile (a related real project or skill is fine, and say plainly what is not done yet), or leave the box empty if it is optional.' }
     }
   }
+  // a bare number about the user that the profile does not give is not typed (a real run typed "120" credit hours that
+  // no profile or saved answer states). The same number again on the same page is taken: a code from an email, a value
+  // the page itself shows.
+  if (this.jobsMode && (action.type === 'type' || action.type === 'fill') && /^\s*\d[\d.,]*\s*$/.test(String(action.text || '')) &&
+      String(action.text).replace(/\D/g, '').length >= 2 && !/(^|\.)linkedin\.com$/i.test(irisSiteOf(wc.getURL()) || '')) {
+    const num = String(action.text).trim()
+    const year = /^\d{4}$/.test(num) && Math.abs(+num - new Date().getFullYear()) <= 12
+    const known = JSON.stringify([irisCareerLoad(), irisProfileLoad()])
+    const inProfile = new RegExp('(^|[^0-9])' + num.replace(/[.,]/g, '[.,]?') + '([^0-9]|$)').test(known)
+    const again = this.refusedNumber && this.refusedNumber.text === num && this.refusedNumber.url === wc.getURL()
+    if (!year && !inProfile && !again) {
+      this.refusedNumber = { text: num, url: wc.getURL() }
+      return { ok: false, error: 'not typed — "' + num + '" is a number about you that your profile and saved answers do not give, and numbers about the user are never guessed. ' +
+        'If this page or an email shows this exact number (a code, a value printed on the page), type it again. If a required box asks for it and the profile lacks it, log the job needs_you naming that question and go on to the next job.' }
+    }
+    this.refusedNumber = null
+  }
   // secrets are filled in here, at the last moment: the model and the panel only see {{Label}}
   let typed = action.type === 'type' ? action.text : null
   // the e-mail typed on a sign-up page: the new account's username
