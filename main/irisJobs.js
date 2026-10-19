@@ -357,10 +357,11 @@ function irisJobIds (url) {
 }
 
 function irisSameJob (a, b) {
-  if (a.url && b.url && irisJobKey(a.url) && irisJobKey(a.url) === irisJobKey(b.url)) return true
-  if (a.url && b.url) {
-    const ids = irisJobIds(a.url)
-    if (ids.length && irisJobIds(b.url).some(function (x) { return ids.indexOf(x) >= 0 })) return true
+  const aUrls = [a.url].concat(a.urls || []).filter(Boolean)
+  for (const au of aUrls) {
+    if (b.url && irisJobKey(au) && irisJobKey(au) === irisJobKey(b.url)) return true
+    const ids = irisJobIds(au)
+    if (b.url && ids.length && irisJobIds(b.url).some(function (x) { return ids.indexOf(x) >= 0 })) return true
   }
   const norm = function (s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() }
   return !!(a.company && b.company && a.title && b.title && norm(a.company) === norm(b.company) && norm(a.title) === norm(b.title))
@@ -374,6 +375,11 @@ function irisApplicationAdd (rec) {
   const items = irisApplicationsLoad()
   const existing = items.findIndex(function (a) { return irisSameJob(a, rec) })
   const item = Object.assign({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), at: Date.now() }, existing === -1 ? {} : items[existing], rec, { updated: Date.now() })
+  // every address the job was seen at stays (a real run's update replaced Duolingo's careers.duolingo.com address with
+  // another board's, and the job then looked new at the first address)
+  const urls = [].concat(existing === -1 ? [] : (items[existing].urls || []), existing === -1 ? [] : [items[existing].url], [rec.url])
+    .filter(function (u, i, all) { return u && all.indexOf(u) === i })
+  if (urls.length > 1) item.urls = urls.slice(-10)
   if (existing === -1) items.push(item)
   else items[existing] = item
   irisApplicationsSave(items)
