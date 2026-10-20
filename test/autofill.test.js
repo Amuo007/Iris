@@ -313,6 +313,13 @@ test('the agent names a field by the label it reads; Iris finds that field', () 
   assert.strictEqual(af.findField(fields, 'Favourite colour', ['combobox', 'select']), null)
 })
 
+test('two boxes with the same label: the one still unanswered is found', () => {
+  const fields = [{ key: 'j1', kind: 'select', label: 'Is current position?', value: 'Yes' }, { key: 'j2', kind: 'select', label: 'Is current position?', value: 'Select an option' }]
+  assert.strictEqual(af.findField(fields, 'Is current position?', ['select']).key, 'j2')
+  const both = [{ key: 'j1', kind: 'select', label: 'Is current position?', value: '' }, { key: 'j2', kind: 'select', label: 'Is current position?', value: '' }]
+  assert.strictEqual(af.findField(both, 'Is current position?', ['select']).key, 'j1')
+})
+
 
 test('a name pronunciation box is not the full name', () => {
   assert.strictEqual(plan('Name Pronunciation | How do you pronounce your name?', 'text').do, 'leave')

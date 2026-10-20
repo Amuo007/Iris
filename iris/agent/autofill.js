@@ -148,9 +148,16 @@ function findField (fields, label, kinds) {
     if (!l) continue
     let sc = l === want ? 100 : l.indexOf(want) === 0 ? 85 : want.indexOf(l) === 0 && l.length > 3 ? 75 : l.indexOf(want) > 0 ? 65 : want.indexOf(l) > 0 && l.length > 3 ? 55 : 0
     if (!sc && ww.length) { const lw = words(f.label); const hit = ww.filter(function (w) { return lw.indexOf(w) >= 0 }).length; sc = Math.round(45 * hit / ww.length) }
-    if (sc > top) { top = sc; best = f }
+    // two boxes with the same label (one "Is current position?" per job): the one still empty, not the one already
+    // answered (a real run chose into the first of two for 15 steps while the second stayed unset)
+    if (sc > top || (sc && sc === top && best && isAnswered(best) && !isAnswered(f))) { top = sc; best = f }
   }
   return top >= 30 ? best : null
+}
+
+function isAnswered (f) {
+  const v = clean(f && f.value)
+  return !!v && !isPlaceholderOption(v)
 }
 
 /* A list's "nothing chosen" entry ("--", "Select…", "Please select"): not a real option. */
