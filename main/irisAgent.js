@@ -425,10 +425,15 @@ function irisAccountsLoad () {
 }
 
 function irisAccountSave (rec) {
-  const list = irisAccountsLoad().filter(function (a) { return !(a.site === rec.site && a.username === rec.username) })
+  const all = irisAccountsLoad()
+  const old = all.find(function (a) { return a.site === rec.site && a.username === rec.username })
+  const list = all.filter(function (a) { return a !== old })
   const pw = String(rec.password || '')
   const ref = /^\{\{\s*([^}]+?)\s*\}\}$/.exec(pw)
-  list.push({
+  // the password it replaces is kept (a real run made a second EA password for an account EA already had: the
+  // working one was lost)
+  const previous = old && old.password ? { previous: old.password, previousCreated: old.created } : {}
+  list.push(Object.assign({
     site: rec.site,
     username: rec.username,
     url: rec.url || '',
@@ -438,7 +443,7 @@ function irisAccountSave (rec) {
     title: String(rec.title || '').slice(0, 120),
     purpose: String(rec.purpose || '').slice(0, 200),
     created: Date.now()
-  })
+  }, previous))
   fs.writeFileSync(irisAccountsPath(), JSON.stringify({ accounts: list }, null, 1), { mode: 0o600 })
 }
 
@@ -1318,6 +1323,9 @@ IrisComputer.prototype.withNewPassword = function (wc, text) {
       // earlier save ran when the step was announced, before the password was made, and skipped the placeholder)
       let user = this.lastTypedEmail || ''
       if (!user) { try { user = String((irisCareerLoad().basics || {}).email || '').trim() } catch (e) {} }
+      // an account saved before for this site: the site may already know this email
+      const had = user ? irisAccountsLoad().find(function (a) { return a.site === site && a.username === user }) : null
+      if (had) this.notes = (this.notes || []).concat('An account for ' + site + ' (' + user + ') was already saved on ' + new Date(had.created).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ': if the site says this email is taken, sign in with {{account:' + site + '}} (the earlier password is kept).')
       if (user) {
         try {
           irisAccountSave({ site: site, username: user, password: this.newPasswords[site], url: wc.getURL(), title: wc.getTitle(), purpose: this.taskTitle || '' })
