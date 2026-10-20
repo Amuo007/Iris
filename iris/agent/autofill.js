@@ -466,6 +466,9 @@ const PAGE_COLLECT = `(() => {
   // (Workday's dropdowns are buttons that open a list: button[aria-haspopup=listbox])
   const SEL = 'input, select, textarea, [role=combobox]:not(input):not(select):not(textarea), button[aria-haspopup="listbox"]';
   let all = [...form.querySelectorAll(SEL)];
+  // and the boxes inside components in the form (SmartRecruiters' spl-select dropdowns sit in shadow roots next to
+  // plain consent checkboxes: a real run could not find "Have you ever worked at AbbVie" in 6 tries)
+  all = all.concat(__deep(SEL, form).filter(e => all.indexOf(e) < 0));
   if (all.filter(e => e.type !== 'hidden' && e.type !== 'file').length < 3) all = __deep(SEL);
   all.forEach(el => {
     const t = (el.type || '').toLowerCase();
