@@ -108,6 +108,8 @@ function buildFacts (bank, info) {
     // "Expected December 2026": the degree is not finished — "highest completed" is high school
     degreeDone: !!degree && !/expected|anticipated|in progress|present/i.test(clean(edu.dates)),
     gpa: answer(/^gpa$/i),
+    // the year school began (a saved answer: "Started at University of Houston: 2024")
+    eduStartYear: (answer(/^started at|school start|year (you )?(started|began|enrolled)/i).match(/\b(19|20)\d{2}\b/) || [''])[0],
     company: clean(job.company).replace(/\s*\(.*\)\s*$/, ''),
     title: clean(job.title),
     workAuthorized: yes(answer(/work authori[sz]ation/i)),
@@ -244,7 +246,9 @@ function rulesFor (f) {
       text: f.gradMonth && f.gradYear ? String(['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].indexOf(f.gradMonth.toLowerCase()) + 1).padStart(2, '0') + '/01/' + f.gradYear : '' },
     { test: /^end date month|graduation month|^end month/i, choose: f.gradMonth ? [new RegExp('^' + f.gradMonth, 'i')] : null, text: f.gradMonth },
     { test: /^end date year|graduation (date|year)|^end year|year of graduation|expected graduation/i, choose: f.gradYear ? [new RegExp('^' + f.gradYear + '$')] : null, text: f.gradYear },
-    { test: /^start date (month|year)|^start (month|year)/i, leave: 'not in the profile' },
+    // the school's start year from the saved answer (left empty, a real run's Greenhouse form showed start 2027, end 2026)
+    { test: /^start date year|^start year/i, choose: f.eduStartYear ? [new RegExp('^' + f.eduStartYear + '$')] : null, text: f.eduStartYear, leave: f.eduStartYear ? undefined : 'not in the profile' },
+    { test: /^start date month|^start month/i, leave: 'not in the profile' },
     { test: /\bgpa\b|grade point/i, text: f.gpa },
     // ---- work
     { test: /(current|most recent|present)\b[^?]{0,25}\b(company|employer)|^(company|employer)( name)?$/i, skip: /previous|former|ever|before/i, text: f.company },

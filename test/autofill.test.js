@@ -358,3 +358,12 @@ test('a graduation date picker gets a full date (Ashby takes MM/DD/YYYY only); o
   assert.match(plan('Graduation Date or Anticipated Graduation Date', 'text', null, { placeholder: 'Pick date...' }).value, /^\d{2}\/01\/\d{4}$/)
   assert.match(plan('Graduation Date', 'text', null, { placeholder: '' }).value, /^\d{4}$/)
 })
+
+test('the school start year comes from the saved answer; the month stays empty', () => {
+  const withStart = af.buildFacts(Object.assign({}, bank, { answers: bank.answers.concat({ label: 'Started at University of Houston', value: '2024' }) }), info)
+  const p = (label, kind, options) => af.planField({ label, kind: kind || 'text', options: options || null, required: true }, withStart)
+  assert.deepStrictEqual(p('Start date year'), { do: 'text', value: '2024' })
+  assert.strictEqual(p('Start date year', 'select', ['2023', '2024', '2025', '2026', '2027']).do, 'choose')
+  assert.strictEqual(p('Start date month').do, 'leave')
+  assert.strictEqual(plan('Start date year').do, 'leave')
+})
