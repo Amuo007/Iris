@@ -1753,7 +1753,7 @@ IrisComputer.prototype.act = async function (action) {
   // the e-mail typed on a sign-up page: the new account's username
   if (action.type === 'type' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(action.text || '').trim())) this.lastTypedEmail = String(action.text).trim()
   typed = this.withNewPassword(wc, typed)
-  let real = action.type === 'type' ? Object.assign({}, action, { text: irisFillSecrets(typed) }) : action
+  let real = action.type === 'type' ? Object.assign({}, action, { text: irisFillSecrets(typed) }, /\{\{[^}]+\}\}/.test(String(typed || '')) ? { secret: true } : {}) : action
   // a jump of more than about two screens skips whole parts of a form (real run: 15 down, 15 up, again and again)
   if (action.type === 'scroll' && (action.amount || 3) > 12) real = Object.assign({}, real, { amount: 12 })
   // "select all" before typing is for the text already in a field. When the spot is not a text box (the

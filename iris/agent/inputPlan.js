@@ -260,7 +260,9 @@ function planInputEvents (action, opts) {
           } else {
             enterEvents(add)
           }
-        } else if (/[0-9]/.test(ch) && !mods) {
+        } else if (/[0-9]/.test(ch) && !mods && !action.secret) {
+          // (not in a password: Workday's password box drops digits typed as key presses — four accounts made with
+          // a password missing its digit after this came in, HP and NVIDIA then refused the sign-in)
           // a digit is typed as a whole key press, a little slower: masked and split date boxes (Workday's MM/YYYY,
           // Paylocity's MM/DD/YYYY) read key presses and jump to the next part after two digits — typed at 8 ms the
           // digits during the jump were lost ("052026" became 05/0006 on a real Workday form)

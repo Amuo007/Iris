@@ -179,3 +179,9 @@ test('typing nothing into a box selects all and deletes it', () => {
   assert.ok(plan.some(s => s.event && s.event.type === 'keyDown' && s.event.keyCode === 'Backspace'))
   assert.ok(!plan.some(s => s.event && s.event.type === 'char'))
 })
+
+test('a password types its digits as plain characters; other text keeps whole key presses for digits', () => {
+  const evs = a => planInputEvents(a, { from: { x: 0, y: 0 } }).filter(s => s.event && /^(keyDown|char)$/.test(s.event.type)).map(s => s.event.type + ':' + s.event.keyCode)
+  assert.deepStrictEqual(evs({ type: 'type', text: 'a7', secret: true }), ['char:a', 'char:7'])
+  assert.deepStrictEqual(evs({ type: 'type', text: 'a7' }), ['char:a', 'keyDown:7', 'char:7'])
+})
