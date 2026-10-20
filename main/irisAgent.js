@@ -1561,6 +1561,10 @@ IrisComputer.prototype.act = async function (action) {
         const again = this.unconfirmedLog && this.unconfirmedLog.key === (action.company + '|' + action.title) && this.unconfirmedLog.looks > 0
         if (!seen && !again) {
           if (!this.unconfirmedLog || this.unconfirmedLog.key !== (action.company + '|' + action.title)) this.unconfirmedLog = { key: action.company + '|' + action.title, co: co, site: site, looks: 0 }
+          // a way out: a real run took Lear's "Thank you for expressing your interest" greeting above its unfinished form
+          // for a confirmation and asked again and again
+          this.unconfirmedLog.refused = (this.unconfirmedLog.refused || 0) + 1
+          if (this.unconfirmedLog.refused >= 3) return { ok: false, error: 'not logged — "applied" refused ' + this.unconfirmedLog.refused + ' times: no confirmation page was ever seen for this job (a greeting such as "thank you for your interest" on the form itself is none). Do not log it "applied" again: log it needs_you, saying what the page shows, and go on to the next job.' }
           return { ok: false, error: 'not logged — no confirmation was seen for this application (no "thank you / application submitted" page after Submit), so it may not have gone through. Go back to its page and look: submit it if the form is still there, and log "applied" when the confirmation shows. If its page does show it went through, log it again after that look.' }
         }
         if (!seen && again) action = Object.assign({}, action, { note: ((action.note || '') + ' (no confirmation page recognised)').trim() })
