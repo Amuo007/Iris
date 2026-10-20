@@ -220,7 +220,10 @@ async function irisAfChooseOne (computer, wc, field, option) {
     const ok = await irisAfEval(wc, irisAutofillLib.pageSetSelect(field.key, field.options[i]))
     result = ok ? { set: field.options[i] } : { left: 'the list did not take it' }
   } else if (field.kind === 'radios' || field.kind === 'checkboxes') {
-    const i = irisAutofillLib.pickOption(field.options || [], patterns)
+    let i = irisAutofillLib.pickOption(field.options || [], patterns)
+    // a lone box ("I certify that I am at least 18 years of age"): "Yes" / "agree" / "tick" means tick it (a real run
+    // chose "Yes" on Bosch's SmartRecruiters box, whose only choice is its own sentence)
+    if (i < 0 && field.kind === 'checkboxes' && (field.options || []).length === 1 && /^(yes|true|on|check(ed)?|tick(ed)?|i agree|agree(d)?|accept(ed)?|confirm(ed)?)$/i.test(String(option).trim())) i = 0
     if (i < 0) return { error: 'no choice "' + option + '" in "' + field.label + '" — its choices: ' + (field.options || []).slice(0, 15).join(' / ') }
     result = await irisAfTick(computer, wc, field, i, field.options[i])
   } else {
