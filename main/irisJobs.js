@@ -397,6 +397,10 @@ function irisApplicationAdd (rec) {
   // (a real run turned Salesforce's applied record into "skipped — already applied")
   if (existing !== -1 && items[existing].status === 'applied' && rec.status && rec.status !== 'applied') {
     rec = Object.assign({}, rec, { status: 'applied', note: [items[existing].note, rec.note ? 'later: ' + rec.note : ''].filter(Boolean).join(' | ').slice(0, 600) })
+  } else if (existing !== -1 && items[existing].status === 'skipped' && /citizen|ITAR|clearance|U\.?S\.? person|no (visa )?sponsorship|ineligib/i.test(items[existing].note || '') && (rec.status === 'needs_you' || rec.status === 'failed')) {
+    // a job ruled out as one the user cannot take stays ruled out: a later visit that only failed is no to-do for the
+    // user (a real run went back to Oshkosh's ITAR job, could not sign in, and turned "skipped" into "needs_you")
+    rec = Object.assign({}, rec, { status: 'skipped', note: [items[existing].note, rec.note ? 'later: ' + rec.note : ''].filter(Boolean).join(' | ').slice(0, 600) })
   } else if (existing !== -1 && items[existing].note && rec.status && rec.status !== items[existing].status && rec.note) {
     // another status keeps what the earlier one said (a real run's "failed — site broke" wiped GE Vernova's
     // needs_you note about the date box the user had to fix)
