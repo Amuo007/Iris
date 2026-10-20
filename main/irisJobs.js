@@ -351,6 +351,14 @@ function irisJobKey (url) {
       const named = end.filter(function (x) { return x.indexOf('_') >= 0 }).pop()
       if (named) return (u.hostname + '/job/' + named.split('_').pop().replace(/-\d+$/, '')).toLowerCase()
     }
+    // iCIMS: one posting at careers-<company>.icims.com/jobs/<n>/<slug>/<step> and at the company's own
+    // jobs.<company>.com/jobs/<n>?icims=1 (a real run went back to Keysight 55077, applied the day before)
+    const ic = /^(?:careers-)?([a-z0-9-]+)\.icims\.com$/i.exec(u.hostname)
+    const icId = /\/jobs\/(\d+)(\/|$)/.exec(u.pathname)
+    if (icId && (ic || u.searchParams.has('icims'))) {
+      const co = ic ? ic[1] : u.hostname.replace(/^(www|jobs|careers)\./i, '').split('.')[0]
+      return ('icims/' + co + '/' + icId[1]).toLowerCase()
+    }
     // only the parameters that name a job stay ("?gh_jid=…", Greenhouse's embed "?for=…&token=…"): "?embed=true" on an
     // Ashby link made a real run see Quora, applied to an hour before, as a new job
     const keep = new URLSearchParams()
