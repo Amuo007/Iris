@@ -427,7 +427,14 @@ function irisApplicationNote (url, pageTitle) {
     const page = norm(pageTitle)
     hit = irisApplicationsLoad().slice().reverse().find(function (a) {
       const t = norm(a.title); const c = norm(a.company)
-      return t.trim().length >= 8 && c.trim().length >= 3 && page.indexOf(t) >= 0 && page.indexOf(c) >= 0
+      const i = page.indexOf(t)
+      if (t.trim().length < 8 || c.trim().length < 3 || i < 0 || page.indexOf(c) < 0) return false
+      // the whole role, not the start of a longer one: "Software Engineer, New Grad" is not "Software Engineer, New
+      // Grad - Query Engines" (a real run skipped both of Palantir's new Query Engines postings as already handled)
+      const before = page.slice(0, i).trim(); const after = page.slice(i + t.length); const cw = c.trim()
+      const okBefore = !before || / for$/.test(' ' + before) || before.indexOf(cw) >= 0
+      const okAfter = !after || after.indexOf('at ') === 0 || after.indexOf(cw) === 0
+      return okBefore && okAfter
     }) || null
   }
   if (!hit) return null
