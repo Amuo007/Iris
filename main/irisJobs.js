@@ -506,6 +506,8 @@ function irisJobsPrompt (task, mode) {
     'Immigration papers are facts, never estimates: an EAD/OPT card date, a visa, I-94 or SEVIS number, a permit expiry',
     'is typed only when the profile or saved answers give it (a real run typed a made-up EAD expiry). An optional one',
     'stays empty; a required one makes the job needs_you naming it.',
+    'Every application carries the resume, even where its upload is optional: on Workday attach it on the My Experience',
+    'step before Save and Continue (a real run reached Citi\'s review with Resume/CV "No Response" and could not go back).',
     'A date box split into parts (MM / YYYY, Workday\'s "From" and "To"): click the month part and type only its two digits,',
     'then click the year part and type only its four digits. Never type the whole date at once (a real run typed "052026"',
     'and the box kept "/5202"). A year part that shows wrong digits: click it and type the four digits again.',
