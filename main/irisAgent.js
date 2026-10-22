@@ -809,7 +809,9 @@ function IrisComputer (tabId, config, hooks, viewBounds) {
 function irisNextListedJob (task, since) {
   const lines = String(task || '').split('\n')
   for (const line of lines) {
-    const m = /^\s*(\d+)\.\s+(.+?)\s+[—–-]\s+(.+?)\s+[—–-]\s+(https?:\/\/\S+)/.exec(line)
+    // "12. Axon — Software Engineer 1 — https://…" or "12. Axon — Software Engineer 1 (Remote): https://…" (a real run's
+    // list used the colon: no line matched, and every log told the model the whole list was done)
+    const m = /^\s*(\d+)\.\s+(.+?)\s+[—–-]\s+(.+?)(?:\s+[—–-]\s+|:\s+)(https?:\/\/\S+)/.exec(line)
     if (!m) continue
     const job = { company: m[2].trim(), title: m[3].trim(), url: m[4].trim() }
     const hit = irisApplicationFind(job)
@@ -1623,8 +1625,15 @@ IrisComputer.prototype.act = async function (action) {
       }
       const item = irisApplicationAdd(rec)
       const label = { applied: 'Applied', skipped: 'Skipped', needs_you: 'Waiting for the user', failed: 'Could not apply' }[rec.status]
+      // the user asked for LinkedIn connections after each application: say so right here, where the model would
+      // otherwise read "go on" (a real run skipped LinkedIn after every job on an old "search limit" note)
+      const linkedinAsked = rec.status === 'applied' && rec.company && /linked ?in/i.test(String(irisAgentState.task || ''))
       this.notes = (this.notes || []).concat('Logged in Settings → Jobs → Applications: ' + label + ' — ' + (rec.title || 'job') + (rec.company ? ' at ' + rec.company : '') + '.' +
-        (rec.status === 'applied' ? ' Applications sent today: ' + irisAppliedToday() + '.' : '') + ' Go on to the next job.')
+        (rec.status === 'applied' ? ' Applications sent today: ' + irisAppliedToday() + '.' : '') +
+        (linkedinAsked
+          ? ' Now, before the next job, do the LinkedIn part the user asked for: send a connection request to at least 1 person who works at ' + rec.company +
+            '. If LinkedIn\'s own search is limited, search Google for site:linkedin.com/in ' + rec.company + ' software engineer, open a profile from the results and press Connect there. Then go on to the next job.'
+          : ' Go on to the next job.'))
       if (rec.status === 'needs_you') irisNotify('A job application needs you', (rec.title || 'A job') + (rec.company ? ' at ' + rec.company : '') + (rec.note ? ': ' + rec.note : ''))
       broadcastEvent({ type: 'application', item: item, sessionId: this.sessionId })
       if (job) this.jobsTailored = tailored.filter(function (j) { return j !== job })
@@ -1636,7 +1645,13 @@ IrisComputer.prototype.act = async function (action) {
       }
       const next = irisNextListedJob(irisAgentState.task, irisAgentState.startedAt)
       if (next) this.notes = this.notes.concat('Next in the user\'s list: ' + next + ' (jobs before it are done).')
-      else if (/^\s*\d+\.\s/m.test(String(irisAgentState.task || ''))) this.notes = this.notes.concat('Every job in the user\'s list has now been handled: finish with done and the summary.')
+      else if (/^\s*\d+\.\s/m.test(String(irisAgentState.task || ''))) {
+        // a task that says to keep going (non-stop, till morning) is not over when its list is
+        const keepGoing = /non-?stop|keep (going|finding|applying|repeating)|till morning|never stop|no end/i.test(String(irisAgentState.task || ''))
+        this.notes = this.notes.concat(keepGoing
+          ? 'Every job in the user\'s list has now been handled: keep going as the task says — find new jobs (do not finish).'
+          : 'Every job in the user\'s list has now been handled: finish with done and the summary.')
+      }
       const open = (this.jobsTailored || []).filter(function (j) { return Date.now() - (j.at || 0) < 3 * 3600 * 1000 && !irisApplicationFind(j) })
       if (open.length) {
         this.notes = this.notes.concat('Not logged yet (a resume was made for each): ' + open.map(function (j) { return j.title + (j.company ? ' at ' + j.company : '') }).join('; ') + ' — log_application for each as well (applied, needs_you, skipped or failed).')
