@@ -8,6 +8,14 @@ Iris is built on [Min](https://github.com/minbrowser/min) (Apache-2.0), which pr
 tasks, history, bookmarks, search, content blocking and settings. Everything above that layer —
 the visual identity, the agent, the panel, the safety gates — is new.
 
+## See it run
+
+[![Iris applying to a job, then sending a LinkedIn connection request (click for the 1-minute video)](docs/media/iris-highlights-preview.gif)](docs/media/iris-highlights.mp4)
+
+One evening's run, hands off: Iris finds computer-science jobs, fills in and submits each application, then sends
+LinkedIn connection requests to people at that company. Real moments at 2× speed —
+[watch the full 1-minute video](docs/media/iris-highlights.mp4).
+
 ![Iris running an agent task](docs/screenshots/agent-panel.png)
 
 ---
