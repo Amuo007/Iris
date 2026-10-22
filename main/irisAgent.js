@@ -1561,9 +1561,12 @@ IrisComputer.prototype.act = async function (action) {
         const co = squash(action.company).slice(0, 6)
         // the company's own site counts too: Workday names it short ("bah", "amfam", "bbinsurance"), never "boozal…"
         const site = action.url ? irisSiteKey(action.url) : ''
+        const ids = action.url ? irisJobIds(action.url) : []
         const seen = (this.confirmations || []).some(function (c) {
           const k = irisJobKey(c.url).replace(/\/(thanks|thank-you|confirmation|submitted|success)$/, '')
-          return Date.now() - c.at < 45 * 60000 && ((want && (k === want || k.indexOf(want) === 0 || want.indexOf(k) === 0)) || (co && squash(c.url).indexOf(co) >= 0) || (site && irisSiteKey(c.url) === site))
+          return Date.now() - c.at < 45 * 60000 && ((want && (k === want || k.indexOf(want) === 0 || want.indexOf(k) === 0)) || (co && squash(c.url).indexOf(co) >= 0) || (site && irisSiteKey(c.url) === site) ||
+            // the same posting number: a company page's ?gh_jid=N confirmed on Greenhouse's embed ?token=N
+            (ids.length && irisJobIds(c.url).some(function (x) { return ids.indexOf(x) >= 0 })))
         })
         // asked again for the same job after a look at its page: taken
         const again = this.unconfirmedLog && this.unconfirmedLog.key === (action.company + '|' + action.title) && this.unconfirmedLog.looks > 0

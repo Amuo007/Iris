@@ -372,7 +372,13 @@ function irisJobKey (url) {
 /* a posting's long number (8+ digits): the same job reached by two addresses keeps it (Duolingo 8888721002 at
    careers.duolingo.com/jobs/… and at Greenhouse's embed ?token=…: a real run applied to it twice) */
 function irisJobIds (url) {
-  return irisJobKey(url).match(/\d{8,}/g) || [] // its path and job-naming parameters only, never a tracking id
+  const key = irisJobKey(url)
+  const ids = key.match(/\d{8,}/g) || [] // its path and job-naming parameters only, never a tracking id
+  // a Greenhouse job number names the posting at any length: AQR's careers.aqr.com/jobs?gh_jid=8284812 is its embed
+  // form's ?token=8284812 (a real run's confirmation there was refused as another job's)
+  const gh = /[?&](?:gh_jid|token)=(\d{5,})(?:&|$)/.exec(key)
+  if (gh && ids.indexOf(gh[1]) < 0) ids.push(gh[1])
+  return ids
 }
 
 function irisSameJob (a, b) {
