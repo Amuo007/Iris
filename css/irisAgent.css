@@ -156,6 +156,9 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* never sideways: a long URL or code in a step wraps instead of widening the panel */
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
   padding: 16px 16px 8px;
   display: flex;
   flex-direction: column;
@@ -566,6 +569,8 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
   padding: 6px 8px 12px;
 }
 
