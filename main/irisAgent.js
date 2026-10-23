@@ -3090,13 +3090,24 @@ function startAgent (task, options) {
     const jobsLimitReached = computer.jobsMode && irisCareerLoad().prefs.dailyLimit > 0 && irisAppliedToday() >= irisCareerLoad().prefs.dailyLimit
     if (mode === 'continuous' && result.status === 'done' && irisPrompts.isOpenEnded(original.text) && !jobsLimitReached && (session.autoResumes || 0) < 200) {
       session.autoResumes = (session.autoResumes || 0) + 1
-      // research finds more right away; new job postings appear slowly, so a job run looks again in 30 minutes
-      const waitMs = computer.jobsMode ? 30 * 60000 : 20000
+      // a job run that says "done" right after an application is not out of jobs (real night: 2 stops, each one a
+      // finished-sounding reply after a submit): go on in 20 s; only 3 "done"s within 30 minutes mean nothing is left,
+      // and then it looks again in 30 minutes, as new postings appear slowly
+      session.doneTimes = (session.doneTimes || []).filter(function (t) { return Date.now() - t < 30 * 60000 }).concat(Date.now())
+      const waitMs = computer.jobsMode && session.doneTimes.length >= 3 ? 30 * 60000 : 20000
+      // an application whose thank-you page was seen but that never got logged (the "done" came instead of the log)
+      const unlogged = computer.jobsMode ? (computer.confirmations || []).filter(function (c) {
+        return Date.now() - c.at < 20 * 60000 && !/linkedin\.com/i.test(c.url) && !irisApplicationFind({ url: c.url })
+      }).map(function (c) { return c.url }) : []
+      const logFirst = unlogged.length
+        ? 'First: the application at ' + unlogged.slice(-1)[0].slice(0, 200) + ' was submitted (its thank-you page showed) but is not in the Applications list: ' +
+          'log it with log_application {"status":"applied", "company", "title", "url"}. Then '
+        : ''
       broadcastEvent({ type: 'repeat:scheduled', at: Date.now() + waitMs, minutes: waitMs / 60000, sessionId: session.id, resume: true })
       irisRepeatTimer = setTimeout(function () {
         irisRepeatTimer = null
         const tabId = irisComputer ? irisComputer.tabId : options.tabId
-        const again = startAgent('Keep going (you were asked to continue until stopped): find more that you have not covered yet, ' +
+        const again = startAgent(logFirst + 'Keep going (you were asked to continue until stopped): find more that you have not covered yet, ' +
           'and skip everything you already judged, downloaded or applied to. The task: ' + original.text, Object.assign({}, options, { tabId: tabId, sessionId: session.id, plan: false }))
         if (!again.ok) DBUG('continue failed: ' + again.error)
       }, waitMs)
