@@ -743,7 +743,7 @@ function irisJobsPrompt (task, mode) {
   // Settings → Connections → WhatsApp: a code sent to the user's phone is asked for there, without waiting (a real day
   // ended 7 TikTok applications at "enter the code we texted you")
   if (irisWhatsAppReady()) {
-    live.push('WhatsApp is on: a code the site sends to the user\'s phone (SMS, text, phone call, authenticator app), or to an inbox you cannot open, is no reason for needs_you. ' +
+    live.push('WhatsApp is on: a code the site sends to the user\'s phone (SMS, text, phone call, authenticator app) is no reason for needs_you. A code sent by email is not for WhatsApp: read it in the inbox yourself. ' +
       'From the page with the code box send {"type":"request_code","what":"what the site asks for, e.g. the 6-digit code TikTok texted to the phone","company":str,"title":str} once. ' +
       'Do not wait for it: leave that tab open as it is, open the next job in a new tab and go on. Iris tells you the code and the tab the moment it comes (finish only the step you are on, switch to that tab, type the code, submit and log the job), ' +
       'or after 15 minutes that none came (then Iris has logged that job needs_you). request_code is only for such codes — never for a CAPTCHA, a sign-in, a question or a password.')

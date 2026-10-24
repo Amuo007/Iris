@@ -325,11 +325,12 @@ async function irisWhatsAppIncoming (text) {
   if (!cmd) {
     // not for Iris: in Message yourself a note to self, so quiet unless a code is waiting
     if (m.request) return irisWhatsAppSend(irisChannelsLib.noCodeText(m.request))
+    if (m.closed) return irisWhatsAppSend(irisChannelsLib.closedText(m.closed))
     if (m.late) return irisWhatsAppSend(irisChannelsLib.lateText(m.late))
     return
   }
-  // a lone code with nothing waiting for one (late, or sent twice) is not a task
-  if (!m.request && irisChannelsLib.isJustCode(text) && (cmd.kind === 'task' || cmd.kind === 'link')) return irisWhatsAppSend(m.late ? irisChannelsLib.lateText(m.late) : irisChannelsLib.noCodeWaitingText())
+  // a lone code with nothing waiting for one (late, already handled, or sent twice) is not a task
+  if (!m.request && irisChannelsLib.isJustCode(text) && (cmd.kind === 'task' || cmd.kind === 'link')) return irisWhatsAppSend(m.closed ? irisChannelsLib.closedText(m.closed) : m.late ? irisChannelsLib.lateText(m.late) : irisChannelsLib.noCodeWaitingText())
   // a code is waiting: anything but a command is taken as a try at the code ("hi" must not start a run)
   if (m.request && (cmd.kind === 'task' || cmd.kind === 'link')) return irisWhatsAppSend(irisChannelsLib.noCodeText(m.request))
   DBUG('whatsapp command: ' + cmd.kind)
@@ -369,6 +370,8 @@ function irisWhatsAppUpdate (text, always) {
 
 /** An application was logged (applied / needs you / failed are sent when updates are on). */
 function irisWhatsAppOnApplication (rec) {
+  // the job is handled: a code still asked for it is no longer needed
+  irisChannelsLib.closeFor(irisWhatsAppState.requests, rec)
   irisWhatsAppUpdate(irisChannelsLib.applicationText(rec), false)
 }
 

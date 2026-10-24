@@ -146,7 +146,24 @@ function matchReply (requests, text, now) {
   if (open.length && code) return { request: open[open.length - 1], code: code }
   if (open.length) return { request: open[open.length - 1], code: null }
   const recent = (requests || []).filter(function (r) { return r.state !== 'answered' && now - r.at < KEEP_MS }).slice(-1)[0]
+  if (recent && code && recent.state === 'closed') return { closed: recent }
   return recent && code ? { late: recent } : {}
+}
+
+/**
+ * A job was logged (applied, needs you, skipped, failed): its waiting code request is closed, so a code that comes later
+ * is answered "no longer needed" and the model is not sent back to an old tab (a real BNY code came 4 minutes after
+ * the model had read it in the inbox itself and logged the job). Returns the requests closed.
+ */
+function closeFor (requests, rec) {
+  const name = jobName(rec || {})
+  const url = String((rec && rec.url) || '').split('?')[0]
+  const out = []
+  ;(requests || []).forEach(function (r) {
+    if (r.state !== 'sent') return
+    if (jobName(r) === name || (url && String(r.url || '').split('?')[0] === url)) { r.state = 'closed'; out.push(r) }
+  })
+  return out
 }
 
 /** Requests whose time is up (still marked sent): the caller tells the model and the user, then marks them expired. */
@@ -182,6 +199,10 @@ function expiredText (req) {
 
 function lateText (req) {
   return '[Iris] That came after ' + jobName(req) + ' timed out, so I could not use it. It is in the Applications list (needs you).'
+}
+
+function closedText (req) {
+  return '[Iris] Thanks — no longer needed: ' + jobName(req) + ' was already handled.'
 }
 
 function noCodeText (req) {
@@ -286,6 +307,8 @@ module.exports = {
   newRequest,
   matchReply,
   dueToExpire,
+  closeFor,
+  closedText,
   prune,
   codeArrivedNote,
   codeExpiredNote,

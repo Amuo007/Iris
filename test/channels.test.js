@@ -181,3 +181,19 @@ test('a message that is only a code is told apart from a task', () => {
   assert.ok(!ch.isJustCode('hello'))
   assert.ok(ch.isIrisMessage(ch.noCodeWaitingText()))
 })
+
+test('a logged job closes its code request; a code after that is "no longer needed"', () => {
+  const r1 = ch.newRequest({ company: 'BNY', title: '2027 Analyst - Data Science', what: 'code', url: 'https://eofe.fa.us2.oraclecloud.com/x/job/82245?a=1' }, T0, 'a')
+  const closed = ch.closeFor([r1], { status: 'needs_you', company: 'BNY', title: '2027 Analyst - Data Science' })
+  assert.strictEqual(closed.length, 1)
+  assert.strictEqual(r1.state, 'closed')
+  assert.deepStrictEqual(ch.openRequests([r1], T0 + MIN), [], 'not waiting any more')
+  assert.deepStrictEqual(ch.dueToExpire([r1], T0 + 20 * MIN), [], 'a closed request does not time out')
+  assert.strictEqual(ch.matchReply([r1], '497721', T0 + 12 * MIN).closed, r1)
+  assert.ok(/no longer needed: BNY — 2027 Analyst - Data Science was already handled/.test(ch.closedText(r1)))
+  // the same link closes it too, and another job leaves it open
+  const r2 = ch.newRequest({ company: 'TikTok', title: 'SWE', url: 'https://lifeattiktok.com/resume/1/apply' }, T0, 'b')
+  assert.strictEqual(ch.closeFor([r2], { company: 'ByteDance', title: 'Other' }).length, 0)
+  assert.strictEqual(ch.closeFor([r2], { company: 'TikTok Inc.', title: 'Software Engineer', url: 'https://lifeattiktok.com/resume/1/apply' }).length, 1)
+  assert.ok(ch.isIrisMessage(ch.closedText(r2)))
+})
