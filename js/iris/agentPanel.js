@@ -56,7 +56,6 @@ const ICONS = {
   play: '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5L8 5.5z" fill="currentColor"/></svg>',
   check: '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   search: '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M15 15l5 5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>',
-  folder: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
   cross: '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>'
 }
 
@@ -108,10 +107,8 @@ let projectSelect = null
 let projectNewRow = null
 let projects = []
 let currentProjectId = null
-// the Project row shows only for a chat in a project, or when opened from the header's folder button
+// every chat belongs to a project (General unless the user picks one); the row says which
 let projectBar = null
-let projectButton = null
-let projectBarOpen = false
 let streamEl = null
 let historyEl = null
 let statusBar = null
@@ -181,12 +178,6 @@ function buildPanel () {
   header.appendChild(title)
   modelBadge = el('span', 'iris-model-badge', '')
   header.appendChild(modelBadge)
-  projectButton = iconButton('', ICONS.folder, 'Projects: chats that share a plan, notes and downloads')
-  projectButton.addEventListener('click', function () {
-    projectBarOpen = !projectBarOpen
-    renderProjectBar()
-  })
-  header.appendChild(projectButton)
   const newBtn = iconButton('', ICONS.plus, 'New chat')
   newBtn.addEventListener('click', newChat)
   header.appendChild(newBtn)
@@ -203,11 +194,11 @@ function buildPanel () {
 
   // project: chats in a project share one plan and one memory
   projectBar = el('div', 'iris-projectbar')
-  projectBar.hidden = true
   projectBar.appendChild(el('span', 'iris-projectbar-label', 'Project'))
   projectSelect = document.createElement('select')
   projectSelect.className = 'iris-project-select'
-  projectSelect.title = 'Chats in a project share their plan, notes, decisions and downloads'
+  projectSelect.title = 'Every chat is in a project, and Usage counts tokens, steps and applications per project. ' +
+    'Chats in a project you make share its plan, notes and downloads; General keeps each chat on its own.'
   projectSelect.addEventListener('change', function () {
     if (projectSelect.value === '__new') {
       projectNewRow.hidden = false
@@ -215,7 +206,7 @@ function buildPanel () {
       projectSelect.value = currentProjectId || ''
       return
     }
-    setProject(projectSelect.value || null)
+    setProject(projectSelect.value)
   })
   projectBar.appendChild(projectSelect)
   panelEl.appendChild(projectBar)
@@ -411,10 +402,6 @@ function openSettings () {
 
 function renderProjects () {
   projectSelect.innerHTML = ''
-  const none = document.createElement('option')
-  none.value = ''
-  none.textContent = 'No project'
-  projectSelect.appendChild(none)
   projects.forEach(function (p) {
     const o = document.createElement('option')
     o.value = p.id
@@ -425,16 +412,12 @@ function renderProjects () {
   add.value = '__new'
   add.textContent = '+ New project…'
   projectSelect.appendChild(add)
-  if (currentProjectId && !projects.some(function (p) { return p.id === currentProjectId })) currentProjectId = null
+  // no project chosen yet, or it was removed: General
+  if (!projects.some(function (p) { return p.id === currentProjectId })) {
+    const general = projects.find(function (p) { return p.general })
+    currentProjectId = general ? general.id : (projects[0] && projects[0].id) || null
+  }
   projectSelect.value = currentProjectId || ''
-  renderProjectBar()
-}
-
-function renderProjectBar () {
-  if (!projectBar) return
-  projectBar.hidden = !currentProjectId && !projectBarOpen
-  projectButton.classList.toggle('is-on', !!currentProjectId)
-  projectButton.setAttribute('aria-pressed', String(!projectBar.hidden))
 }
 
 function setProject (id) {
@@ -443,9 +426,7 @@ function setProject (id) {
     return
   }
   currentProjectId = id
-  if (!id) projectBarOpen = false
   settings.set('irisAI', Object.assign({}, settings.get('irisAI') || {}, { currentProject: id }))
-  renderProjectBar()
   newChat()
 }
 
@@ -624,7 +605,10 @@ function renderHistory (list) {
   historyEl.appendChild(head)
   if (currentProjectId) {
     head.querySelector('.iris-history-title').textContent = 'History · ' + projectName(currentProjectId)
-    list = (list || []).filter(function (s) { return s.projectId === currentProjectId })
+    // General also holds the chats from before every chat had a project
+    const inGeneral = (projects.find(function (p) { return p.id === currentProjectId }) || {}).general
+    const known = function (id) { return projects.some(function (p) { return p.id === id }) }
+    list = (list || []).filter(function (s) { return s.projectId === currentProjectId || (inGeneral && !known(s.projectId)) })
   }
   if (!list || !list.length) {
     historyEl.appendChild(el('p', 'iris-history-empty', currentProjectId ? 'No chats in this project yet.' : 'No chats yet. Everything you ask Iris is saved here.'))
@@ -1522,6 +1506,7 @@ function bindProfileBridge () {
   const forward = {
     irisAccountsGet: 'iris-accounts-get',
     irisAccountReveal: 'iris-account-reveal',
+    irisAccountCopy: 'iris-account-copy',
     irisAccountDelete: 'iris-account-delete'
   }
   Object.keys(forward).forEach(function (name) {
@@ -1543,7 +1528,7 @@ function bindProfileBridge () {
   })
   ipc.on('iris-accounts-data', function (e, data) {
     if (!data || !data.tabId || !tabs.get(data.tabId)) return
-    webviews.callAsync(data.tabId, 'send', ['irisAccountsData', { accounts: data.accounts, revealed: data.revealed }])
+    webviews.callAsync(data.tabId, 'send', ['irisAccountsData', { accounts: data.accounts, revealed: data.revealed, copied: data.copied }])
   })
   ipc.on('iris-profile-data', function (e, data) {
     if (!data || !data.tabId || !tabs.get(data.tabId)) return
@@ -1659,7 +1644,6 @@ function initialize () {
     renderProjects()
   })
   currentProjectId = (settings.get('irisAI') || {}).currentProject || null
-  renderProjectBar()
   ipc.send('iris-projects')
 
   window.addEventListener('keydown', function (e) {

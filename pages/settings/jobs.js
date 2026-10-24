@@ -500,6 +500,9 @@ document.getElementById('iris-jobs-start').addEventListener('click', function ()
 var IRIS_STATUS_TEXT = { applied: 'Applied', skipped: 'Skipped', needs_you: 'Needs you', failed: 'Failed' }
 
 function irisRenderApplications (r) {
+  // kept for Accounts (it redraws this list when sign-ins change) and Usage (applications per project)
+  window.irisApplicationsData = r
+  if (window.irisRenderUsage) window.irisRenderUsage()
   var items = r.items || []
   var list = document.getElementById('iris-applications-list')
   var counts = { applied: 0, skipped: 0, needs_you: 0, failed: 0 }
@@ -519,7 +522,18 @@ function irisRenderApplications (r) {
     if (a.url) { main.href = a.url; main.title = a.url }
     main.appendChild(irisEl('span', 'iris-list-title', (a.title || 'Job') + (a.company ? ' — ' + a.company : '')))
     main.appendChild(irisEl('span', 'iris-list-sub', [a.fit !== null && a.fit !== undefined ? 'fit ' + a.fit : '', a.note || ''].filter(Boolean).join(' · ') || (a.url || '').replace(/^https?:\/\/(www\.)?/, '')))
-    row.appendChild(main)
+    // the sign-in Iris used on that site, with Show / Copy (Settings → Accounts has them all); under the job's link,
+    // not inside it, so the buttons do not open the job
+    var col = irisEl('div', 'iris-app-col')
+    col.appendChild(main)
+    var account = a.url && window.irisAccountFor ? window.irisAccountFor(a.url) : null
+    if (account) {
+      var signin = irisEl('div', 'iris-app-signin')
+      signin.appendChild(irisEl('span', 'iris-app-signin-user', 'Sign-in: ' + account.username))
+      signin.appendChild(window.irisAccountControls(account))
+      col.appendChild(signin)
+    }
+    row.appendChild(col)
     row.appendChild(irisEl('span', 'iris-status iris-status-' + a.status, IRIS_STATUS_TEXT[a.status] || a.status))
     if (a.resumeExists) {
       var show = irisEl('button', 'iris-button', 'Resume')
@@ -534,6 +548,8 @@ function irisRenderApplications (r) {
 }
 
 /* ---------- replies from the main process ---------- */
+
+window.irisRenderApplications = irisRenderApplications
 
 window.addEventListener('message', function (e) {
   if (!e.data || e.data.message !== 'irisSettingsActionResult') return

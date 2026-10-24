@@ -578,7 +578,12 @@
 
     <div class="settings-container" id="iris-accounts-container">
       <h3>Accounts Iris created</h3>
-      <div class="setting-secondary-label">Sites where Iris signed you up, with the login it used.</div>
+      <div class="setting-secondary-label">Sites where Iris signed you up, with the login it used. Passwords are kept
+        encrypted with your Mac's keychain; Show reveals one, Copy puts it on the clipboard for 90 seconds without showing it.</div>
+      <div class="iris-accounts-tools">
+        <input type="search" id="iris-accounts-search" class="iris-search" placeholder="Search sites, usernames or jobs" spellcheck="false" />
+        <span class="iris-inline-status" id="iris-accounts-count"></span>
+      </div>
       <div id="iris-accounts-list" class="iris-rows"></div>
 
     </div>

@@ -70,7 +70,7 @@ timeline without typing. The real model server is never contacted by any test.
 | Run a task | Type what you want and press Enter |
 | Continue the chat | Reply after a run ends; Iris keeps the context. **+** starts a new chat |
 | Past chats | The clock button: reopen any saved chat and continue it |
-| Projects | Chats in a project share one plan, notes, decisions and downloads |
+| Projects | Every chat is in a project (**General** unless you pick one), and Usage counts tokens, steps and applications per project. Chats in a project you make share its plan, notes, decisions and downloads; General keeps each chat on its own |
 | Pause / resume / stop | Buttons in the status bar while Iris works |
 | Take over | Click or type in the page; Iris pauses. Type a message to tell it something, or press ▶ |
 | Iris asks you | For a CAPTCHA, a phone code or a missing detail, Iris pauses, asks, and shows a macOS notification if you are away |
@@ -196,7 +196,10 @@ that mentions a word.
 - **Look-ups:** on/off, how many per task, sites never to contact
 - **My info:** your details for forms and logins. Secret fields are encrypted with the macOS
   keychain and never shown to the model: it types `{{Password}}` and Iris fills in the real value
-- **Accounts, Rules, Schedule, Skills, Coding agents**
+- **Accounts:** every sign-in Iris made, searchable, with the job it was for; **Show** reveals a password, **Copy**
+  puts it on the clipboard for 90 seconds without showing it. Passwords are encrypted with the Mac's keychain.
+  Settings → Applications shows the same sign-in under each job
+- **Rules, Schedule, Skills, Coding agents**
 - **Usage:** totals for 7 days, 30 days or all time (tokens read and written, model replies and
   seconds per step, tasks and look-ups, output speed and how much was read from the cache), a bar
   per day (tokens, replies or model time; hover a bar for the day's figures), then tokens and speed

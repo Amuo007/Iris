@@ -28,7 +28,7 @@ window.addEventListener('message', function (e) {
     ipc.send('irisImportChrome')
   }
 
-  if (e.data && ['irisAccountsGet', 'irisAccountReveal', 'irisAccountDelete'].includes(e.data.message)) {
+  if (e.data && ['irisAccountsGet', 'irisAccountReveal', 'irisAccountCopy', 'irisAccountDelete'].includes(e.data.message)) {
     ipc.send(e.data.message, { site: e.data.site, username: e.data.username })
   }
 })

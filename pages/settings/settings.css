@@ -2188,3 +2188,81 @@ body.dark-mode :is(.iris-settings-brand, .iris-about-mark) .iris-stop-4b { stop-
 .iris-about-row > span:first-child {
   color: var(--s-text-2);
 }
+
+/* --- Accounts: search, and Show / Copy on each sign-in ---------------------- */
+
+.iris-accounts-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 2px 0 8px;
+}
+.iris-settings .iris-accounts-tools input[type="search"].iris-search {
+  flex: 1;
+  max-width: 360px;
+}
+.iris-settings .iris-account-row {
+  align-items: center;
+  gap: 14px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--s-line);
+}
+.iris-settings .iris-account-site {
+  flex: 1 1 240px;
+}
+.iris-settings .iris-account-site .iris-list-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--s-text-3);
+}
+.iris-settings .iris-account-user {
+  flex: 0 1 220px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.iris-account-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.iris-settings .iris-account-controls .iris-account-pw {
+  flex: none;
+  min-width: 90px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: all;
+}
+.iris-settings .iris-account-controls .iris-button {
+  min-height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+/* --- Applications: the job's sign-in under its link -------------------------- */
+
+.iris-app-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.iris-app-signin {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--s-text-2);
+}
+.iris-app-signin-user {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}

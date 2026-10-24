@@ -339,3 +339,26 @@ test('a job form without the word apply is still a job task', () => {
   assert.ok(career.isJobTask('Finish the Lyft Software Engineer application (job 2 of my list) that is half filled in tab 1'))
   assert.ok(!career.isJobTask('The application crashed when I opened the settings'))
 })
+
+test('LinkedIn weekly limit is read from the application notes', () => {
+  const { linkedinLimitSeen } = require('../iris/agent/career')
+  const day = 24 * 3600 * 1000
+  const now = Date.UTC(2026, 9, 24, 4)
+  const at = (d) => now - d * day
+  // met yesterday, nothing sent since: in force
+  assert.strictEqual(linkedinLimitSeen([{ at: at(1), note: 'Submitted. LinkedIn skipped: weekly invitation limit reached.' }], now), at(1))
+  // a connection request went out after it: lifted
+  assert.strictEqual(linkedinLimitSeen([
+    { at: at(2), note: 'LinkedIn skipped — weekly invitation limit reached' },
+    { at: at(1), note: 'Applied. Sent connection requests to 2 engineers.' }
+  ], now), 0)
+  // "already sent earlier" is no new request: the limit stays
+  assert.strictEqual(linkedinLimitSeen([
+    { at: at(1), note: 'weekly limit reached on LinkedIn' },
+    { at: at(0.5), note: 'Connections already sent earlier this run' }
+  ], now), at(1))
+  // more than a week old: no longer in force
+  assert.strictEqual(linkedinLimitSeen([{ at: at(8), note: 'out of invitations on LinkedIn' }], now), 0)
+  assert.strictEqual(linkedinLimitSeen([{ at: at(1), note: 'Submitted via Greenhouse.' }], now), 0)
+  assert.strictEqual(linkedinLimitSeen(null, now), 0)
+})

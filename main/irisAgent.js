@@ -342,6 +342,30 @@ function irisProjectMemoryAdd (id, kind, text, extra) {
   }
 }
 
+/*
+ * Every chat belongs to a project; General is where a chat goes unless the user picks one. General only groups chats
+ * (usage, steps, applications): unlike the user's own projects it shares no plan or notes between its chats, so a chat
+ * there works exactly like a chat on its own.
+ */
+const IRIS_GENERAL_ID = 'general'
+
+function irisGeneralProject () {
+  const list = irisProjectsLoad()
+  let general = list.find(function (p) { return p.general })
+  if (!general) {
+    general = { id: IRIS_GENERAL_ID, name: 'General', general: true, created: Date.now(), updated: Date.now(), plan: '' }
+    list.unshift(general)
+    try { irisProjectsSave(list) } catch (e) { DBUG('project save: ' + e.message) }
+  }
+  return general
+}
+
+/* the project whose plan and notes a chat shares: none for General */
+function irisSharedProjectId (id) {
+  const p = irisProject(id)
+  return p && !p.general ? p.id : null
+}
+
 /** What every chat in the project knows up front: plan, latest notes, decisions so far. */
 function irisProjectBrief (id) {
   const p = irisProject(id)
@@ -362,6 +386,7 @@ function irisProjectBrief (id) {
 }
 
 ipc.on('iris-projects', function (event) {
+  irisGeneralProject()
   event.reply('iris-projects-reply', { projects: irisProjectsLoad() })
 })
 
@@ -2870,7 +2895,7 @@ function irisContextWindow (cfg) {
 function irisSystemExtra (mode, task, projectId, sessionId) {
   const parts = []
   const live = []
-  const brief = irisProjectBrief(projectId)
+  const brief = irisProjectBrief(irisSharedProjectId(projectId))
   if (brief) live.push(brief)
   const now = new Date()
   parts.push('Today is ' + now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + '. ' + irisCalendarHint(now))
@@ -2944,6 +2969,8 @@ function startAgent (task, options) {
     irisSession = irisNewSession(task)
     if (options.projectId && irisProject(options.projectId)) irisSession.projectId = options.projectId
   }
+  // a chat outside any project (new, or from before projects were required) goes into General
+  if (!irisSession.projectId || !irisProject(irisSession.projectId)) irisSession.projectId = irisGeneralProject().id
   const session = irisSession
   session.run = (session.run || 0) + 1
   session.items.push({ kind: 'user', text: task, mode: options.mode || 'once', run: session.run })
@@ -2963,8 +2990,8 @@ function startAgent (task, options) {
   computer.memory = irisSessionMemory(session)
   computer.taskTitle = session.title
   computer.sessionId = session.id
-  computer.projectId = session.projectId || null
-  computer.projectMemory = irisProjectMemory(session.projectId)
+  computer.projectId = irisSharedProjectId(session.projectId)
+  computer.projectMemory = irisProjectMemory(computer.projectId)
   computer.jobsMode = irisJobsActive(session.title + '\n' + task)
   computer.ghDirectTried = new Set()
   irisComputer = computer
@@ -3064,9 +3091,9 @@ function startAgent (task, options) {
       }
       if (type === 'remember' && payload.note && !payload.automatic) {
         irisSessionMemory(session).add('note', payload.note)
-        if (session.projectId) irisProjectMemoryAdd(session.projectId, 'note', payload.note)
+        if (computer.projectId) irisProjectMemoryAdd(computer.projectId, 'note', payload.note)
       }
-      if (session.projectId && type === 'verdict') irisProjectMemoryAdd(session.projectId, 'verdict', (payload.keep ? 'Kept: ' : 'Skipped: ') + payload.item + (payload.why ? ' — ' + payload.why : ''))
+      if (computer.projectId && type === 'verdict') irisProjectMemoryAdd(computer.projectId, 'verdict', (payload.keep ? 'Kept: ' : 'Skipped: ') + payload.item + (payload.why ? ' — ' + payload.why : ''))
       if (type === 'verdict') {
         let here = ''
         try { here = computer.view().webContents.getURL() } catch (e) { /* tab gone */ }
@@ -3087,7 +3114,7 @@ function startAgent (task, options) {
         })
         payload = Object.assign({}, payload, { items: undefined })
       }
-      if (session.projectId && type === 'plan' && payload.text) irisProjectUpdate(session.projectId, { plan: payload.text })
+      if (computer.projectId && type === 'plan' && payload.text) irisProjectUpdate(computer.projectId, { plan: payload.text })
       if (type === 'plan' && payload.text) session.lastPlan = payload.text
       // with <userData>/iris-shots/RECORD present, the image the model gets is kept per step (for reviewing a run's
       // decisions against what it saw); written in the background so the run never waits on it
@@ -3271,7 +3298,7 @@ function startAgent (task, options) {
   if (previousHistory) agent.importHistory(previousHistory)
   irisAgent = agent
 
-  const project = irisProject(session.projectId)
+  const project = irisProject(computer.projectId)
   const smart = options.plan ? (options.plan === 'deep' ? 'deep' : 'quick') : false
   agent.run(task, { followUp: !!previousHistory, plan: smart, projectPlan: project && project.plan }).then(function (result) {
     irisAgentState.status = result.status
@@ -3571,6 +3598,21 @@ ipc.on('iris-accounts-get', function (event, data) {
 
 ipc.on('iris-account-reveal', function (event, data) {
   event.reply('iris-accounts-data', { tabId: data && data.tabId, accounts: irisAccountsForPage(), revealed: { site: data.site, username: data.username, password: irisAccountPassword(data.site, data.username) } })
+})
+
+/* "Copy" in settings: the password goes to the clipboard without being shown, and is cleared from it after 90 s
+   (unless something else was copied since) */
+let irisCopyClearTimer = null
+ipc.on('iris-account-copy', function (event, data) {
+  const password = irisAccountPassword(data.site, data.username)
+  if (password) {
+    electron.clipboard.writeText(password)
+    clearTimeout(irisCopyClearTimer)
+    irisCopyClearTimer = setTimeout(function () {
+      if (electron.clipboard.readText() === password) electron.clipboard.clear()
+    }, 90000)
+  }
+  event.reply('iris-accounts-data', { tabId: data && data.tabId, accounts: irisAccountsForPage(), copied: password ? { site: data.site, username: data.username } : null })
 })
 
 ipc.on('iris-account-delete', function (event, data) {

@@ -1301,11 +1301,6 @@ function irisSpeedOf (t) {
   return t && t.genMs > 0 && t.genOut > 0 ? t.genOut / (t.genMs / 1000) : 0
 }
 
-function irisSpeed (t) {
-  var v = irisSpeedOf(t)
-  return v ? Math.round(v) + ' tok/s' : '–'
-}
-
 function irisWhen (ms) {
   if (!ms) return '–'
   var d = new Date(ms)
@@ -1522,20 +1517,31 @@ function irisRenderUsageGroups (usage) {
   var sessions = usage.sessions || {}
   var newest = function (obj) { return Object.keys(obj).sort(function (a, b) { return (obj[b].last || 0) - (obj[a].last || 0) }) }
   var total = function (t) { return (t.input || 0) + (t.output || 0) }
-  var head = '<div class="iris-ulist-row iris-ulist-head"><span class="iris-ulist-avatar"></span><span>Name</span><span class="iris-ulist-meter"></span><span>Input</span><span>Output</span><span>Steps</span><span>Speed</span><span>Last used</span></div>'
+  var head = '<div class="iris-ulist-row iris-ulist-head"><span class="iris-ulist-avatar"></span><span>Name</span><span class="iris-ulist-meter"></span><span>Input</span><span>Output</span><span>Steps</span><span>Applied</span><span>Last used</span></div>'
+  // applications per chat and per project: each application names its chat, each chat its project; a chat Usage
+  // never saw (from before it kept chats) counts for General
+  var apps = ((window.irisApplicationsData || {}).items || []).filter(function (a) { return a.status === 'applied' })
+  var appliedIn = function (projectId, sessionId) {
+    return apps.filter(function (a) {
+      if (sessionId) return a.sessionId === sessionId
+      var sess = sessions[a.sessionId]
+      return sess ? sess.project === projectId : projectId === 'general'
+    }).length
+  }
 
-  var row = function (name, sub, t, max) {
+  var row = function (name, sub, t, max, applied) {
     var initial = (String(name).trim().replace(/^(open|find|go to)\s+/i, '').charAt(0) || '·').toUpperCase()
     return '<div class="iris-ulist-row"><span class="iris-ulist-avatar">' + irisEscape(initial) + '</span><span class="iris-ulist-name" title="' + irisEscape(name) + '">' + irisEscape(name) +
       (sub ? '<small>' + irisEscape(sub) + '</small>' : '') + '</span>' +
       '<span class="iris-ulist-meter"><i style="width:' + (max ? Math.max(2, (total(t) / max) * 100) : 0) + '%"></i></span>' +
-      '<span>' + irisFormatK(t.input) + '</span><span>' + irisFormatK(t.output) + '</span><span>' + irisFormatK(t.requests || 0) + '</span><span>' + irisSpeed(t) + '</span><span>' + irisWhen(t.last) + '</span></div>'
+      '<span>' + irisFormatK(t.input) + '</span><span>' + irisFormatK(t.output) + '</span><span>' + irisFormatK(t.requests || 0) + '</span>' +
+      '<span>' + (applied || '–') + '</span><span>' + irisWhen(t.last) + '</span></div>'
   }
 
   var pIds = newest(projects)
   var pMax = Math.max.apply(null, pIds.map(function (id) { return total(projects[id]) }).concat([0]))
   document.getElementById('iris-usage-projects').innerHTML = pIds.length
-    ? head + pIds.map(function (id) { return row(projects[id].name || 'Project', '', projects[id], pMax) }).join('')
+    ? head + pIds.map(function (id) { return row(projects[id].name || 'Project', '', projects[id], pMax, appliedIn(id)) }).join('')
     : '<div class="iris-usage-empty">Work in a project shows here.</div>'
 
   var sIds = newest(sessions).slice(0, 15)
@@ -1544,7 +1550,7 @@ function irisRenderUsageGroups (usage) {
     ? head + sIds.map(function (id) {
       var t = sessions[id]
       var model = (IRIS_PROVIDER_NAMES[t.provider] || '') + (t.model ? ' · ' + t.model : '')
-      return row(t.title || 'Chat', model, t, sMax)
+      return row(t.title || 'Chat', model, t, sMax, appliedIn(null, id))
     }).join('')
     : '<div class="iris-usage-empty">Chats show here after their first model reply.</div>'
 }
@@ -1746,15 +1752,84 @@ postMessage({ message: 'irisProfileGet' })
 /* --- Accounts Iris created -------------------------------------------- */
 
 var irisAccountsList = document.getElementById('iris-accounts-list')
+var irisAccountsSearch = document.getElementById('iris-accounts-search')
+// shared with Settings → Applications (jobs.js), which shows each job's sign-in
+window.irisAccountItems = []
+window.irisAccountRevealed = null
+window.irisAccountCopied = null
+var irisCopiedTimer = null
+
+/* the sign-in Iris used on the site of a job link (accounts are kept per site address) */
+window.irisAccountFor = function (url) {
+  var host = ''
+  try { host = new URL(url).hostname } catch (e) { return null }
+  return window.irisAccountItems.filter(function (a) { return a.site === host }).pop() || null
+}
+
+/* the password cell and its buttons, here and on Applications: hidden until Show; Copy never shows it */
+window.irisAccountControls = function (a) {
+  var wrap = document.createElement('span')
+  wrap.className = 'iris-account-controls'
+  var revealed = window.irisAccountRevealed
+  var shown = revealed && revealed.site === a.site && revealed.username === a.username
+  var copied = window.irisAccountCopied && window.irisAccountCopied.site === a.site && window.irisAccountCopied.username === a.username
+  var pw = document.createElement('span')
+  pw.className = 'iris-account-pw'
+  pw.textContent = shown ? revealed.password : '••••••••'
+  if (!shown && a.passwordFrom) pw.title = 'From ' + a.passwordFrom
+  var show = document.createElement('button')
+  show.type = 'button'
+  show.className = 'iris-button'
+  show.textContent = shown ? 'Hide' : 'Show'
+  show.addEventListener('click', function () {
+    if (shown) {
+      window.irisAccountRevealed = null
+      irisRenderAccounts()
+    } else {
+      postMessage({ message: 'irisAccountReveal', site: a.site, username: a.username })
+    }
+  })
+  var copy = document.createElement('button')
+  copy.type = 'button'
+  copy.className = 'iris-button'
+  copy.textContent = copied ? 'Copied' : 'Copy'
+  copy.title = 'Copies the password without showing it; the clipboard is cleared after 90 seconds'
+  copy.addEventListener('click', function () { postMessage({ message: 'irisAccountCopy', site: a.site, username: a.username }) })
+  wrap.appendChild(pw)
+  wrap.appendChild(show)
+  wrap.appendChild(copy)
+  return wrap
+}
+
+function irisAccountDate (ms) {
+  return ms ? new Date(ms).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : ''
+}
 
 function irisRenderAccounts (data) {
-  var accounts = (data && data.accounts) || []
+  if (data) {
+    window.irisAccountItems = data.accounts || []
+    window.irisAccountRevealed = data.revealed || null
+    if (data.copied) {
+      window.irisAccountCopied = data.copied
+      clearTimeout(irisCopiedTimer)
+      irisCopiedTimer = setTimeout(function () { window.irisAccountCopied = null; irisRenderAccounts() }, 4000)
+    }
+  }
+  var accounts = window.irisAccountItems
+  var q = (irisAccountsSearch.value || '').trim().toLowerCase()
+  var shown = accounts.slice().reverse().filter(function (a) {
+    return !q || [a.site, a.username, a.title].join(' ').toLowerCase().indexOf(q) !== -1
+  })
+  document.getElementById('iris-accounts-count').textContent = accounts.length
+    ? (q ? shown.length + ' of ' + accounts.length : accounts.length) + (accounts.length === 1 ? ' sign-in' : ' sign-ins')
+    : ''
   irisAccountsList.innerHTML = ''
   if (!accounts.length) {
-    irisAccountsList.appendChild(irisEmptyLine('None yet. Accounts Iris creates for you appear here, with the link and why they were made.'))
-    return
+    irisAccountsList.appendChild(irisEmptyLine('None yet. Accounts Iris creates for you appear here, with the site and the job they were for.'))
+  } else if (!shown.length) {
+    irisAccountsList.appendChild(irisEmptyLine('No sign-in matches "' + irisAccountsSearch.value.trim() + '".'))
   }
-  accounts.forEach(function (a) {
+  shown.forEach(function (a) {
     var row = document.createElement('div')
     row.className = 'iris-row iris-account-row'
     var site = document.createElement('div')
@@ -1765,23 +1840,13 @@ function irisRenderAccounts (data) {
     site.appendChild(siteName)
     var meta = document.createElement('span')
     meta.className = 'iris-list-sub'
-    meta.textContent = [a.purpose ? 'For: ' + a.purpose : '', a.created ? 'Created ' + new Date(a.created).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : ''].filter(Boolean).join(' · ')
+    // the job page's title says what the account was for (the purpose field holds the whole task's text)
+    meta.textContent = [a.title ? a.title.slice(0, 80) : '', a.created ? 'Created ' + irisAccountDate(a.created) : ''].filter(Boolean).join(' · ')
     if (meta.textContent) site.appendChild(meta)
     var user = document.createElement('span')
     user.className = 'iris-account-user'
     user.textContent = a.username
-    var pw = document.createElement('span')
-    pw.className = 'iris-account-pw'
-    var shown = data.revealed && data.revealed.site === a.site && data.revealed.username === a.username
-    pw.textContent = shown ? data.revealed.password : '••••••••' + (a.passwordFrom ? '  (' + a.passwordFrom + ')' : '')
-    var show = document.createElement('button')
-    show.type = 'button'
-    show.className = 'iris-button'
-    show.textContent = shown ? 'Hide' : 'Show'
-    show.addEventListener('click', function () {
-      if (shown) irisRenderAccounts({ accounts: accounts })
-      else postMessage({ message: 'irisAccountReveal', site: a.site, username: a.username })
-    })
+    user.title = a.username
     var del = document.createElement('button')
     del.type = 'button'
     del.className = 'iris-row-delete'
@@ -1790,12 +1855,15 @@ function irisRenderAccounts (data) {
     del.addEventListener('click', function () { postMessage({ message: 'irisAccountDelete', site: a.site, username: a.username }) })
     row.appendChild(site)
     row.appendChild(user)
-    row.appendChild(pw)
-    row.appendChild(show)
+    row.appendChild(window.irisAccountControls(a))
     row.appendChild(del)
     irisAccountsList.appendChild(row)
   })
+  // Applications show each job's sign-in: draw them again with the new data
+  if (window.irisRenderApplications && window.irisApplicationsData) window.irisRenderApplications(window.irisApplicationsData)
 }
+
+irisAccountsSearch.addEventListener('input', function () { irisRenderAccounts() })
 
 window.addEventListener('message', function (e) {
   if (e.data && e.data.message === 'irisAccountsData') irisRenderAccounts(e.data.data)

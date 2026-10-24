@@ -842,6 +842,11 @@ test('open-ended tasks are recognised; tasks with an end are not', () => {
   const { isOpenEnded } = require('../iris/agent/prompts')
   assert.ok(isOpenEnded('Keep researching papers until I stop you'))
   assert.ok(isOpenEnded('download as many as you can'))
+  // an explicit end wins over open-ended words elsewhere; "never stop" keeps it open
+  assert.ok(!isOpenEnded('Find jobs and apply, keep repeating this non-stop. Only the jobs in the list below. When every job in the list is done, stop: finish with a short summary.'))
+  assert.ok(!isOpenEnded('Collect papers non-stop, then stop and report'))
+  assert.ok(isOpenEnded('When the list is done, keep finding new jobs; never stop with a summary.'))
+  assert.ok(isOpenEnded('keep going until I tell you'))
   assert.ok(isOpenEnded('keep going'))
   assert.ok(!isOpenEnded('find me 10 papers on harnesses'))
   assert.ok(!isOpenEnded('book a train to Milwaukee'))

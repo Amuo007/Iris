@@ -1759,7 +1759,29 @@ function readLatexLog (log) {
   return { pages: pages ? Number(pages[1]) : 0, fill: ratio === null ? 1 : ratio, error: err ? err[1] + (line ? ' (line ' + line[1] + ')' : '') : null }
 }
 
+/*
+ * LinkedIn's weekly invitation limit, read from the applications' own notes: when it was last met, unless a newer
+ * note says a connection request went out. 0 when it is not in force (never met, a week old, or lifted since).
+ * A real week (10-18 → 10-23): 297 jobs each spent steps opening LinkedIn just to meet the same limit again.
+ */
+const LINKEDIN_LIMIT = /(weekly|invitation) (invitation |invite )?limit|out of (invitations|invites)|no (invitations|invites) left/i
+const LINKEDIN_SENT = /(connection|invite|invitation)s? (requests? )?(sent|went out)|sent (a |an |\d+ )?(connection|invitation|invite)|connected with/i
+
+function linkedinLimitSeen (applications, now) {
+  let limitAt = 0
+  let sentAt = 0
+  ;(applications || []).forEach(function (a) {
+    const at = (a && (a.updated || a.at)) || 0
+    const note = String((a && a.note) || '')
+    if (LINKEDIN_LIMIT.test(note)) limitAt = Math.max(limitAt, at)
+    else if (LINKEDIN_SENT.test(note) && !/already|earlier|before/i.test(note)) sentAt = Math.max(sentAt, at)
+  })
+  const week = 7 * 24 * 3600 * 1000
+  return limitAt && limitAt > sentAt && (now || Date.now()) - limitAt < week ? limitAt : 0
+}
+
 module.exports = {
+  linkedinLimitSeen,
   SECTION_KINDS,
   isJobTask,
   skillYears,

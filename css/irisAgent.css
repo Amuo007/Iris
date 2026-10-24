@@ -1641,13 +1641,6 @@ body.dark-mode {
   grid-template-columns: minmax(22px, auto) 1fr auto;
 }
 
-/* the folder button lights up when the chat is in a project */
-.iris-panel-header .iris-icon-btn.is-on {
-  color: var(--logo-1b);
-}
-.iris-projectbar[hidden] {
-  display: none;
-}
 /* long counters wrap to a second row instead of being cut */
 .iris-status-sub {
   flex-wrap: wrap;

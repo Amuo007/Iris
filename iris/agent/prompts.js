@@ -212,7 +212,12 @@ function profileText (profile) {
 
 /** "Keep going until I stop you": a task that has no natural end. */
 function isOpenEnded (task) {
-  return /until (i|you are|you're) (stop|tell)|keep (going|researching|looking|collecting|finding|searching|downloading)|non-?stop|forever|continuously|as many as (you can|possible)/i.test(String(task || ''))
+  const t = String(task || '')
+  // an explicit end wins over open-ended words elsewhere in the text ("keep repeating this non-stop ... when the
+  // list is done, stop"): such a run ends when the model says done
+  // ("never stop with a summary" is the opposite, so a "never"/"not" just before "stop" does not count)
+  if (/\b(then|and) stop\b|(?<!never |not |n't )\bstop(:| with| when| once| after)|do not look for (other|more)|don't look for (other|more)/i.test(t)) return false
+  return /until (i|you are|you're) (stop|tell)|keep (going|researching|looking|collecting|finding|searching|downloading)|non-?stop|forever|continuously|as many as (you can|possible)/i.test(t)
 }
 
 function modeText (mode) {

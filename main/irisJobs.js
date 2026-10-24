@@ -673,7 +673,8 @@ function irisJobsPrompt (task, mode) {
     '   the required ones (*, the application privacy notice); leave optional ones (talent community, future jobs,',
     '   marketing) empty — so never "Select all" when it would tick optional boxes too.',
     '   "How did you hear about us?": where you found the posting (the company\'s own site → Company Website; a job board →',
-    '   that board, or Job Board); if none fits, Other.',
+    '   that board, or Job Board); if none fits, Other. Decide from the first list you see: do not open its sub-lists one',
+    '   by one looking for a better match (a real run spent 8 steps on Citi\'s) — pick the closest general option and go on.',
     '   Cover letter optional: skip it. Required as a file: cover_letter {"company":str,"title":str,"requirements":str} makes',
     '   a one-page PDF from the profile; upload it with {"type":"upload","file":"cover letter"} (replacing any old one the site',
     '   shows). Required as a text box: type',
@@ -723,6 +724,15 @@ function irisJobsPrompt (task, mode) {
   // "How many years have you worked with X?": counted by code from the jobs that mention X
   const years = irisCareerLib.skillYears(bank).slice(0, 30)
   if (years.length) lines.push('Years with each skill (from the dates of the jobs that mention it — use these for "how many years with X"): ' + years.map(function (y) { return y.skill + ' ' + y.years }).join(', ') + '.')
+  // LinkedIn's weekly limit, from the notes: skip that step instead of opening LinkedIn to meet the limit again;
+  // looked at again once a day, so a lifted limit is noticed
+  const limitAt = irisCareerLib.linkedinLimitSeen(irisApplicationsLoad(), Date.now())
+  if (limitAt) {
+    const when = new Date(limitAt).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    live.push(Date.now() - limitAt < 24 * 3600 * 1000
+      ? 'LinkedIn: the weekly invitation limit was reached (last seen ' + when + '). Skip the LinkedIn part of every job — do not open LinkedIn — and log each application right away, saying "LinkedIn skipped: weekly limit".'
+      : 'LinkedIn: the weekly invitation limit was reached ' + when + ', over a day ago. Try LinkedIn once on the next job; if the limit is still there, skip it for the other jobs.')
+  }
   // only a job that was applied to is closed for good; one skipped or left for the user may be asked for again
   const done = irisApplicationsLoad().slice(-60)
   const name = function (a) { return (a.title || '?') + ' at ' + (a.company || '?') }
