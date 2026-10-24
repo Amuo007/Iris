@@ -1318,21 +1318,143 @@ body.dark-mode .iris-status-needs_you {
   padding-top: 5px;
 }
 
+
 /* ==========================================================================
-   One section at a time (the sidebar is the page list), search, grouped
-   model settings and the usage dashboard
+   Surfaces: the sidebar, the page and the cards each have their own shade
    ========================================================================== */
 
 :root {
-  --s-chart: #2a78d6;
-  --s-chart-hover: #1c5cab;
+  --s-page: #f4f4f6;
+  --s-side: #e9e9ed;
+  --s-card: #ffffff;
+  --s-field: #ffffff;
+  --s-raised: #ffffff;
+  --s-muted: #ececf0;
   --s-seg-on: #ffffff;
+  --s-nav-on: #ffffff;
+  --s-line: #e2e2e7;
+  --s-line-strong: #cfcfd6;
+  --s-text: #111114;
+  --s-text-2: #54545c;
+  --s-text-3: #8a8a93;
+  --s-bg: var(--s-page);
+  --s-shadow: 0 1px 2px rgba(16, 16, 24, 0.05);
+  --s-chart: #2a78d6;
+  --s-chart-today: #1c5cab;
+  /* the six totals, in the checked categorical order (colour-blind safe on white and on black) */
+  --s-k1: #2a78d6;
+  --s-k2: #eb6834;
+  --s-k3: #1baf7a;
+  --s-k4: #eda100;
+  --s-k5: #e87ba4;
+  --s-k6: #008300;
 }
 body.dark-mode {
+  --s-page: #131316;
+  --s-side: #0b0b0d;
+  --s-card: #1b1b1f;
+  --s-field: #111114;
+  --s-raised: #26262b;
+  --s-muted: #25252a;
+  --s-seg-on: #3a3a41;
+  --s-nav-on: #202025;
+  --s-line: #2a2a30;
+  --s-line-strong: #3b3b43;
+  --s-text: #f1f1f3;
+  --s-text-2: #a8a8b0;
+  --s-text-3: #75757e;
+  --s-bg: var(--s-page);
+  --s-shadow: none;
   --s-chart: #3987e5;
-  --s-chart-hover: #6da7ec;
-  --s-seg-on: #2a2a2a;
+  --s-chart-today: #6da7ec;
+  --s-k1: #3987e5;
+  --s-k2: #d95926;
+  --s-k3: #199e70;
+  --s-k4: #c98500;
+  --s-k5: #d55181;
+  --s-k6: #008300;
 }
+
+body,
+body.dark-mode {
+  background: var(--s-page);
+}
+.iris-settings .iris-settings-nav {
+  background: var(--s-side);
+  border-right: 1px solid var(--s-line);
+}
+.iris-settings .iris-settings-nav a:hover {
+  background: var(--s-muted);
+}
+.iris-settings .iris-settings-nav a.is-current {
+  background: var(--s-nav-on);
+  box-shadow: var(--s-shadow), 0 0 0 1px var(--s-line);
+}
+.iris-settings .settings-container {
+  background: var(--s-card);
+  border-color: var(--s-line) !important;
+  box-shadow: var(--s-shadow);
+}
+.iris-settings select,
+.iris-settings input[type="text"],
+.iris-settings input[type="password"],
+.iris-settings input[type="number"],
+.iris-settings input[type="time"],
+.iris-settings input:not([type]),
+.iris-settings textarea,
+.iris-settings input[type="search"].iris-search {
+  background: var(--s-field) !important;
+}
+.iris-settings .iris-button,
+.iris-settings button.button-border {
+  background: var(--s-raised);
+}
+.iris-settings .iris-button:hover {
+  background: var(--s-muted);
+}
+.iris-settings .iris-button.iris-primary {
+  background: var(--s-text);
+  border-color: var(--s-text);
+  color: var(--s-page);
+}
+.iris-list-day {
+  background: var(--s-card);
+}
+
+/* every text box grows with its text, whatever section was open when it was filled */
+.iris-settings textarea {
+  field-sizing: content;
+  max-height: 420px;
+  overflow-y: auto;
+  line-height: 1.45;
+}
+.iris-settings textarea.iris-skill-items,
+.iris-settings .iris-bullet textarea,
+.iris-settings textarea.iris-answer-q {
+  min-height: 32px;
+  overflow-y: hidden;
+}
+.iris-settings textarea.iris-career-text {
+  min-height: 54px;
+  max-width: none;
+}
+.iris-settings #iris-career-paste-text {
+  min-height: 120px;
+}
+.iris-settings textarea.iris-rules {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  min-height: 84px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+/* ==========================================================================
+   One section at a time (the sidebar is the page list), and search
+   ========================================================================== */
 
 .iris-settings.is-paged .iris-settings-main > .settings-container:not(.is-shown) {
   display: none !important;
@@ -1363,14 +1485,13 @@ body.dark-mode {
   padding: 0 10px;
   border: 1px solid var(--s-line) !important;
   border-radius: 8px;
-  background: var(--s-muted) !important;
+  background: var(--s-card) !important;
   color: var(--s-text) !important;
   font-size: 13px;
   outline: none;
 }
 .iris-settings input[type="search"].iris-settings-search:focus {
   border-color: var(--s-text-3) !important;
-  background: var(--s-bg) !important;
   box-shadow: 0 0 0 3px rgba(127, 127, 127, 0.18);
 }
 
@@ -1421,6 +1542,7 @@ body.dark-mode {
 }
 .iris-settings .iris-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   margin-top: 14px;
@@ -1475,39 +1597,46 @@ body.dark-mode {
   margin-top: 12px;
 }
 
-/* --- Usage ---------------------------------------------------------------- */
+/* ==========================================================================
+   Usage: a dashboard (the section's own card steps aside for its cards)
+   ========================================================================== */
 
+.iris-settings #iris-usage-container {
+  padding: 0;
+  border: none !important;
+  background: none;
+  box-shadow: none;
+}
 .iris-settings .iris-usage-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
+  gap: 16px;
+  margin-bottom: 14px;
 }
 .iris-settings .iris-usage-top > h3 {
   margin: 0;
 }
-.iris-settings.is-paged:not(.is-searching) .iris-usage-top {
-  justify-content: flex-end;
-  margin: 0 0 -26px;
-}
-.iris-settings.is-paged:not(.is-searching) #iris-usage-container > .setting-secondary-label {
-  max-width: calc(100% - 250px);
-  min-height: 26px;
+.iris-settings .iris-usage-lede {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--s-text-2);
 }
 
 .iris-segmented {
   display: inline-flex;
   flex: none;
   padding: 2px;
-  border-radius: 8px;
+  border-radius: 9px;
   background: var(--s-muted);
 }
 .iris-settings .iris-segmented button {
-  height: 24px;
-  padding: 0 10px;
+  height: 26px;
+  padding: 0 11px;
   border: none;
-  border-radius: 6px;
+  border-radius: 7px;
   background: transparent;
   color: var(--s-text-2);
   font-size: 12px;
@@ -1521,38 +1650,99 @@ body.dark-mode {
 .iris-settings .iris-segmented button[aria-selected="true"] {
   background: var(--s-seg-on);
   color: var(--s-text);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
 }
 .iris-settings .iris-segmented-small button {
-  height: 22px;
-  padding: 0 8px;
+  height: 24px;
+  padding: 0 9px;
   font-size: 11.5px;
 }
 
-.iris-tiles {
+.iris-dcard {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--s-line);
+  border-radius: 14px;
+  background: var(--s-card);
+  box-shadow: var(--s-shadow);
+}
+.iris-dcard + .iris-dcard {
+  margin-top: 12px;
+}
+.iris-settings .iris-dcard-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--s-text);
+}
+
+/* the four totals: icon, figure, change from the period before, and a line of the days */
+.iris-kpis {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin: 4px 0 12px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
-.iris-tile {
+.iris-kpi {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  padding: 12px 14px;
+  padding: 14px 16px 0;
+  overflow: hidden;
   border: 1px solid var(--s-line);
-  border-radius: 12px;
+  border-radius: 14px;
+  background: var(--s-card);
+  box-shadow: var(--s-shadow);
 }
-.iris-tile-label {
-  font-size: 12px;
+.iris-kpi-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.iris-kpi-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 8px;
+  color: var(--kpi);
+  background: color-mix(in srgb, var(--kpi) 16%, transparent);
+}
+.iris-kpi-icon svg {
+  width: 15px;
+  height: 15px;
+}
+.iris-kpi-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
   color: var(--s-text-2);
 }
-.iris-tile-value {
-  margin: 4px 0 2px;
-  font-size: 22px;
-  font-weight: 650;
+.iris-kpi-delta {
+  flex: none;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--s-muted);
+  color: var(--s-text-2);
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.iris-tile-sub {
+.iris-kpi-value {
+  margin: 10px 0 2px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.iris-kpi-sub {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1560,27 +1750,56 @@ body.dark-mode {
   color: var(--s-text-3);
   font-variant-numeric: tabular-nums;
 }
-
-.iris-chart-card {
-  padding: 12px 16px 10px;
-  border: 1px solid var(--s-line);
-  border-radius: 12px;
+.iris-kpi-spark {
+  display: block;
+  width: calc(100% + 32px);
+  height: 34px;
+  margin: 10px -16px 0;
 }
+.iris-kpi-spark .area {
+  fill: var(--kpi);
+  opacity: 0.14;
+}
+.iris-kpi-spark .line {
+  fill: none;
+  stroke: var(--kpi);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.iris-kpi-spark-none {
+  display: flex;
+  align-items: flex-end;
+  height: 34px;
+  margin-top: 10px;
+  padding-bottom: 10px;
+  box-sizing: border-box;
+  font-size: 11px;
+  color: var(--s-text-3);
+}
+
+/* the bar chart */
 .iris-chart-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 .iris-settings .iris-chart-title {
   margin: 0;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 650;
+}
+.iris-chart-sub {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--s-text-3);
+  font-variant-numeric: tabular-nums;
 }
 .iris-chart {
   position: relative;
-  height: 190px;
+  height: 210px;
   margin-left: 46px;
 }
 .iris-chart-grid,
@@ -1589,13 +1808,17 @@ body.dark-mode {
   top: 0;
   left: 0;
   right: 0;
-  bottom: 22px;
+  bottom: 24px;
 }
 .iris-chart-line {
   position: absolute;
   left: 0;
   right: 0;
-  border-top: 1px solid var(--s-line);
+  border-top: 1px dashed var(--s-line);
+}
+.iris-chart-line.is-base {
+  border-top-style: solid;
+  border-top-color: var(--s-line-strong);
 }
 .iris-chart-line span {
   position: absolute;
@@ -1607,13 +1830,33 @@ body.dark-mode {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+.iris-chart-avg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  border-top: 1.5px dashed var(--s-text-3);
+  pointer-events: none;
+}
+.iris-chart-avg span {
+  position: absolute;
+  left: 0;
+  bottom: 3px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--s-card);
+  color: var(--s-text-2);
+  font-size: 11px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 .iris-chart-bars {
   display: flex;
   align-items: stretch;
-  gap: 3px;
+  gap: 4px;
 }
 .iris-chart-bars.is-dense {
-  gap: 1px;
+  gap: 2px;
 }
 .iris-chart-col {
   position: relative;
@@ -1622,20 +1865,21 @@ body.dark-mode {
   min-width: 0;
   align-items: flex-end;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: 6px;
 }
 .iris-chart-col.is-hover {
   background: var(--s-muted);
 }
 .iris-chart-bar {
   width: 100%;
-  max-width: 26px;
-  border-radius: 4px 4px 0 0;
+  max-width: 28px;
+  border-radius: 5px 5px 0 0;
   background: var(--s-chart);
   transition: background 0.1s;
 }
+.iris-chart-col.is-today .iris-chart-bar,
 .iris-chart-col.is-hover .iris-chart-bar {
-  background: var(--s-chart-hover);
+  background: var(--s-chart-today);
 }
 .iris-chart-axis {
   position: absolute;
@@ -1660,16 +1904,15 @@ body.dark-mode {
 .iris-chart-tip {
   position: absolute;
   top: 4px;
-  z-index: 2;
-  min-width: 150px;
-  padding: 8px 10px;
+  z-index: 3;
+  min-width: 160px;
+  padding: 9px 11px;
   border: 1px solid var(--s-line);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--s-card);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
   pointer-events: none;
   white-space: nowrap;
-  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 .iris-chart-tip[hidden] {
@@ -1677,14 +1920,19 @@ body.dark-mode {
 }
 .iris-chart-tip b {
   display: block;
-  margin-bottom: 4px;
-  font-weight: 600;
+  margin-bottom: 5px;
+  font-size: 12px;
+  font-weight: 650;
 }
 .iris-chart-tip div {
   display: flex;
   justify-content: space-between;
-  gap: 14px;
+  gap: 16px;
+  font-size: 12px;
   color: var(--s-text-2);
+}
+.iris-chart-tip div span {
+  font-size: 12px;
 }
 .iris-chart-tip div span:last-child {
   color: var(--s-text);
@@ -1698,26 +1946,45 @@ body.dark-mode {
   color: var(--s-text-3);
 }
 
-.iris-usage-list {
+/* projects and chats */
+.iris-ulist-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 2.4fr) minmax(40px, 1fr) 54px 54px 54px 66px 68px;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--s-line);
+}
+.iris-ulist-row > span {
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
-.iris-ulist-row {
-  display: grid;
-  grid-template-columns: minmax(0, 2.4fr) minmax(40px, 1fr) 56px 56px 66px 70px;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--s-line);
-}
-.iris-ulist-row > span:nth-child(n + 3) {
+.iris-ulist-row > span:nth-child(n + 4) {
   text-align: right;
   white-space: nowrap;
 }
 .iris-ulist-head {
-  padding: 0 0 6px;
+  padding: 0 0 7px;
+  border-top: none;
+}
+.iris-ulist-head > span {
   font-size: 11.5px;
   color: var(--s-text-3);
+}
+.iris-ulist-avatar {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--s-muted);
+  color: var(--s-text-2);
+  font-size: 12px !important;
+  font-weight: 650;
+}
+.iris-ulist-head .iris-ulist-avatar {
+  height: 0;
+  background: none;
 }
 .iris-ulist-name {
   min-width: 0;
@@ -1729,6 +1996,7 @@ body.dark-mode {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin-top: 1px;
   font-size: 11.5px;
   color: var(--s-text-3);
 }
@@ -1738,8 +2006,7 @@ body.dark-mode {
   background: var(--s-muted);
   overflow: hidden;
 }
-.iris-ulist-head .iris-ulist-meter,
-.iris-ulist-head > span:nth-child(2) {
+.iris-ulist-head .iris-ulist-meter {
   background: none;
 }
 .iris-ulist-meter i {
@@ -1749,14 +2016,14 @@ body.dark-mode {
   background: var(--s-chart);
 }
 .iris-settings .iris-usage-empty {
-  padding: 4px 0 8px;
+  padding: 4px 0 2px;
   font-size: 12.5px;
   color: var(--s-text-3);
   opacity: 1;
 }
 
-@media (max-width: 900px) {
-  .iris-tiles {
+@media (max-width: 960px) {
+  .iris-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .iris-settings .iris-form-grid-3 {
@@ -1769,17 +2036,15 @@ body.dark-mode {
     grid-template-columns: minmax(0, 1fr);
   }
   .iris-ulist-row {
-    grid-template-columns: minmax(0, 1fr) 56px 56px 66px;
+    grid-template-columns: 30px minmax(0, 1fr) 54px 54px 54px;
   }
-  .iris-ulist-row > span:nth-child(2),
-  .iris-ulist-row > span:nth-child(6) {
+  .iris-ulist-row > span:nth-child(3),
+  .iris-ulist-row > span:nth-child(7),
+  .iris-ulist-row > span:nth-child(8) {
     display: none;
   }
-  .iris-settings.is-paged:not(.is-searching) .iris-usage-top {
-    margin: 0 0 10px;
-  }
-  .iris-settings.is-paged:not(.is-searching) #iris-usage-container > .setting-secondary-label {
-    max-width: none;
+  .iris-settings .iris-usage-top {
+    flex-wrap: wrap;
   }
 }
 
@@ -1802,7 +2067,6 @@ body.dark-mode {
     overflow-y: hidden;
     border-right: none;
     border-bottom: 1px solid var(--s-line);
-    background: var(--s-bg);
   }
   .iris-settings .iris-settings-brand,
   .iris-settings .iris-settings-group {
@@ -1819,15 +2083,111 @@ body.dark-mode {
   }
 }
 
-/* base.css gives every element 16px: the dashboard's text sets its own size */
-.iris-usage-list .iris-ulist-row > span {
-  font-size: 13px;
+.iris-settings .iris-settings-main {
+  max-width: 1000px;
 }
-.iris-usage-list .iris-ulist-head > span {
-  font-size: 11.5px;
+
+/* base.css gives every element 16px; inside a section, text without its own size takes the section's size
+   (zero specificity: any rule that sets a size still wins) */
+.iris-settings .settings-container {
+  font-size: 13.5px;
 }
-.iris-chart-tip b,
-.iris-chart-tip div,
-.iris-chart-tip span {
-  font-size: 12px;
+:where(.iris-settings .settings-container) :where(div, details, ul, ol, a, summary, span, button, p, li, b, small, em, strong) {
+  font-size: inherit;
+}
+
+/* the Iris mark in the sidebar (same drawing and colours as js/iris/logo.js, still) */
+.iris-settings-brand .iris-logo {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+.iris-settings-brand .iris-logo svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.iris-settings-brand .iris-logo-petals path {
+  stroke: var(--s-side);
+  stroke-width: 0.8px;
+  vector-effect: non-scaling-stroke;
+}
+.iris-settings-brand .iris-logo-ripple {
+  display: none;
+}
+.iris-settings-brand .iris-stop-1a { stop-color: #4cc3ff; }
+.iris-settings-brand .iris-stop-1b { stop-color: #1757e8; }
+.iris-settings-brand .iris-stop-2a { stop-color: #2fd9c2; }
+.iris-settings-brand .iris-stop-2b { stop-color: #0786a6; }
+.iris-settings-brand .iris-stop-3a { stop-color: #6fdcff; }
+.iris-settings-brand .iris-stop-3b { stop-color: #0a78e0; }
+.iris-settings-brand .iris-stop-4a { stop-color: #45e0a0; }
+.iris-settings-brand .iris-stop-4b { stop-color: #059669; }
+body.dark-mode .iris-settings-brand .iris-stop-1a { stop-color: #8fd8ff; }
+body.dark-mode .iris-settings-brand .iris-stop-1b { stop-color: #2f7bff; }
+body.dark-mode .iris-settings-brand .iris-stop-2a { stop-color: #67f0dc; }
+body.dark-mode .iris-settings-brand .iris-stop-2b { stop-color: #0aa6c8; }
+body.dark-mode .iris-settings-brand .iris-stop-3a { stop-color: #b3f0ff; }
+body.dark-mode .iris-settings-brand .iris-stop-3b { stop-color: #1e9bff; }
+body.dark-mode .iris-settings-brand .iris-stop-4a { stop-color: #8af5c0; }
+body.dark-mode .iris-settings-brand .iris-stop-4b { stop-color: #10b981; }
+.iris-settings-brand .iris-stop-pa { stop-color: #ffffff; }
+.iris-settings-brand .iris-stop-pb { stop-color: #d6efff; }
+.iris-settings-brand .iris-logo-pointer path {
+  stroke: #0b1324;
+  stroke-width: 1.2px;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* base.css gives every element 16px; inside a section, text without its own size takes the section's size
+   (zero specificity: any rule that sets a size still wins) */
+.iris-settings .settings-container {
+  font-size: 13.5px;
+}
+:where(.iris-settings .settings-container) :where(div, details, ul, ol, a, summary, span, button, p, li, b, small, em, strong) {
+  font-size: inherit;
+}
+
+/* the Iris mark in the sidebar (same drawing as js/iris/logo.js, still) */
+.iris-settings-brand .iris-logo {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--s-text);
+}
+.iris-settings-brand .iris-logo svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.iris-settings-brand .iris-logo-petals path {
+  fill: currentColor;
+  stroke: var(--s-side);
+  stroke-width: 0.8px;
+  vector-effect: non-scaling-stroke;
+}
+.iris-settings-brand .iris-petal-2 {
+  opacity: 0.78;
+}
+.iris-settings-brand .iris-petal-3 {
+  opacity: 0.56;
+}
+.iris-settings-brand .iris-petal-4 {
+  opacity: 0.38;
+}
+.iris-settings-brand .iris-logo-pointer path {
+  fill: var(--s-side);
+  stroke: currentColor;
+  stroke-width: 1.4px;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
 }

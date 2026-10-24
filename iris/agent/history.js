@@ -40,10 +40,18 @@ function textPart (text) {
 
 const KEEP_KINDS = new Set(['task', 'followup', 'plan'])
 
-// Iris's own instructions never change during a run: measure them once
+// Iris's own instructions never change during a run: measure them once, and the list of actions
+// (its tools) inside them
 let baseLen = 0
+let toolsLen = 0
 function baseLength () {
-  if (!baseLen) baseLen = prompts.systemPrompt().length
+  if (!baseLen) {
+    const base = prompts.systemPrompt()
+    const from = base.indexOf('Actions. x/y')
+    const to = base.indexOf('\nRules:', from)
+    baseLen = base.length
+    toolsLen = from >= 0 && to > from ? to - from : 0
+  }
   return baseLen
 }
 const KEEP_FOLLOWUPS = 6 // a repeating run adds one per repeat: only the newest few are pinned
@@ -267,8 +275,9 @@ function createHistory (options) {
 
       const out = [{ role: 'system', content: prompts.systemPrompt(systemExtra) }]
       // characters per part (Context card): Iris's own instructions, the user's info, the task, past steps, this step
-      const layout = { instructions: baseLength(), info: 0, task: 0, steps: 0, page: 0, images: [] }
-      layout.info = Math.max(0, out[0].content.length - layout.instructions)
+      const base = baseLength()
+      const layout = { instructions: base - toolsLen, tools: toolsLen, info: 0, task: 0, steps: 0, page: 0, images: [] }
+      layout.info = Math.max(0, out[0].content.length - base)
       // the summary of forgotten steps sits right after the task and plan: it changes only when Iris
       // forgets a chunk of steps (which changes the prompt right there anyway), so the server keeps it
       // cached between those times instead of reading ~2,000 tokens again on every step

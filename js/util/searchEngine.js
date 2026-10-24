@@ -8,7 +8,7 @@ var currentSearchEngine = {
   searchURL: '%s'
 }
 
-var defaultSearchEngine = 'DuckDuckGo'
+var defaultSearchEngine = 'Google'
 
 var searchEngines = {
   DuckDuckGo: {
@@ -20,6 +20,8 @@ var searchEngines = {
   Google: {
     name: 'Google',
     searchURL: 'https://www.google.com/search?q=%s',
+    // the same list format as the others: [query, [suggestion, …]]
+    suggestionsURL: 'https://suggestqueries.google.com/complete/search?client=firefox&q=%s',
     queryParam: 'q'
   },
   Bing: {

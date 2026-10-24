@@ -1367,12 +1367,32 @@ function irisAttachEvents (computer, obs) {
   return obs
 }
 
+/* the search page of the engine chosen in Settings → Search engine (Google unless changed); %s is the query */
+const IRIS_SEARCH_URLS = {
+  Google: 'https://www.google.com/search?q=%s',
+  DuckDuckGo: 'https://duckduckgo.com/?q=%s',
+  Bing: 'https://www.bing.com/search?q=%s',
+  Yahoo: 'https://search.yahoo.com/search?p=%s',
+  StartPage: 'https://www.startpage.com/do/search?q=%s',
+  Ecosia: 'https://www.ecosia.org/search?q=%s',
+  Qwant: 'https://www.qwant.com/?q=%s',
+  Wikipedia: 'https://wikipedia.org/w/index.php?search=%s',
+  Yandex: 'https://yandex.com/search/?text=%s',
+  Baidu: 'https://www.baidu.com/s?wd=%s'
+}
+function irisSearchUrl (query) {
+  const chosen = settings.get('searchEngine') || {}
+  let url = IRIS_SEARCH_URLS[chosen.name]
+  if (!url && chosen.url && chosen.url.indexOf('%s') !== -1) url = chosen.url
+  return (url || IRIS_SEARCH_URLS.Google).replace('%s', encodeURIComponent(query))
+}
+
 /* Plain words → a web search; anything that looks like an address → that address. */
 function irisResolveUrl (text) {
   const t = String(text || '').trim()
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t) || /^(about|data|mailto):/i.test(t)) return t
   if (/^[^\s]+\.[a-z]{2,}(:\d+)?(\/\S*)?$/i.test(t) || /^localhost(:\d+)?(\/|$)/i.test(t)) return (/^localhost/i.test(t) ? 'http://' : 'https://') + t.replace(/^\/+/, '')
-  return 'https://duckduckgo.com/?q=' + encodeURIComponent(t)
+  return irisSearchUrl(t)
 }
 
 /**
@@ -3096,7 +3116,7 @@ function startAgent (task, options) {
       // remember direct URLs that led to a successful answer: next time they are the shortcut
       if (type === 'action' && payload.action && payload.action.type === 'navigate') {
         const resolved = irisResolveUrl(payload.action.url)
-        if (/\?/.test(resolved) && !/duckduckgo\.com\/\?q=/.test(resolved)) (session.runUrls = session.runUrls || []).push(resolved)
+        if (/\?/.test(resolved) && !/duckduckgo\.com\/\?q=|google\.[a-z.]+\/search\?q=|bing\.com\/search\?q=/.test(resolved)) (session.runUrls = session.runUrls || []).push(resolved)
       }
       // "submitted — now log it and go on" with no log_application among the actions: remind it at once (real run:
       // Shield AI applied, then straight to LinkedIn — the application was never logged)

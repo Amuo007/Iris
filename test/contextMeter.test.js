@@ -21,25 +21,28 @@ test('a screenshot costs what the model server counts', () => {
 })
 
 test('the parts add up to the exact total the server reported', () => {
-  const layout = { instructions: 4000, info: 8000, task: 1000, steps: 3000, page: 2000, images: [{ width: 1024, height: 536 }] }
+  const layout = { instructions: 2500, tools: 1500, info: 8000, task: 1000, steps: 3000, page: 2000, images: [{ width: 1024, height: 536 }] }
   const c = estimate(layout, { prompt_tokens: 6123, completion_tokens: 88, prompt_tokens_details: { cached_tokens: 5000 } }, { provider: 'local', window: 262144 })
   assert.strictEqual(c.used, 6123)
   assert.strictEqual(c.exact, true)
   assert.strictEqual(c.parts.reduce((a, p) => a + p.tokens, 0), 6123)
-  assert.strictEqual(c.parts.find(p => p.key === 'screenshot').tokens, 546)
+  assert.strictEqual(c.screenshot, 546)
+  assert.ok(c.parts.find(p => p.key === 'messages').tokens > 546)
   assert.strictEqual(c.window, 262144)
-  assert.strictEqual(c.free, 262144 - 6123)
   assert.strictEqual(c.compactAt, Math.round(262144 * COMPACT_AT))
+  assert.strictEqual(c.buffer, 262144 - c.compactAt)
+  assert.strictEqual(c.free, c.compactAt - 6123)
   assert.ok(Math.abs(c.percent - (6123 / 262144) * 100) < 1e-9)
   assert.strictEqual(c.output, 88)
   assert.strictEqual(c.cached, 5000)
-  assert.deepStrictEqual(c.parts.map(p => p.key), ['instructions', 'info', 'task', 'steps', 'page', 'screenshot'])
+  assert.deepStrictEqual(c.parts.map(p => p.label), ['System prompt', 'Tools', 'Memory', 'Messages'])
 })
 
 test('the split of a real job step stays close to the tokenizer', () => {
-  // one step of the 10-23 job run, each part counted by Halogen's /tokenize
-  const exact = { instructions: 2800, info: 8663, task: 4272, steps: 4949, page: 2416, screenshot: 546 }
-  const layout = { instructions: 10877, info: 32998, task: 13471, steps: 14362, page: 8870, images: [{ width: 1024, height: 536 }] }
+  // one step of the 10-23 job run, each part counted by Halogen's /tokenize; messages = task 4272 + earlier
+  // steps 4949 + the page's text 2416 + the screenshot 546
+  const exact = { system: 1603, tools: 1197, memory: 8663, messages: 12183 }
+  const layout = { instructions: 6332, tools: 4545, info: 32998, task: 13471, steps: 14362, page: 8870, images: [{ width: 1024, height: 536 }] }
   const total = Object.values(exact).reduce((a, b) => a + b, 0)
   const c = estimate(layout, { prompt_tokens: total }, { provider: 'local', window: 262144 })
   c.parts.forEach(p => {
@@ -49,14 +52,14 @@ test('the split of a real job step stays close to the tokenizer', () => {
 })
 
 test('no window known: no percentage, and a wrong image formula never makes text negative', () => {
-  const c = estimate({ instructions: 400, images: [{ width: 4000, height: 4000 }] }, { prompt_tokens: 300 }, {})
+  const c = estimate({ instructions: 395, images: [{ width: 4000, height: 4000 }] }, { prompt_tokens: 300 }, {})
   assert.strictEqual(c.window, 0)
   assert.strictEqual(c.percent, null)
   assert.strictEqual(c.free, null)
   assert.ok(c.parts.every(p => p.tokens >= 0))
   assert.strictEqual(c.parts.reduce((a, p) => a + p.tokens, 0), 300)
   // and without usage at all, the estimate still adds up
-  const g = estimate({ instructions: 390, images: [] }, null, {})
+  const g = estimate({ instructions: 395, images: [] }, null, {})
   assert.strictEqual(g.exact, false)
   assert.strictEqual(g.used, 100)
 })
@@ -86,7 +89,8 @@ test('history measures every part of the request it builds', () => {
   const layout = h.layout()
   const textLength = sent.reduce((a, m) => a + (typeof m.content === 'string' ? m.content.length
     : m.content.reduce((b, p) => b + (p.type === 'text' ? p.text.length : 0), 0)), 0)
-  assert.strictEqual(layout.instructions + layout.info + layout.task + layout.steps + layout.page, textLength)
+  assert.strictEqual(layout.instructions + layout.tools + layout.info + layout.task + layout.steps + layout.page, textLength)
+  assert.ok(layout.tools > 3000, 'the list of actions is counted as tools')
   assert.ok(layout.info >= 'My info: Ada'.length)
   assert.ok(layout.task >= 'Project notes: none'.length)
   assert.deepStrictEqual(layout.images, [{ width: 1024, height: 536 }])
@@ -111,6 +115,6 @@ test('a nearly full context: Iris forgets its oldest steps before the next reque
   const thought = events.find(e => e.type === 'thought')
   assert.strictEqual(thought.context.used, 9000)
   assert.strictEqual(thought.context.window, 10000)
-  assert.strictEqual(thought.context.parts.find(p => p.key === 'screenshot').tokens, imageTokens(1024, 640, 'local'))
+  assert.strictEqual(thought.context.screenshot, imageTokens(1024, 640, 'local'))
   assert.ok(events.some(e => e.type === 'compact' && e.used === 9000 && e.window === 10000))
 })

@@ -70,6 +70,8 @@ function changeBlockingLevelSetting (level) {
 }
 
 function setExceptionInputSize () {
+  // sized by CSS (field-sizing) where it can be: a hidden section measures 0
+  if (window.CSS && CSS.supports && CSS.supports('field-sizing', 'content')) return
   blockingExceptionsInput.style.height = (blockingExceptionsInput.scrollHeight + 2) + 'px'
 }
 
@@ -1196,6 +1198,12 @@ var irisSettingsSearch = document.getElementById('iris-settings-search')
 // "Iris settings" in the agent panel links to #iris-ai
 var IRIS_SECTION_ALIASES = { 'iris-ai': 'iris-ai-settings-container' }
 
+/* the page scrolls on <body> (base.css), not on the window */
+function irisScrollTop () {
+  document.body.scrollTop = 0
+  document.documentElement.scrollTop = 0
+}
+
 function irisSectionFromHash () {
   var id = decodeURIComponent((location.hash || '').slice(1))
   id = IRIS_SECTION_ALIASES[id] || id
@@ -1218,7 +1226,7 @@ function irisShowSection (id, keepScroll) {
       a.removeAttribute('aria-current')
     }
   })
-  if (!keepScroll) window.scrollTo(0, 0)
+  if (!keepScroll) irisScrollTop()
 }
 
 irisNavLinks.forEach(function (a) {
@@ -1249,7 +1257,7 @@ function irisRunSearch () {
     if (hit) found++
   })
   irisSettingsTitle.textContent = found ? 'Results for “' + raw + '”' : 'Nothing matches “' + raw + '”'
-  window.scrollTo(0, 0)
+  irisScrollTop()
 }
 irisSettingsSearch.addEventListener('input', irisRunSearch)
 irisSettingsSearch.addEventListener('keydown', function (e) {
@@ -1258,13 +1266,15 @@ irisSettingsSearch.addEventListener('keydown', function (e) {
     irisRunSearch()
   }
 })
-irisShowSection(irisSectionFromHash(), true)
+irisShowSection(irisSectionFromHash())
+// the browser jumps to the #section on load, past the page title: start at the top
+window.addEventListener('load', function () { if (!irisSettingsSearch.value) irisScrollTop() })
 
 /* --- Usage: four totals, a bar per day, then projects and chats ------------ */
 
 var irisUsageData = null
 var irisUsageRange = 30 // days; 0 = all time
-var irisUsageMetric = 'tokens'
+var irisUsageMetric = 'all'
 
 /* 812 → "812", 22,614 → "22.6k", 262,144 → "262k", 9,310,000 → "9.3M" (the panel writes them the same way) */
 function irisFormatK (n) {
@@ -1274,13 +1284,6 @@ function irisFormatK (n) {
   if (n < 1e6) return Math.round(n / 1000) + 'k'
   if (n < 1e9) return (n / 1e6).toFixed(n < 1e7 ? 1 : 0).replace(/\.0$/, '') + 'M'
   return (n / 1e9).toFixed(1).replace(/\.0$/, '') + 'B'
-}
-
-function irisFormatDuration (ms) {
-  var min = Math.round((ms || 0) / 60000)
-  if (min < 60) return min + ' min'
-  var h = Math.floor(min / 60)
-  return h + ' h' + (min % 60 ? ' ' + (min % 60) + ' min' : '')
 }
 
 function irisDayKey (d) {
@@ -1311,40 +1314,45 @@ function irisWhen (ms) {
 
 var IRIS_PROVIDER_NAMES = { local: 'Local', openai: 'OpenAI-compatible', anthropic: 'Claude' }
 
-/* the days of the chosen period, oldest first (all time starts at the first day with use) */
-function irisUsagePeriod (days) {
+/* `count` days ending `endOffset` days before today, oldest first */
+function irisDays (days, count, endOffset) {
   var today = new Date()
   today.setHours(0, 0, 0, 0)
-  var start = new Date(today)
-  if (irisUsageRange) {
-    start.setDate(start.getDate() - (irisUsageRange - 1))
-  } else {
-    var first = Object.keys(days).sort()[0]
-    if (first) start = new Date(first + 'T00:00:00')
-    // at least a week, so a new install's chart is not one fat bar
-    var weekAgo = new Date(today)
-    weekAgo.setDate(weekAgo.getDate() - 6)
-    if (start > weekAgo) start = weekAgo
-  }
   var list = []
-  var count = Math.round((today - start) / 86400000) + 1
-  for (var i = 0; i < count; i++) {
-    var d = new Date(start)
-    d.setDate(d.getDate() + i)
+  for (var i = count - 1; i >= 0; i--) {
+    var d = new Date(today)
+    d.setDate(d.getDate() - i - (endOffset || 0))
     var key = irisDayKey(d)
     list.push({ key: key, date: d, t: days[key] || {} })
   }
   return list
 }
 
+/* how many days the chosen period covers (all time: from the first day with use, at least a week) */
+function irisPeriodLength (days) {
+  if (irisUsageRange) return irisUsageRange
+  var first = Object.keys(days).sort()[0]
+  if (!first) return 7
+  var today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Math.max(7, Math.round((today - new Date(first + 'T00:00:00')) / 86400000) + 1)
+}
+
+function irisSum (period) {
+  var sum = { tasks: 0, requests: 0, input: 0, output: 0, cached: 0, ms: 0, lookups: 0, genMs: 0, genOut: 0 }
+  period.forEach(function (p) { Object.keys(sum).forEach(function (f) { sum[f] += p.t[f] || 0 }) })
+  return sum
+}
+
 function irisRenderUsage (usage) {
   if (usage !== undefined) irisUsageData = usage || {}
   var data = irisUsageData || {}
-  var period = irisUsagePeriod(data.days || {})
-  var sum = { tasks: 0, requests: 0, input: 0, output: 0, cached: 0, ms: 0, lookups: 0, genMs: 0, genOut: 0 }
-  period.forEach(function (p) { Object.keys(sum).forEach(function (f) { sum[f] += p.t[f] || 0 }) })
+  var days = data.days || {}
+  var n = irisPeriodLength(days)
+  var period = irisDays(days, n, 0)
+  var sum = irisSum(period)
   // days recorded before speeds were kept per day: the chats used in the period know theirs
-  if (!sum.genMs && period.length) {
+  if (!sum.genMs) {
     var from = period[0].date.getTime()
     var sessions = data.sessions || {}
     Object.keys(sessions).forEach(function (id) {
@@ -1352,24 +1360,70 @@ function irisRenderUsage (usage) {
       if ((t.last || 0) >= from) { sum.genMs += t.genMs || 0; sum.genOut += t.genOut || 0 }
     })
   }
-  irisRenderTiles(sum)
+  // the same number of days just before, for the change shown on each total (not for all time)
+  var before = irisUsageRange ? irisSum(irisDays(days, n, n)) : null
+  irisRenderTiles(sum, before, period)
   irisRenderChart(period)
   irisRenderUsageGroups(data)
 }
 
-function irisTile (label, value, sub) {
-  return '<div class="iris-tile"><div class="iris-tile-label">' + label + '</div><div class="iris-tile-value">' + value +
-    '</div><div class="iris-tile-sub">' + (sub || '&nbsp;') + '</div></div>'
+var IRIS_KPI_ICONS = {
+  input: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19h14"/></svg>',
+  output: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M7.5 8.5L12 4l4.5 4.5"/><path d="M5 19h14"/></svg>',
+  replies: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.2A8 8 0 1 1 20 12z"/></svg>',
+  speed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6L13 3z"/></svg>'
 }
 
-function irisRenderTiles (t) {
+/* change from the period before: "+38%", "−12%", or nothing when there is nothing to compare */
+function irisDelta (now, then) {
+  if (!then || !(then > 0) || !(now >= 0)) return ''
+  var pct = Math.round(((now - then) / then) * 100)
+  return (pct > 0 ? '▲ ' : pct < 0 ? '▼ ' : '') + Math.abs(pct) + '%'
+}
+
+/* a small line of the period's days under a total (needs two days with something to draw) */
+function irisSpark (values) {
+  var known = values.filter(function (v) { return v !== null })
+  if (known.filter(function (v) { return v > 0 }).length < 2) return '<div class="iris-kpi-spark-none"></div>'
+  var max = Math.max.apply(null, known) || 1
+  var n = values.length
+  var pts = []
+  values.forEach(function (v, i) {
+    if (v === null) return
+    var x = n > 1 ? (i / (n - 1)) * 100 : 50
+    pts.push([x, 31 - (v / max) * 27])
+  })
+  var line = pts.map(function (p, i) { return (i ? 'L' : 'M') + p[0].toFixed(2) + ' ' + p[1].toFixed(2) }).join(' ')
+  var area = line + ' L' + pts[pts.length - 1][0].toFixed(2) + ' 34 L' + pts[0][0].toFixed(2) + ' 34 Z'
+  return '<svg class="iris-kpi-spark" viewBox="0 0 100 34" preserveAspectRatio="none" aria-hidden="true"><path class="area" d="' + area +
+    '"/><path class="line" d="' + line + '" vector-effect="non-scaling-stroke"/></svg>'
+}
+
+function irisKpi (o) {
+  return '<div class="iris-kpi" style="--kpi: var(' + o.color + ')"><div class="iris-kpi-top"><span class="iris-kpi-icon">' + IRIS_KPI_ICONS[o.icon] +
+    '</span><span class="iris-kpi-label">' + o.label + '</span>' + (o.delta ? '<span class="iris-kpi-delta" title="Compared with the ' + o.days + ' days before">' + o.delta + '</span>' : '') +
+    '</div><div class="iris-kpi-value">' + o.value + '</div><div class="iris-kpi-sub">' + (o.sub || '&nbsp;') + '</div>' + irisSpark(o.spark) + '</div>'
+}
+
+function irisRenderTiles (t, before, period) {
   var speed = irisSpeedOf(t)
-  var cachedShare = t.input && t.cached ? Math.round((t.cached / t.input) * 100) : 0
+  var b = before || {}
+  var days = period.length
+  var kpi = function (icon, color, label, value, delta, sub, spark) {
+    return irisKpi({ icon: icon, color: color, label: label, value: value, delta: delta, sub: sub, spark: spark, days: days })
+  }
   document.getElementById('iris-usage-tiles').innerHTML =
-    irisTile('Tokens', irisFormatK(t.input + t.output), irisFormatK(t.input) + ' read · ' + irisFormatK(t.output) + ' written') +
-    irisTile('Model replies', irisFormatK(t.requests), t.requests ? (t.ms / t.requests / 1000).toFixed(1) + ' s per step' : '') +
-    irisTile('Tasks', irisFormatK(t.tasks), t.lookups ? irisFormatK(t.lookups) + ' look-ups' : '') +
-    irisTile('Speed', speed ? Math.round(speed) + ' tok/s' : '–', cachedShare ? cachedShare + '% of reading from cache' : 'output tokens per second')
+    kpi('input', '--s-k1', 'Input tokens', irisFormatK(t.input),
+      before && irisDelta(t.input, b.input), 'what the model read',
+      period.map(function (p) { return p.t.input || 0 })) +
+    kpi('output', '--s-k2', 'Output tokens', irisFormatK(t.output),
+      before && irisDelta(t.output, b.output), 'what the model wrote',
+      period.map(function (p) { return p.t.output || 0 })) +
+    kpi('replies', '--s-k3', 'Steps', irisFormatK(t.requests),
+      before && irisDelta(t.requests, b.requests), t.requests ? (t.ms / t.requests / 1000).toFixed(1) + ' s each' : '',
+      period.map(function (p) { return p.t.requests || 0 })) +
+    kpi('speed', '--s-k4', 'Speed', speed ? Math.round(speed) + ' tok/s' : '–', '', 'how fast it writes',
+      period.map(function (p) { return irisSpeedOf(p.t) || null }))
 }
 
 /* round up to 1, 2, 2.5 or 5 × 10^n so the gridlines land on plain numbers */
@@ -1382,9 +1436,14 @@ function irisNiceMax (v) {
 }
 
 var IRIS_METRICS = {
-  tokens: { title: 'Tokens per day', value: function (t) { return (t.input || 0) + (t.output || 0) }, label: irisFormatK },
-  requests: { title: 'Model replies per day', value: function (t) { return t.requests || 0 }, label: irisFormatK },
-  time: { title: 'Model time per day', value: function (t) { return t.ms || 0 }, label: function (v) { return v ? irisFormatDuration(v) : '0' } }
+  all: { title: 'Tokens per day (input + output)', unit: 'tokens', value: function (t) { return (t.input || 0) + (t.output || 0) }, label: irisFormatK },
+  input: { title: 'Input tokens per day', unit: 'tokens', value: function (t) { return t.input || 0 }, label: irisFormatK },
+  output: { title: 'Output tokens per day', unit: 'tokens', value: function (t) { return t.output || 0 }, label: irisFormatK },
+  requests: { title: 'Steps per day', unit: 'steps', value: function (t) { return t.requests || 0 }, label: irisFormatK }
+}
+
+function irisShortDate (d) {
+  return irisDayKey(d) === irisDayKey(new Date()) ? 'Today' : d.toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
 function irisRenderChart (period) {
@@ -1392,32 +1451,44 @@ function irisRenderChart (period) {
   var box = document.getElementById('iris-usage-chart')
   document.getElementById('iris-chart-title').textContent = metric.title
   var values = period.map(function (p) { return metric.value(p.t) })
+  var total = values.reduce(function (a, v) { return a + v }, 0)
+  var busiest = values.indexOf(Math.max.apply(null, values))
+  var used = values.filter(function (v) { return v > 0 }).length
+  var avg = used ? total / used : 0
+  document.getElementById('iris-chart-sub').textContent = total
+    ? 'Busiest: ' + irisShortDate(period[busiest].date) + ', ' + metric.label(values[busiest]) + (metric.unit ? ' ' + metric.unit : '')
+    : ''
   var top = irisNiceMax(Math.max.apply(null, values.concat([0])))
   var html = '<div class="iris-chart-grid">'
-  ;[1, 0.5, 0].forEach(function (f) {
-    html += '<div class="iris-chart-line" style="bottom:' + (f * 100) + '%"><span>' + metric.label(top * f) + '</span></div>'
+  ;[1, 0.75, 0.5, 0.25, 0].forEach(function (f) {
+    html += '<div class="iris-chart-line' + (f === 0 ? ' is-base' : '') + '" style="bottom:' + (f * 100) + '%"><span>' + (f === 0.25 || f === 0.75 ? '' : metric.label(top * f)) + '</span></div>'
   })
+  if (avg) html += '<div class="iris-chart-avg" style="bottom:' + ((avg / top) * 100) + '%"><span>avg ' + metric.label(avg) + '</span></div>'
   html += '</div><div class="iris-chart-bars' + (period.length > 45 ? ' is-dense' : '') + '">'
+  var today = irisDayKey(new Date())
   period.forEach(function (p, i) {
     var h = values[i] > 0 ? Math.max(1.5, (values[i] / top) * 100) : 0
-    html += '<div class="iris-chart-col" data-i="' + i + '" aria-label="' + irisEscape(p.date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ': ' + metric.label(values[i])) + '">' +
+    html += '<div class="iris-chart-col' + (p.key === today ? ' is-today' : '') + '" data-i="' + i + '" aria-label="' + irisEscape(irisShortDate(p.date) + ': ' + metric.label(values[i])) + '">' +
       '<div class="iris-chart-bar" style="height:' + h + '%"></div></div>'
   })
   html += '</div><div class="iris-chart-axis">'
-  // a date under the first, middle and last bars
-  var marks = period.length > 1 ? [0, Math.floor((period.length - 1) / 2), period.length - 1] : [0]
+  // up to five dates spread under the bars
+  var marks = []
+  var steps = Math.min(4, period.length - 1)
+  for (var k = 0; k <= steps; k++) marks.push(Math.round((k / Math.max(1, steps)) * (period.length - 1)))
   marks.forEach(function (i, n) {
-    if (!period[i]) return
-    var where = period.length > 1 ? (i / (period.length - 1)) * 100 : 50
-    html += '<span class="iris-chart-date' + (n === marks.length - 1 && period.length > 1 ? ' is-last' : n === 0 ? ' is-first' : '') + '" style="left:' + where + '%">' +
-      (irisDayKey(period[i].date) === irisDayKey(new Date()) ? 'Today' : period[i].date.toLocaleDateString([], { month: 'short', day: 'numeric' })) + '</span>'
+    var where = period.length > 1 ? ((i + 0.5) / period.length) * 100 : 50
+    var cls = n === 0 ? ' is-first' : n === marks.length - 1 ? ' is-last' : ''
+    if (n === 0) where = 0
+    if (n === marks.length - 1 && marks.length > 1) where = 100
+    html += '<span class="iris-chart-date' + cls + '" style="left:' + where + '%">' + irisShortDate(period[i].date) + '</span>'
   })
   html += '</div><div class="iris-chart-tip" hidden></div>'
-  box.innerHTML = values.some(function (v) { return v > 0 }) ? html : '<div class="iris-chart-empty">Nothing used in this period yet.</div>'
+  box.innerHTML = total ? html : '<div class="iris-chart-empty">Nothing used in this period yet.</div>'
   box._period = period
 }
 
-/* hover: the day's figures in a small card over the bar */
+/* hover: the day's figures in a small card beside the bar */
 function irisChartHover (e) {
   var box = document.getElementById('iris-usage-chart')
   var col = e.target.closest && e.target.closest('.iris-chart-col')
@@ -1431,11 +1502,9 @@ function irisChartHover (e) {
   var t = p.t
   col.classList.add('is-hover')
   tip.innerHTML = '<b>' + p.date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + '</b>' +
-    '<div><span>Read</span><span>' + irisFormatK(t.input) + '</span></div>' +
-    '<div><span>Written</span><span>' + irisFormatK(t.output) + '</span></div>' +
-    '<div><span>Replies</span><span>' + irisFormatK(t.requests) + '</span></div>' +
-    '<div><span>Model time</span><span>' + (t.ms ? irisFormatDuration(t.ms) : '–') + '</span></div>' +
-    '<div><span>Tasks</span><span>' + (t.tasks || 0) + '</span></div>'
+    '<div><span>Input tokens</span><span>' + irisFormatK(t.input) + '</span></div>' +
+    '<div><span>Output tokens</span><span>' + irisFormatK(t.output) + '</span></div>' +
+    '<div><span>Steps</span><span>' + irisFormatK(t.requests) + '</span></div>'
   tip.hidden = false
   // beside the bar, never over it: to its left on the right half of the chart, to its right otherwise
   var boxRect = box.getBoundingClientRect()
@@ -1450,13 +1519,14 @@ function irisRenderUsageGroups (usage) {
   var sessions = usage.sessions || {}
   var newest = function (obj) { return Object.keys(obj).sort(function (a, b) { return (obj[b].last || 0) - (obj[a].last || 0) }) }
   var total = function (t) { return (t.input || 0) + (t.output || 0) }
-  var head = '<div class="iris-ulist-row iris-ulist-head"><span>Name</span><span></span><span>Tokens</span><span>Replies</span><span>Speed</span><span>Last used</span></div>'
+  var head = '<div class="iris-ulist-row iris-ulist-head"><span class="iris-ulist-avatar"></span><span>Name</span><span class="iris-ulist-meter"></span><span>Input</span><span>Output</span><span>Steps</span><span>Speed</span><span>Last used</span></div>'
 
   var row = function (name, sub, t, max) {
-    return '<div class="iris-ulist-row"><span class="iris-ulist-name" title="' + irisEscape(name) + '">' + irisEscape(name) +
+    var initial = (String(name).trim().replace(/^(open|find|go to)\s+/i, '').charAt(0) || '·').toUpperCase()
+    return '<div class="iris-ulist-row"><span class="iris-ulist-avatar">' + irisEscape(initial) + '</span><span class="iris-ulist-name" title="' + irisEscape(name) + '">' + irisEscape(name) +
       (sub ? '<small>' + irisEscape(sub) + '</small>' : '') + '</span>' +
       '<span class="iris-ulist-meter"><i style="width:' + (max ? Math.max(2, (total(t) / max) * 100) : 0) + '%"></i></span>' +
-      '<span>' + irisFormatK(total(t)) + '</span><span>' + irisFormatK(t.requests || 0) + '</span><span>' + irisSpeed(t) + '</span><span>' + irisWhen(t.last) + '</span></div>'
+      '<span>' + irisFormatK(t.input) + '</span><span>' + irisFormatK(t.output) + '</span><span>' + irisFormatK(t.requests || 0) + '</span><span>' + irisSpeed(t) + '</span><span>' + irisWhen(t.last) + '</span></div>'
   }
 
   var pIds = newest(projects)
@@ -1486,7 +1556,7 @@ function irisSegmented (id, attr, onPick) {
   })
 }
 irisSegmented('iris-usage-range', 'days', function (v) { irisUsageRange = Number(v) || 0; irisRenderUsage() })
-irisSegmented('iris-usage-metric', 'metric', function (v) { irisUsageMetric = IRIS_METRICS[v] ? v : 'tokens'; irisRenderUsage() })
+irisSegmented('iris-usage-metric', 'metric', function (v) { irisUsageMetric = IRIS_METRICS[v] ? v : 'all'; irisRenderUsage() })
 document.getElementById('iris-usage-chart').addEventListener('mousemove', irisChartHover)
 document.getElementById('iris-usage-chart').addEventListener('mouseleave', function () {
   var tip = document.querySelector('#iris-usage-chart .iris-chart-tip')

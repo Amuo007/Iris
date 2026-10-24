@@ -15,6 +15,7 @@
 const webviews = require('webviews.js')
 const settings = require('util/settings/settings.js')
 const urlParser = require('util/urlParser.js')
+const { logoMarkup } = require('iris/logo.js')
 
 const PANEL_WIDTH = 380
 const MAX_STEPS_SHOWN = 80
@@ -54,8 +55,8 @@ const ICONS = {
   pause: '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6.5" y="5" width="3.6" height="14" rx="1" fill="currentColor"/><rect x="13.9" y="5" width="3.6" height="14" rx="1" fill="currentColor"/></svg>',
   play: '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5L8 5.5z" fill="currentColor"/></svg>',
   check: '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  cross: '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
-  spark: '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z" fill="currentColor"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z" fill="currentColor" opacity=".6"/></svg>'
+  search: '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M15 15l5 5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>',
+  cross: '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>'
 }
 
 const ACTION_LABELS = {
@@ -171,7 +172,7 @@ function buildPanel () {
   // header
   const header = el('header', 'iris-panel-header')
   const title = el('div', 'iris-panel-title')
-  title.innerHTML = '<span class="iris-panel-mark" aria-hidden="true"></span><span>Iris</span>'
+  title.innerHTML = logoMarkup() + '<span>Iris</span>'
   header.appendChild(title)
   modelBadge = el('span', 'iris-model-badge', '')
   header.appendChild(modelBadge)
@@ -232,7 +233,9 @@ function buildPanel () {
   // live status (while a task runs or waits to repeat)
   statusBar = el('div', 'iris-statusbar')
   statusBar.hidden = true
-  const dot = el('span', 'iris-status-dot')
+  // the Iris mark turns while Iris works (and stands still while paused)
+  const dot = el('span', 'iris-status-mark')
+  dot.innerHTML = logoMarkup('is-working')
   statusText = el('span', 'iris-status-text', '')
   statusTime = el('span', 'iris-status-time', '')
   // the model's speed on its last reply and the tokens this session has used
@@ -277,6 +280,17 @@ function buildPanel () {
   })
   taskInput.addEventListener('input', autosize)
   box.appendChild(taskInput)
+  // how full the model's context is: in the box beside Send, so the row of switches below keeps its room
+  contextBtn = el('button', 'iris-context-btn')
+  contextBtn.type = 'button'
+  contextBtn.hidden = true
+  contextBtn.setAttribute('aria-haspopup', 'dialog')
+  contextBtn.addEventListener('click', function (e) {
+    e.stopPropagation()
+    if (contextCard.hidden) openContextCard()
+    else closeContextCard()
+  })
+  box.appendChild(contextBtn)
   sendButton = iconButton('iris-send', ICONS.send, 'Send')
   sendButton.addEventListener('click', submitTask)
   box.appendChild(sendButton)
@@ -291,16 +305,6 @@ function buildPanel () {
   meta.appendChild(thinkingSelect.label)
   modeSelect = selectControl(ICONS.loop, RUN_MODES, 'Once: until the task is done. Non-stop: no step or time limit. Repeat: runs again on a timer until you press Stop.')
   meta.appendChild(modeSelect.label)
-  contextBtn = el('button', 'iris-context-btn')
-  contextBtn.type = 'button'
-  contextBtn.hidden = true
-  contextBtn.setAttribute('aria-haspopup', 'dialog')
-  contextBtn.addEventListener('click', function (e) {
-    e.stopPropagation()
-    if (contextCard.hidden) openContextCard()
-    else closeContextCard()
-  })
-  meta.appendChild(contextBtn)
   planToggle = el('button', 'iris-plan-toggle')
   planToggle.type = 'button'
   planToggle.innerHTML = '<span class="iris-switch" aria-hidden="true"></span><span>Smart</span>'
@@ -345,7 +349,7 @@ function buildPanel () {
   openButton.id = 'iris-ask-button'
   openButton.className = 'iris-ask-button'
   openButton.title = 'Ask Iris  (⌘⇧Space)'
-  openButton.innerHTML = ICONS.spark + '<span>Ask Iris</span>'
+  openButton.innerHTML = logoMarkup() + '<span>Ask Iris</span>'
   openButton.addEventListener('click', togglePanel)
   document.getElementById('navbar').appendChild(openButton)
 }
@@ -441,6 +445,14 @@ function selectControl (icon, options, title) {
 
 function emptyState () {
   const empty = el('div', 'iris-empty')
+  // the mark assembles, then breathes while Iris waits
+  const logo = el('div', 'iris-empty-logo')
+  logo.innerHTML = logoMarkup('is-welcome')
+  setTimeout(function () {
+    const mark = logo.firstChild
+    if (mark) mark.className = 'iris-logo is-idle'
+  }, 2600)
+  empty.appendChild(logo)
   empty.appendChild(el('h2', 'iris-empty-title', 'What should Iris do?'))
   empty.appendChild(el('p', 'iris-empty-text', 'Iris reads the page from screenshots and uses the mouse and keyboard, like you. Watch every step, and click or type in the page to take over.'))
   const list = el('div', 'iris-suggestions')
@@ -729,6 +741,10 @@ function setStatus (status, text) {
   stopButton.disabled = status === 'stopping'
   sendButton.disabled = running && status !== 'paused'
   openButton.classList.toggle('is-working', running)
+  const mark = openButton.querySelector('.iris-logo')
+  if (mark) mark.classList.toggle('is-working', running && status !== 'paused')
+  const statusMark = statusBar.querySelector('.iris-logo')
+  if (statusMark) statusMark.classList.toggle('is-working', running && status !== 'paused')
   if ((running || repeatAt) && !clock) {
     clock = setInterval(tick, 1000)
     tick()
@@ -825,6 +841,14 @@ function showUsage (payload) {
 
 const CONTEXT_RING = 2 * Math.PI * 6
 
+// what each part of the context is, on hover
+const CONTEXT_HELP = {
+  system: function () { return "Iris's standing instructions to the model" },
+  tools: function () { return 'The actions the model can use: click, type, scroll, open a page, web search, remember…' },
+  memory: function () { return 'What Iris knows about you: your info, saved answers, accounts, rules and site tips' },
+  messages: function (c) { return 'The conversation: your task, the plan, earlier steps and the page now' + (c.screenshot ? ', with its screenshot (' + formatK(c.screenshot) + ')' : '') }
+}
+
 /* 812 → "812", 22,614 → "22.6k", 262,144 → "262k", 9,310,000 → "9.3M" */
 function formatK (n) {
   n = Math.max(0, Math.round(n || 0))
@@ -919,7 +943,7 @@ function renderContextCard () {
   sum.appendChild(el('span', 'iris-ctx-of', c.window ? formatK(c.used) + ' / ' + formatK(c.window) : 'window size unknown'))
   contextCard.appendChild(sum)
 
-  // one bar: each part in its colour, the free space as the track, a tick where Iris starts forgetting
+  // one bar: each part in its colour, then the free space, then the buffer Iris keeps free
   const bar = el('div', 'iris-ctx-bar')
   ;(c.parts || []).forEach(function (p, i) {
     if (!(p.tokens > 0)) return
@@ -929,37 +953,40 @@ function renderContextCard () {
     seg.title = p.label + ': ' + formatK(p.tokens)
     bar.appendChild(seg)
   })
-  if (c.window && c.compactAt) {
-    const tick = el('span', 'iris-ctx-tick')
-    tick.style.left = ((c.compactAt / c.window) * 100) + '%'
-    tick.title = 'Iris forgets its oldest steps here'
-    bar.appendChild(tick)
+  if (c.window && c.buffer) {
+    const buf = el('span', 'iris-ctx-buffer')
+    buf.style.width = (c.buffer / c.window) * 100 + '%'
+    buf.title = 'Autocompact buffer: kept free, Iris forgets old steps before using it'
+    bar.appendChild(buf)
   }
   contextCard.appendChild(bar)
 
   const rows = el('div', 'iris-ctx-rows')
   ;(c.parts || []).forEach(function (p, i) {
-    rows.appendChild(contextRow('var(--iris-ctx-' + (i + 1) + ')', p.label, formatK(p.tokens), formatPct((p.tokens / whole) * 100)))
+    const row = contextRow('var(--iris-ctx-' + (i + 1) + ')', p.label, formatK(p.tokens), formatPct((p.tokens / whole) * 100))
+    row.title = CONTEXT_HELP[p.key] ? CONTEXT_HELP[p.key](c) : ''
+    rows.appendChild(row)
   })
   if (c.window) {
     rows.appendChild(contextRow('', 'Free space', formatK(c.free), formatPct((c.free / c.window) * 100), 'is-free'))
-    rows.appendChild(contextRow('', 'Forgets old steps at', formatK(c.compactAt), formatPct((c.compactAt / c.window) * 100), 'is-limit'))
+    const buffer = contextRow('', 'Autocompact buffer', formatK(c.buffer), formatPct((c.buffer / c.window) * 100), 'is-buffer')
+    buffer.title = 'Kept free. When the context reaches it, Iris forgets its oldest steps (the task, plan and notes stay).'
+    rows.appendChild(buffer)
   }
   contextCard.appendChild(rows)
 
   const stats = el('div', 'iris-ctx-stats')
   const reply = [formatK(c.output) + ' tokens']
   if (st.speed) reply.push(Math.round(st.speed) + ' tok/s')
-  stats.appendChild(contextStat('Last reply', reply.join(' · ')))
+  stats.appendChild(contextStat('Last step', reply.join(' · ')))
   if (c.used && c.cached) stats.appendChild(contextStat('Read from cache', formatPct((c.cached / c.used) * 100) + ' of this context'))
   const sess = st.session
   if (sess && sess.requests) {
-    stats.appendChild(contextStat('This chat', sess.requests + (sess.requests === 1 ? ' reply · ' : ' replies · ') + formatK(sess.input) + ' read · ' + formatK(sess.output) + ' written'))
+    stats.appendChild(contextStat('This chat', sess.requests + (sess.requests === 1 ? ' step · ' : ' steps · ') + formatK(sess.input) + ' read · ' + formatK(sess.output) + ' written'))
   }
   contextCard.appendChild(stats)
 
-  contextCard.appendChild(el('p', 'iris-ctx-note', 'Every step sends this whole context again, so the chat total grows fast. ' +
-    'The total is the server\'s count; the split is estimated.'))
+  contextCard.appendChild(el('p', 'iris-ctx-note', 'Every step sends this whole context again, so the chat total grows fast.'))
 }
 
 function actionDetail (action, description) {
@@ -1044,10 +1071,14 @@ const LOOKUP_KINDS = { web: 'Web', papers: 'Papers', arxiv: 'arXiv', wiki: 'Wiki
 function addLookup (p) {
   removeEmpty()
   const key = p.step + '|' + p.kind + '|' + p.query
-  const row = el('div', 'iris-lookup')
+  // searching: an animated magnifier and a sweep across the row until the results arrive
+  const row = el('div', 'iris-lookup is-pending')
+  const icon = el('span', 'iris-lookup-icon')
+  icon.innerHTML = ICONS.search
+  row.appendChild(icon)
   row.appendChild(el('span', 'iris-lookup-kind', LOOKUP_KINDS[p.kind] || 'Web'))
   row.appendChild(el('span', 'iris-lookup-query', p.query))
-  const meta = el('span', 'iris-lookup-meta', 'looking up…')
+  const meta = el('span', 'iris-lookup-meta', 'searching')
   row.appendChild(meta)
   lookupRows[key] = meta
   if (p.step > 0 && steps[p.step]) steps[p.step].body.appendChild(row)
@@ -1059,6 +1090,8 @@ function lookupDone (p) {
   const meta = lookupRows[p.step + '|' + p.kind + '|' + p.query]
   if (!meta) return
   meta.textContent = p.ok ? p.count + (p.count === 1 ? ' result' : ' results') : 'unavailable'
+  meta.parentNode.classList.remove('is-pending')
+  meta.parentNode.classList.add('is-done')
   meta.parentNode.classList.toggle('is-failed', !p.ok)
 }
 
@@ -1259,7 +1292,7 @@ function handleEvent (payload) {
       showUsage(payload)
       break
     case 'compact':
-      addNote('The context was ' + formatPct((payload.used / payload.window) * 100) + ' full, so Iris forgot its oldest steps. The task, plan and notes stay.', 'memo')
+      addNote('The context was nearly full, so Iris forgot its oldest steps. The task, plan and notes stay.', 'memo')
       break
     case 'remember':
       if (!payload.automatic) addNote('Noted: ' + payload.note, 'memo')

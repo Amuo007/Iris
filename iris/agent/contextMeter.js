@@ -6,23 +6,24 @@
  * What fills the model's context window on a step: the panel's Context card.
  *
  * The total is exact: the model server reports how many tokens it read (usage.prompt_tokens).
- * The split into parts is worked out here. The screenshot uses the model's own image formula
- * (from its pixel size); the text parts use their length, and are then scaled so that every
- * part adds up to the exact total.
+ * The split (system prompt, tools, memory, messages) is worked out here. The screenshot uses the
+ * model's own image formula (from its pixel size); the text parts use their length, and are then
+ * scaled so that every part adds up to the exact total.
  *
  * Pure.
  */
 
-// characters per token of each part, measured with the Qwen tokenizer on a real job run
-// (2026-10-23): instructions 3.88, info 3.81, task 3.15, steps 2.90, this step 3.67
+// What the panel shows, in the words Claude Code and Codex use. Each is made of measured parts.
 const PARTS = [
-  { key: 'instructions', label: 'Iris instructions', charsPerToken: 3.9 },
-  { key: 'info', label: 'Your info & rules', charsPerToken: 3.8 },
-  { key: 'task', label: 'Task & plan', charsPerToken: 3.2 },
-  { key: 'steps', label: 'Earlier steps', charsPerToken: 2.9 },
-  { key: 'page', label: 'This step', charsPerToken: 3.7 },
-  { key: 'screenshot', label: 'Screenshot' }
+  { key: 'system', label: 'System prompt', of: ['instructions'] },
+  { key: 'tools', label: 'Tools', of: ['tools'] },
+  { key: 'memory', label: 'Memory', of: ['info'] },
+  { key: 'messages', label: 'Messages', of: ['task', 'steps', 'page', 'images'] }
 ]
+
+// characters per token of each measured part, from the Qwen tokenizer on a real job run (2026-10-23):
+// instructions 3.95, tools 3.80, info 3.81, task 3.15, steps 2.90, this step's page text 3.67
+const CHARS_PER_TOKEN = { instructions: 3.95, tools: 3.8, info: 3.8, task: 3.2, steps: 2.9, page: 3.7 }
 
 // Iris forgets its oldest steps before the context gets this full
 const COMPACT_AT = 0.85
@@ -52,7 +53,7 @@ function imageTokens (width, height, provider) {
 
 /**
  * Split one request's context into its parts.
- * layout: { instructions, info, task, steps, page } in characters, images: [{ width, height }]
+ * layout: characters of { instructions, tools, info, task, steps, page }, images: [{ width, height }]
  * usage:  the reply's usage ({ prompt_tokens, completion_tokens, prompt_tokens_details })
  * opts:   { provider, window }
  */
@@ -67,18 +68,19 @@ function estimate (layout, usage, opts) {
 
   const guess = {}
   let guessed = 0
-  PARTS.forEach(function (p) {
-    if (!p.charsPerToken) return
-    guess[p.key] = (Number(l[p.key]) || 0) / p.charsPerToken
-    guessed += guess[p.key]
+  Object.keys(CHARS_PER_TOKEN).forEach(function (k) {
+    guess[k] = (Number(l[k]) || 0) / CHARS_PER_TOKEN[k]
+    guessed += guess[k]
   })
 
-  // with an exact total, the text parts share what the screenshot leaves (a wrong image formula
-  // can never push the text below zero)
+  // with an exact total, the text shares what the screenshot leaves (a wrong image formula can never
+  // push the text below zero)
   if (total) image = Math.min(image, Math.round(total * 0.6))
   const scale = total && guessed > 0 ? (total - image) / guessed : 1
+  guess.images = image / (scale || 1)
   const parts = PARTS.map(function (p) {
-    return { key: p.key, label: p.label, tokens: p.key === 'screenshot' ? image : Math.round(guess[p.key] * scale) }
+    const raw = p.of.reduce(function (a, k) { return a + (guess[k] || 0) }, 0)
+    return { key: p.key, label: p.label, tokens: Math.round(raw * scale) }
   })
   const sum = parts.reduce(function (a, p) { return a + p.tokens }, 0)
   if (total && sum !== total) {
@@ -89,14 +91,18 @@ function estimate (layout, usage, opts) {
 
   const used = total || sum
   const window = o.window > 0 ? Math.round(o.window) : 0
+  const compactAt = window ? Math.round(window * COMPACT_AT) : 0
   const cached = (u.prompt_tokens_details && u.prompt_tokens_details.cached_tokens) || 0
   return {
     used,
     exact: !!total,
     window,
     percent: window ? Math.min(100, (used / window) * 100) : null,
-    free: window ? Math.max(0, window - used) : null,
-    compactAt: window ? Math.round(window * COMPACT_AT) : 0,
+    // the last 15% is kept free: Iris forgets old steps before it would be needed (Claude Code's "autocompact buffer")
+    buffer: window ? window - compactAt : 0,
+    free: window ? Math.max(0, compactAt - used) : null,
+    compactAt,
+    screenshot: image,
     output: u.completion_tokens || 0,
     cached: Math.min(cached, used),
     parts

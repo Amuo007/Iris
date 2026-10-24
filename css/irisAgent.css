@@ -1041,11 +1041,11 @@ body.dark-mode {
 .iris-context-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 28px;
-  padding: 0 8px 0 7px;
-  margin-left: auto;
+  gap: 4px;
+  height: 30px;
+  padding: 0 6px;
   flex: none;
+  align-self: flex-end;
   border: 1px solid transparent;
   border-radius: var(--iris-r-sm);
   background: transparent;
@@ -1060,11 +1060,12 @@ body.dark-mode {
 }
 .iris-context-btn:hover,
 .iris-context-btn[aria-expanded="true"] {
-  background: var(--iris-bg-subtle);
-  border-color: var(--iris-border);
+  background: var(--iris-bg-muted);
 }
-.iris-context-btn:not([hidden]) + .iris-smart-group {
-  margin-left: 0;
+/* the switches under the box: wrap to a second line rather than run past the panel */
+.iris-composer-meta {
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
 .iris-ring-track,
 .iris-ring-fill {
@@ -1162,14 +1163,12 @@ body.dark-mode {
   flex: none;
   height: 100%;
 }
-.iris-ctx-tick {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  margin-left: -1px;
-  background: var(--iris-text);
-  box-shadow: 0 0 0 1px var(--iris-bg);
+/* the autocompact buffer: the end of the bar, striped */
+.iris-ctx-buffer {
+  flex: none;
+  height: 100%;
+  margin-left: auto;
+  background: repeating-linear-gradient(135deg, var(--iris-border-strong) 0 2px, transparent 2px 5px);
 }
 
 .iris-ctx-rows {
@@ -1193,15 +1192,11 @@ body.dark-mode {
   box-sizing: border-box;
   border: 1.5px solid var(--iris-border-strong);
 }
-.iris-ctx-row.is-limit .iris-ctx-dot {
-  width: 2px;
-  height: 11px;
-  margin-left: 4px;
-  border-radius: 1px;
-  background: var(--iris-text-3);
+.iris-ctx-row.is-buffer .iris-ctx-dot {
+  background: repeating-linear-gradient(135deg, var(--iris-text-3) 0 1.5px, transparent 1.5px 3.5px);
 }
 .iris-ctx-row.is-free,
-.iris-ctx-row.is-limit {
+.iris-ctx-row.is-buffer {
   color: var(--iris-text-2);
 }
 .iris-ctx-label {
@@ -1243,4 +1238,357 @@ body.dark-mode {
   color: var(--iris-text-3);
   font-size: 11px !important;
   line-height: 1.45;
+}
+
+/* --- The Iris mark (js/iris/logo.js) -------------------------------------- */
+
+/* the petals' colours: deeper steps on light surfaces, brighter ones on dark */
+:root {
+  --logo-1a: #4cc3ff;
+  --logo-1b: #1757e8;
+  --logo-2a: #2fd9c2;
+  --logo-2b: #0786a6;
+  --logo-3a: #6fdcff;
+  --logo-3b: #0a78e0;
+  --logo-4a: #45e0a0;
+  --logo-4b: #059669;
+  --logo-ring: #0a8fe0;
+}
+body.dark-mode {
+  --logo-1a: #8fd8ff;
+  --logo-1b: #2f7bff;
+  --logo-2a: #67f0dc;
+  --logo-2b: #0aa6c8;
+  --logo-3a: #b3f0ff;
+  --logo-3b: #1e9bff;
+  --logo-4a: #8af5c0;
+  --logo-4b: #10b981;
+  --logo-ring: #5cc8ff;
+}
+
+.iris-logo {
+  --logo-cut: var(--iris-bg);
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  vertical-align: middle;
+}
+.iris-logo svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.iris-logo-petals path {
+  /* a hairline in the colour behind the mark keeps the four blades apart */
+  stroke: var(--logo-cut);
+  stroke-width: 0.8px;
+  vector-effect: non-scaling-stroke;
+}
+.iris-logo .iris-stop-1a { stop-color: var(--logo-1a); }
+.iris-logo .iris-stop-1b { stop-color: var(--logo-1b); }
+.iris-logo .iris-stop-2a { stop-color: var(--logo-2a); }
+.iris-logo .iris-stop-2b { stop-color: var(--logo-2b); }
+.iris-logo .iris-stop-3a { stop-color: var(--logo-3a); }
+.iris-logo .iris-stop-3b { stop-color: var(--logo-3b); }
+.iris-logo .iris-stop-4a { stop-color: var(--logo-4a); }
+.iris-logo .iris-stop-4b { stop-color: var(--logo-4b); }
+.iris-logo .iris-stop-pa { stop-color: #ffffff; }
+.iris-logo .iris-stop-pb { stop-color: #d6efff; }
+.iris-logo-pointer path {
+  stroke: #0b1324;
+  stroke-width: 1.3px;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+/* the ring that spreads from the pointer's tip when it clicks */
+.iris-logo-ripple {
+  position: absolute;
+  left: 42%;
+  top: 47%;
+  width: 64%;
+  height: 64%;
+  margin: -32% 0 0 -32%;
+  box-sizing: border-box;
+  border: 2px solid var(--logo-ring);
+  border-radius: 50%;
+  opacity: 0;
+  transform: scale(0.2);
+  pointer-events: none;
+}
+
+/* working: the iris turns, the pointer clicks and a ring spreads from its tip */
+.iris-logo.is-working .iris-logo-petals {
+  animation: iris-logo-turn 2.8s linear infinite;
+  will-change: transform;
+}
+.iris-logo.is-working .iris-logo-pointer {
+  animation: iris-logo-click 1.4s ease-in-out infinite;
+  will-change: transform;
+}
+.iris-logo.is-working .iris-logo-ripple {
+  animation: iris-logo-ripple 1.4s ease-out infinite;
+}
+/* idle: a slow breath, the iris sways and the pointer floats */
+.iris-logo.is-idle {
+  animation: iris-logo-breathe 3.2s ease-in-out infinite;
+}
+.iris-logo.is-idle .iris-logo-petals {
+  animation: iris-logo-sway 6.4s ease-in-out infinite;
+}
+.iris-logo.is-idle .iris-logo-pointer {
+  animation: iris-logo-float 3.2s ease-in-out infinite;
+}
+/* welcome: the petals fly in and settle, then the pointer arrives and clicks */
+.iris-logo.is-welcome .iris-logo-petals {
+  animation: iris-logo-settle 1.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.iris-logo.is-welcome .iris-logo-petals path {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.iris-logo.is-welcome .iris-petal-1 {
+  animation: iris-logo-petal-1 1.25s cubic-bezier(0.18, 0.85, 0.2, 1) both;
+}
+.iris-logo.is-welcome .iris-petal-2 {
+  animation: iris-logo-petal-2 1.25s 0.08s cubic-bezier(0.18, 0.85, 0.2, 1) both;
+}
+.iris-logo.is-welcome .iris-petal-3 {
+  animation: iris-logo-petal-3 1.25s 0.16s cubic-bezier(0.18, 0.85, 0.2, 1) both;
+}
+.iris-logo.is-welcome .iris-petal-4 {
+  animation: iris-logo-petal-4 1.25s 0.24s cubic-bezier(0.18, 0.85, 0.2, 1) both;
+}
+.iris-logo.is-welcome .iris-logo-pointer {
+  animation: iris-logo-arrive 2.3s ease-in-out both;
+}
+.iris-logo.is-welcome .iris-logo-ripple {
+  /* forwards, not both: the ring stays hidden until the pointer clicks */
+  animation: iris-logo-ripple-once 0.9s 1.6s ease-out forwards;
+}
+
+@keyframes iris-logo-turn {
+  to { transform: rotate(360deg); }
+}
+@keyframes iris-logo-click {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  30% { transform: translate(-4%, -5%) scale(1); }
+  45% { transform: translate(-4%, -5%) scale(0.78); }
+  56% { transform: translate(-4%, -5%) scale(1); }
+  82% { transform: translate(0, 0) scale(1); }
+}
+@keyframes iris-logo-ripple {
+  0%, 44% { opacity: 0; transform: translate(-4%, -5%) scale(0.2); }
+  50% { opacity: 0.95; transform: translate(-4%, -5%) scale(0.35); }
+  100% { opacity: 0; transform: translate(-4%, -5%) scale(1.25); }
+}
+@keyframes iris-logo-ripple-once {
+  0% { opacity: 0.95; transform: scale(0.3); }
+  100% { opacity: 0; transform: scale(1.35); }
+}
+@keyframes iris-logo-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.07); }
+}
+@keyframes iris-logo-sway {
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(8deg); }
+}
+@keyframes iris-logo-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4%); }
+}
+@keyframes iris-logo-settle {
+  0% { transform: rotate(-120deg) scale(0.6); }
+  60% { transform: rotate(12deg) scale(1.04); }
+  100% { transform: rotate(0) scale(1); }
+}
+@keyframes iris-logo-petal-1 {
+  from { opacity: 0; transform: translate(-60%, -55%) rotate(-85deg) scale(0.4); }
+}
+@keyframes iris-logo-petal-2 {
+  from { opacity: 0; transform: translate(-55%, 60%) rotate(75deg) scale(0.4); }
+}
+@keyframes iris-logo-petal-3 {
+  from { opacity: 0; transform: translate(55%, -64%) rotate(100deg) scale(0.4); }
+}
+@keyframes iris-logo-petal-4 {
+  from { opacity: 0; transform: translate(60%, 55%) rotate(-95deg) scale(0.4); }
+}
+@keyframes iris-logo-arrive {
+  0%, 40% { opacity: 0; transform: translate(36%, 32%) scale(1.15); }
+  62% { opacity: 1; transform: translate(0, 0) scale(1); }
+  70% { transform: translate(0, 0) scale(0.8); }
+  80%, 100% { opacity: 1; transform: translate(0, 0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .iris-logo,
+  .iris-logo * {
+    animation: none !important;
+  }
+}
+
+/* where it appears */
+.iris-panel-title .iris-logo {
+  width: 18px;
+  height: 18px;
+}
+.iris-empty-logo {
+  display: block;
+  margin: 0 0 16px;
+}
+.iris-empty-logo .iris-logo {
+  width: 64px;
+  height: 64px;
+}
+.iris-empty-logo .iris-logo-ripple {
+  border-width: 3px;
+}
+.iris-statusbar .iris-logo {
+  --logo-cut: var(--iris-bg-subtle);
+  width: 18px;
+  height: 18px;
+}
+.iris-statusbar .iris-logo-ripple,
+.iris-ask-button .iris-logo-ripple {
+  border-width: 1.5px;
+}
+/* paused: the mark stands still and greys out */
+.iris-panel[data-status="paused"] .iris-statusbar .iris-logo {
+  filter: grayscale(1);
+  opacity: 0.6;
+}
+.iris-status-mark {
+  display: inline-flex;
+  flex: none;
+}
+
+/* --- Motion: the panel slides in, new items rise in, work in progress shimmers ------- */
+
+.iris-panel:not([hidden]) {
+  animation: iris-panel-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes iris-panel-in {
+  from { opacity: 0; transform: translateX(18px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* every step, note, message and result card fades and rises in as it arrives */
+.iris-stream > * {
+  animation: iris-item-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes iris-item-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.iris-result {
+  animation: iris-card-in 320ms cubic-bezier(0.2, 0.9, 0.25, 1.15) both;
+}
+@keyframes iris-card-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.iris-step-thought:not([hidden]),
+.iris-step-error {
+  animation: iris-fade-in 220ms ease-out both;
+}
+@keyframes iris-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* the step being worked on: its number pulses */
+.iris-panel[data-status="running"] .iris-step.is-active .iris-step-num {
+  animation: iris-step-pulse 1.6s ease-out infinite;
+}
+@keyframes iris-step-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--logo-1b) 55%, transparent); }
+  70% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--logo-1b) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* "Thinking…", "Reading the page…": a light sweeps across the words while Iris works */
+.iris-panel[data-status="running"] .iris-status-text {
+  background: linear-gradient(90deg, var(--iris-text) 0%, var(--iris-text) 38%, var(--iris-text-3) 50%, var(--iris-text) 62%, var(--iris-text) 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: iris-shimmer 2.2s linear infinite;
+}
+@keyframes iris-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -150% 0; }
+}
+
+/* a web search: the magnifier circles, a sweep runs across the row; the count pops in when done */
+.iris-lookup {
+  position: relative;
+  overflow: hidden;
+  align-items: center;
+}
+.iris-lookup-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--logo-1b);
+}
+.iris-lookup.is-pending .iris-lookup-icon svg {
+  animation: iris-search 1.2s ease-in-out infinite;
+}
+@keyframes iris-search {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(2px, -1px); }
+  50% { transform: translate(0, -2px); }
+  75% { transform: translate(-2px, -1px); }
+}
+.iris-lookup.is-pending::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--logo-1a) 18%, transparent), transparent);
+  transform: translateX(-100%);
+  animation: iris-sweep 1.4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes iris-sweep {
+  to { transform: translateX(100%); }
+}
+.iris-lookup.is-pending .iris-lookup-meta::after {
+  content: "";
+  display: inline-block;
+  width: 1.2em;
+  text-align: left;
+  animation: iris-dots 1.2s steps(4) infinite;
+}
+@keyframes iris-dots {
+  0% { content: ""; }
+  25% { content: "."; }
+  50% { content: ".."; }
+  75% { content: "..."; }
+}
+.iris-lookup.is-done .iris-lookup-meta {
+  animation: iris-pop 260ms cubic-bezier(0.2, 0.9, 0.25, 1.3) both;
+  color: var(--iris-text-2);
+}
+@keyframes iris-pop {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iris-panel,
+  .iris-panel * {
+    animation: none !important;
+    transition: none !important;
+  }
+  .iris-panel[data-status="running"] .iris-status-text {
+    color: var(--iris-text);
+    background: none;
+  }
 }

@@ -42,7 +42,15 @@ function irisField (obj, key, label, opts) {
   return wrap
 }
 
+// text boxes size themselves to their text (CSS field-sizing). Measuring them here went wrong for a box filled
+// while its settings section was hidden: it measured 0 and stayed one line tall, cutting the text off.
+var IRIS_FIELD_SIZING = !!(window.CSS && CSS.supports && CSS.supports('field-sizing', 'content'))
+
 function irisGrow (ta) {
+  if (IRIS_FIELD_SIZING) {
+    ta.style.height = ''
+    return
+  }
   ta.style.height = 'auto'
   ta.style.height = Math.min(420, ta.scrollHeight + 2) + 'px'
 }

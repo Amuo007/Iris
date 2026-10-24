@@ -235,8 +235,53 @@ body.iris-panel-open .iris-ask-button {
   background: var(--iris-bg-muted);
   color: var(--iris-text);
 }
-.iris-ask-button.is-working svg {
-  animation: iris-spin 2.4s linear infinite;
+/* the Iris mark on the button; it turns while Iris works. The button is white in dark mode and black
+   in light mode, so it takes the other theme's petal colours */
+.iris-ask-button .iris-logo {
+  --logo-cut: var(--iris-primary);
+  --logo-1a: #4cc3ff;
+  --logo-1b: #1757e8;
+  --logo-2a: #2fd9c2;
+  --logo-2b: #0786a6;
+  --logo-3a: #6fdcff;
+  --logo-3b: #0a78e0;
+  --logo-4a: #45e0a0;
+  --logo-4b: #059669;
+  width: 16px;
+  height: 16px;
+}
+body:not(.dark-mode) .iris-ask-button .iris-logo {
+  --logo-1a: #8fd8ff;
+  --logo-1b: #2f7bff;
+  --logo-2a: #67f0dc;
+  --logo-2b: #0aa6c8;
+  --logo-3a: #b3f0ff;
+  --logo-3b: #1e9bff;
+  --logo-4a: #8af5c0;
+  --logo-4b: #10b981;
+}
+body.iris-panel-open .iris-ask-button .iris-logo {
+  --logo-cut: var(--iris-bg-muted);
+}
+body.iris-panel-open.dark-mode .iris-ask-button .iris-logo {
+  --logo-1a: #8fd8ff;
+  --logo-1b: #2f7bff;
+  --logo-2a: #67f0dc;
+  --logo-2b: #0aa6c8;
+  --logo-3a: #b3f0ff;
+  --logo-3b: #1e9bff;
+  --logo-4a: #8af5c0;
+  --logo-4b: #10b981;
+}
+body.iris-panel-open:not(.dark-mode) .iris-ask-button .iris-logo {
+  --logo-1a: #4cc3ff;
+  --logo-1b: #1757e8;
+  --logo-2a: #2fd9c2;
+  --logo-2b: #0786a6;
+  --logo-3a: #6fdcff;
+  --logo-3b: #0a78e0;
+  --logo-4a: #45e0a0;
+  --logo-4b: #059669;
 }
 /* a coding agent is driving Iris through the MCP bridge */
 .iris-ask-button.is-bridged {
@@ -804,4 +849,20 @@ body.iris-has-bookmarks-bar #iris-bookmarks-bar {
   border-radius: var(--iris-r-sm);
   height: 28px;
   font-size: 13px;
+}
+
+/* a page loading: the thin line under the tab in the colours of the Iris mark, with a light running along it */
+.progress-bar {
+  background: linear-gradient(90deg, #2f7bff, #0aa6c8 55%, #10b981);
+  background-size: 200% 100%;
+  animation: iris-progress-flow 1.6s linear infinite;
+}
+@keyframes iris-progress-flow {
+  from { background-position: 0 0; }
+  to { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-bar {
+    animation: none;
+  }
 }
