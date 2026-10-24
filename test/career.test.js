@@ -21,6 +21,9 @@ test('the bank keeps what the user wrote and fills in defaults', () => {
   assert.strictEqual(own.prefs.tailor, false)
   assert.strictEqual(own.prefs.resumeFile, '/Users/x/Desktop/Me Resume.pdf')
   assert.strictEqual(career.normalizeBank({ prefs: { resumeFile: 42 } }).prefs.resumeFile, '')
+  assert.strictEqual(b.prefs.transcriptFile, '', 'no transcript until the user chooses one')
+  assert.strictEqual(career.normalizeBank({ prefs: { transcriptFile: ' /Users/x/Documents/Transcript.pdf ' } }).prefs.transcriptFile, '/Users/x/Documents/Transcript.pdf')
+  assert.strictEqual(career.normalizeBank({ prefs: { transcriptFile: 42 } }).prefs.transcriptFile, '')
   assert.ok(b.answers.some(a => a.label === 'Work authorization' && a.value === 'Canadian citizen'))
   assert.ok(b.answers.some(a => a.label === 'Veteran status' && a.value === ''), 'every usual application question is there to fill in')
   const empty = career.normalizeBank(null)
@@ -361,4 +364,34 @@ test('LinkedIn weekly limit is read from the application notes', () => {
   assert.strictEqual(linkedinLimitSeen([{ at: at(8), note: 'out of invitations on LinkedIn' }], now), 0)
   assert.strictEqual(linkedinLimitSeen([{ at: at(1), note: 'Submitted via Greenhouse.' }], now), 0)
   assert.strictEqual(linkedinLimitSeen(null, now), 0)
+})
+
+test('the model\'s words for the transcript name the saved transcript, and nothing else does', () => {
+  const { isTranscriptName } = require('../iris/agent/career')
+  ;['transcript', 'Transcript', 'my transcript', 'unofficial transcript', 'the unofficial transcript PDF', 'Transcript.pdf',
+    'unofficial_transcript', 'academic record', 'official transcripts', 'grades'].forEach(function (n) {
+    assert.ok(isTranscriptName(n), n)
+  })
+  // the resume and the cover letter keep their own files; a named file goes to the file search
+  ;['resume', 'my resume', 'cover letter', 'Amrinder-Singh-Resume.pdf', 'transcript and resume', 'portfolio', '', null].forEach(function (n) {
+    assert.ok(!isTranscriptName(n), String(n))
+  })
+})
+
+test('a Workday posting id keeps its number and loses only a copy\'s short ending', () => {
+  const { workdayPostingId } = require('../iris/agent/career')
+  // the copy endings still go: one posting, one id
+  assert.strictEqual(workdayPostingId('Software-Engineer_REQ-058508-1'), 'REQ-058508')
+  assert.strictEqual(workdayPostingId('Manageability-Firmware-Engineer_1214522-3'), '1214522')
+  assert.strictEqual(workdayPostingId('Firmware-Engineer_R5055842-2'), 'R5055842')
+  assert.strictEqual(workdayPostingId('Data-Scientist_JR363678'), 'JR363678')
+  // a real night: these became "R", "JR", "REQ" and every job at the company looked like one
+  assert.strictEqual(workdayPostingId('Embedded-Controls-Engineer_R-01364234'), 'R-01364234')
+  assert.strictEqual(workdayPostingId('Data-Engineer_R-01372756'), 'R-01372756')
+  assert.strictEqual(workdayPostingId('Credit-Review-Data-Scientist_JR-16697'), 'JR-16697')
+  assert.strictEqual(workdayPostingId('Motor-Control_REQ-1000052383'), 'REQ-1000052383')
+  assert.strictEqual(workdayPostingId('Firmware-Engineer-Intern_R26-8321'), 'R26-8321')
+  // a short id is never cut down to its letters
+  assert.strictEqual(workdayPostingId('Analyst_R-12'), 'R-12')
+  assert.notStrictEqual(workdayPostingId('Data-Engineer_R-01372756'), workdayPostingId('Embedded-Controls-Engineer_R-01364234'))
 })

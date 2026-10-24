@@ -349,7 +349,7 @@ function irisJobKey (url) {
       const rest = at >= 0 ? segs.slice(at + 1) : []
       const end = rest.indexOf('apply') >= 0 ? rest.slice(0, rest.indexOf('apply')) : rest
       const named = end.filter(function (x) { return x.indexOf('_') >= 0 }).pop()
-      if (named) return (u.hostname + '/job/' + named.split('_').pop().replace(/-\d+$/, '')).toLowerCase()
+      if (named) return (u.hostname + '/job/' + irisCareerLib.workdayPostingId(named)).toLowerCase()
     }
     // iCIMS: one posting at careers-<company>.icims.com/jobs/<n>/<slug>/<step> and at the company's own
     // jobs.<company>.com/jobs/<n>?icims=1 (a real run went back to Keysight 55077, applied the day before)
@@ -495,6 +495,12 @@ function irisOwnResume (bank) {
   return p.resumeFile && fs.existsSync(p.resumeFile) ? p.resumeFile : ''
 }
 
+/* The user's unofficial transcript (Settings → Jobs), or '' when none is chosen or the file is gone. */
+function irisTranscriptFile (bank) {
+  const f = (bank || irisCareerLoad()).prefs.transcriptFile
+  return f && fs.existsSync(f) ? f : ''
+}
+
 function irisJobsPrompt (task, mode) {
   const nonStop = mode === 'continuous'
   const bank = irisCareerLoad()
@@ -502,6 +508,7 @@ function irisJobsPrompt (task, mode) {
   const own = irisOwnResume(bank)
   const tailoring = own === null
   const ownName = own ? path.basename(own) : ''
+  const transcript = irisTranscriptFile(bank)
   const lines = ['JOBS — the user keeps a career profile in Iris (Settings → Jobs). Applying for one job:',
     'THE RULES BELOW ARE DEFAULTS, NOT WALLS. The goal is the application done, honestly. When the usual way does not',
     'work (a box refuses a value, an option is missing, LinkedIn has no notes left, a page will not load), do what a',
@@ -524,7 +531,7 @@ function irisJobsPrompt (task, mode) {
     'A search list that says "No results" for your answer is a fixed list without it (a company\'s school list): try one',
     'shorter word once (a key word of the name); still nothing, pick "Other" (or the closest honest option) and type the',
     'real answer if a box for it appears. Do not retype the same text.',
-    'A required upload of a document you do not have (a transcript, a certificate, an ID, a portfolio, writing samples):',
+    'A required upload of a document you do not have (' + (transcript ? '' : 'a transcript, ') + 'a certificate, an ID, a portfolio, writing samples):',
     'never put another file in its place (a real run uploaded the resume as the transcript and submitted). Log the job',
     'needs_you naming that document and go on to the next job. A cover letter you can make yourself.',
     'Immigration papers are facts, never estimates: an EAD/OPT card date, a visa, I-94 or SEVIS number, a permit expiry',
@@ -714,6 +721,8 @@ function irisJobsPrompt (task, mode) {
   const answers = bank.answers.filter(function (a) { return a.value })
   if (answers.length) lines.push('Answers for application questions (turn them into the form\'s own options, e.g. a citizen is "Yes" to "authorized to work"): ' + answers.map(function (a) { return a.label + ': ' + a.value }).join('; ') + '.')
   if (p.salary) lines.push('Salary expectation: ' + p.salary + '.')
+  // the user's own transcript: a form that asks for one is no longer left for the user
+  if (transcript) lines.push('The user\'s unofficial transcript: where a form asks for a transcript (or academic record, grades), upload it with {"type":"upload","file":"transcript"} (' + path.basename(transcript) + ') — never in the resume\'s place, and never the resume in its place.')
   const summary = []
   if (bank.experience.length) summary.push('Jobs: ' + bank.experience.map(function (e) { return [e.title, e.company].filter(Boolean).join(' at ') + (e.dates ? ' (' + e.dates + ')' : '') }).join('; '))
   if (bank.education.length) summary.push('Education: ' + bank.education.map(function (e) { return [e.degree, e.school, e.dates].filter(Boolean).join(', ') }).join('; '))
@@ -853,6 +862,24 @@ function irisJobsSettingsAction (action, args) {
       const file = irisCareerLoad().prefs.resumeFile
       if (file && fs.existsSync(file)) shell.showItemInFolder(file)
       return Promise.resolve({ shown: !!(file && fs.existsSync(file)) })
+    }
+    case 'transcriptChoose': {
+      // like the resume: the page keeps the path in the profile it saves
+      const current = irisCareerLoad().prefs.transcriptFile
+      // IRIS_TRANSCRIPT_PICK (tests only): the file the dialog would return
+      return (process.env.IRIS_TRANSCRIPT_PICK ? Promise.resolve({ canceled: false, filePaths: [process.env.IRIS_TRANSCRIPT_PICK] }) : dialog.showOpenDialog(windows.getCurrent(), {
+        title: 'Choose your unofficial transcript (PDF)',
+        properties: ['openFile'],
+        filters: [{ name: 'PDF', extensions: ['pdf'] }],
+        defaultPath: current && fs.existsSync(current) ? current : app.getPath('documents')
+      })).then(function (pick) {
+        return { picked: !pick.canceled && pick.filePaths[0] ? pick.filePaths[0] : '' }
+      })
+    }
+    case 'transcriptShow': {
+      const file = irisTranscriptFile()
+      if (file) shell.showItemInFolder(file)
+      return Promise.resolve({ shown: !!file })
     }
     case 'resumeDirChoose':
       return dialog.showOpenDialog(windows.getCurrent(), { properties: ['openDirectory', 'createDirectory'], defaultPath: irisResumeDir() }).then(function (pick) {

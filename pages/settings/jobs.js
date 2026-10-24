@@ -301,6 +301,15 @@ function irisRenderPrefs () {
   IRIS_PREF_FIELDS.forEach(function (f) { document.getElementById(f[0]).value = p[f[1]] === undefined ? '' : p[f[1]] })
   document.getElementById('iris-pref-submit').value = p.autoSubmit === false ? 'ask' : 'auto'
   irisRenderTailor()
+  irisRenderTranscript()
+}
+
+/* An unofficial transcript: uploaded where a form asks for one, tailoring on or off */
+function irisRenderTranscript () {
+  var file = irisCareer.prefs.transcriptFile || ''
+  document.getElementById('iris-transcript-help').textContent = file ? file.replace(/^\/Users\/[^/]+/, '~') : 'No file chosen yet. Choose your unofficial transcript PDF and Iris uploads it where an application asks for one.'
+  document.getElementById('iris-transcript-choose').textContent = file ? 'Choose another…' : 'Choose PDF…'
+  document.getElementById('iris-transcript-show').hidden = !file
 }
 
 /* Tailoring on, or the user's own PDF as it is (then no fit check, so the cutoff does nothing) */
@@ -327,6 +336,8 @@ document.getElementById('checkbox-iris-pref-tailor').addEventListener('change', 
 })
 document.getElementById('iris-own-resume-choose').addEventListener('click', function () { irisAction('ownResumeChoose') })
 document.getElementById('iris-own-resume-show').addEventListener('click', function () { irisAction('ownResumeShow') })
+document.getElementById('iris-transcript-choose').addEventListener('click', function () { irisAction('transcriptChoose') })
+document.getElementById('iris-transcript-show').addEventListener('click', function () { irisAction('transcriptShow') })
 
 IRIS_PREF_FIELDS.forEach(function (f) {
   var el = document.getElementById(f[0])
@@ -579,6 +590,15 @@ window.addEventListener('message', function (e) {
     return
   }
   if (d.action === 'ownResumeShow') return
+  if (d.action === 'transcriptChoose') {
+    if (r.picked && irisCareer) {
+      irisCareer.prefs.transcriptFile = r.picked
+      irisRenderTranscript()
+      irisCareerScheduleSave()
+    }
+    return
+  }
+  if (d.action === 'transcriptShow') return
   if (d.action === 'careerBackup') { irisCareerStatus.textContent = r.backedUp ? 'Saved a copy: ' + r.backedUp + ' (in your download folder)' : 'Could not save a copy.'; return }
   if (d.action === 'careerRestore') {
     if (r.error) { irisCareerStatus.textContent = r.error; return }

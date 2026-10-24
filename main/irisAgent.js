@@ -1935,6 +1935,13 @@ IrisComputer.prototype.act = async function (action) {
       const resumeNow = this.lastResume && fs.existsSync(this.lastResume) ? this.lastResume : irisOwnResume() || null
       if (resumeNow && (/^(the |my |tailored |own |user'?s )*(resume|cv|résumé)( pdf| file)?$/i.test(wanted) || path.basename(wanted) === path.basename(resumeNow))) file = resumeNow
       if (!file && this.lastCover && fs.existsSync(this.lastCover) && (/^(the |my )*cover( letter)?( pdf| file)?$/i.test(wanted) || path.basename(wanted) === path.basename(this.lastCover))) file = this.lastCover
+      // "transcript" means the one the user chose in Settings → Jobs; with none chosen, say so (never another file)
+      const transcriptNow = irisTranscriptFile()
+      if (!file && irisCareerLib.isTranscriptName(wanted)) {
+        if (!transcriptNow) return { ok: false, error: 'no transcript is saved in Settings → Jobs: log the job needs_you naming the transcript (never upload another file in its place)' }
+        file = transcriptNow
+      }
+      if (!file && transcriptNow && path.basename(wanted) === path.basename(transcriptNow)) file = transcriptNow
       if (!file) file = irisFindFile(action.file)
       if (!file) return { ok: false, error: 'no file named "' + action.file + '" in Downloads, Desktop or Documents' }
       try {

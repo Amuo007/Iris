@@ -63,7 +63,8 @@ const DEFAULT_PREFS = {
   dailyLimit: 0, // 0 = no limit
   summary: true, // write a short summary line at the top when the template has one
   tailor: true, // false: no new resume per job, no fit check; the user's own PDF goes out as it is
-  resumeFile: '' // that PDF (used when tailor is false)
+  resumeFile: '', // that PDF (used when tailor is false)
+  transcriptFile: '' // the user's unofficial transcript PDF, uploaded where a form asks for a transcript
 }
 
 function normalizeBank (raw) {
@@ -76,6 +77,7 @@ function normalizeBank (raw) {
   prefs.summary = prefs.summary !== false
   prefs.tailor = prefs.tailor !== false
   prefs.resumeFile = typeof prefs.resumeFile === 'string' ? prefs.resumeFile.trim().slice(0, 1000) : ''
+  prefs.transcriptFile = typeof prefs.transcriptFile === 'string' ? prefs.transcriptFile.trim().slice(0, 1000) : ''
   if (['any', 'remote', 'hybrid', 'onsite'].indexOf(prefs.workplace) === -1) prefs.workplace = 'any'
   ;['roles', 'locations', 'salary'].forEach(function (k) { prefs[k] = str(prefs[k], 300) })
 
@@ -1780,8 +1782,32 @@ function linkedinLimitSeen (applications, now) {
   return limitAt && limitAt > sentAt && (now || Date.now()) - limitAt < week ? limitAt : 0
 }
 
+/*
+ * The model names the file to upload in its own words: "transcript", "my unofficial transcript", "academic record".
+ * Those mean the transcript the user saved in Settings → Jobs (a real run left 6 jobs for the user over a transcript
+ * upload; the resume must never go in its place).
+ */
+function isTranscriptName (name) {
+  const n = String(name || '').trim().toLowerCase().replace(/\.pdf$/, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ')
+  return /^(the |my |user'?s |unofficial |official |academic |college |university |school )*(transcripts?|academic records?|records? of grades|grades?)( pdf| file| document)?$/.test(n)
+}
+
+/*
+ * A Workday posting's id, from the last "_" part of its address ("…_R-01364234", "…_JR363678"), without the short
+ * "-1" a copy of the posting carries ("…_REQ-058508-1"). Only a 1-2 digit ending goes, and only when a number is left:
+ * dropping any "-<digits>" turned "R-01364234" into "R", and every Thermo Fisher, Leidos and GlobalFoundries job looked
+ * like one (a real night merged a needs-you job into another job's "applied" record).
+ */
+function workdayPostingId (part) {
+  const id = String(part || '').split('_').pop()
+  const bare = id.replace(/-\d{1,2}$/, '')
+  return /\d/.test(bare) ? bare : id
+}
+
 module.exports = {
   linkedinLimitSeen,
+  isTranscriptName,
+  workdayPostingId,
   SECTION_KINDS,
   isJobTask,
   skillYears,
