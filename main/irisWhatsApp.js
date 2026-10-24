@@ -215,7 +215,9 @@ function irisWhatsAppOnMessages (e) {
     if (at && Date.now() - at > 5 * 60 * 1000) return
     if (!irisChannelsLib.isFromUser(m.key, user, self)) return
     const text = irisChannelsLib.messageText(m.message)
-    if (text && !irisChannelsLib.isIrisMessage(text)) irisWhatsAppIncoming(text).catch(function (err) { DBUG('whatsapp reply failed: ' + err.message) })
+    if (!text || irisChannelsLib.isIrisMessage(text)) return
+    DBUG('whatsapp in (' + Math.round((Date.now() - (at || Date.now())) / 1000) + ' s after it was sent): ' + text.slice(0, 80))
+    irisWhatsAppIncoming(text).catch(function (err) { DBUG('whatsapp reply failed: ' + err.message) })
   })
 }
 
@@ -353,9 +355,12 @@ function irisWhatsAppConciergeContext () {
 async function irisWhatsAppAskConcierge (text, ctx) {
   const cfg = irisSettings()
   const model = irisLockedModel(irisModelClient.createModelClient({ provider: cfg.provider, baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0.2, thinking: 'off', timeoutMs: 45000 }), cfg.baseUrl)
+  const started = Date.now()
   const reply = await model.next({ messages: irisConciergeLib.conciergeMessages(ctx, text), thinking: 'off' })
   if (reply && reply.usage) irisUsageRecord('request', Object.assign({ ms: reply.ms }, reply.usage))
-  return irisConciergeLib.parseDecision(typeof reply === 'string' ? reply : (reply && reply.content) || '', ctx, text)
+  const raw = typeof reply === 'string' ? reply : (reply && reply.content) || ''
+  DBUG('whatsapp agent answered in ' + ((Date.now() - started) / 1000).toFixed(1) + ' s: ' + String(raw).replace(/\s+/g, ' ').slice(0, 240))
+  return irisConciergeLib.parseDecision(raw, ctx, text)
 }
 
 /** The user wrote to Iris: the WhatsApp agent decides what they mean, Iris's code does it. */
@@ -381,6 +386,7 @@ async function irisWhatsAppIncoming (text) {
     case 'none':
       return
     case 'chat':
+      // the model wrote no reply: the real status rather than an empty "hi"
       return irisWhatsAppSend(reply || irisChannelsLib.statusText(irisWhatsAppStatusInfo()))
     case 'pause':
       if (!busy) return irisWhatsAppSend('[Iris] Nothing is running right now.')

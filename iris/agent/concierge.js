@@ -116,7 +116,7 @@ function parseDecision (text, ctx, message) {
   const msg = String(message || '')
   const d = {
     action: action,
-    reply: clean(obj.reply, 400).replace(/^\[iris\]\s*/i, ''),
+    reply: clean(obj.reply || obj.response || obj.message || obj.text, 400).replace(/^\[iris\]\s*/i, ''),
     task: clean(obj.task, 800),
     url: clean(obj.url, 500),
     when: String(obj.when || '').toLowerCase() === 'now' && NOW_RE.test(String(message || '')) ? 'now' : 'next',
@@ -133,7 +133,8 @@ function parseDecision (text, ctx, message) {
   if (action === 'answer' && !c.question) { action = d.action = 'task'; d.task = d.task || clean(msg, 800) }
   if (action === 'answer' && !d.answer) d.answer = clean(msg, 600)
   if (action === 'code' && (!c.codeFor || !/^[A-Za-z0-9]{4,10}$/.test(d.code) || msg.replace(/[\s-]/g, '').indexOf(d.code) === -1)) { action = d.action = 'chat' }
-  if (action !== 'none' && !d.reply) d.reply = action === 'chat' ? 'Hi! I am here.' : 'OK.'
+  // no reply written: the caller says something useful instead (for chat, the status); never an empty message
+  if (action !== 'none' && !d.reply && action !== 'chat') d.reply = 'OK.'
   return d
 }
 

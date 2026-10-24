@@ -67,6 +67,9 @@ test('the decision is read from the model and checked against what is possible',
   const d4 = p({ action: 'task' }, running, 'check my gmail for interview invites')
   assert.strictEqual(d4.task, 'check my gmail for interview invites')
   assert.ok(d4.reply)
+  // a reply under another name is still the reply; chat with no reply is left empty (Iris sends the status instead)
+  assert.strictEqual(p({ action: 'chat', response: 'Hey there!' }, running, 'hi iris').reply, 'Hey there!')
+  assert.strictEqual(p({ action: 'chat' }, running, 'hi iris').reply, '')
 })
 
 test('"now" only when the user says so; a task with a job link is the user\'s job', () => {
