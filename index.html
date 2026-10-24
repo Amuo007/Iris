@@ -139,14 +139,15 @@
           <input id="tab-editor-input" spellcheck="false" />
         </div>
         <div id="tabs-inner" role="tablist" class="has-thin-scrollbar"></div>
-      </div>
-      <div class="navbar-right-actions">
-        <button
-          id="add-tab-button"
-          class="navbar-action-button i carbon:add"
-          data-label="newTabAction"
-          tabindex="-1"
-        ></button>
+        <!-- right after the last tab, moving right as tabs are added (as in Chrome) -->
+        <div class="navbar-right-actions">
+          <button
+            id="add-tab-button"
+            class="navbar-action-button i carbon:add"
+            data-label="newTabAction"
+            tabindex="-1"
+          ></button>
+        </div>
       </div>
     </div>
 

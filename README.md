@@ -4,9 +4,11 @@
 something is tedious you describe the outcome you want and Iris drives the page for you —
 step by step, in a side panel you can watch, pause, or take over at any time.
 
-Iris is built on [Min](https://github.com/minbrowser/min) (Apache-2.0), which provides tabs,
-tasks, history, bookmarks, search, content blocking and settings. Everything above that layer —
-the visual identity, the agent, the panel, the safety gates — is new.
+Made by **Amrinder Singh** ([github.com/Amuo007](https://github.com/Amuo007)).
+
+Iris is built on [Min](https://github.com/minbrowser/min) by Palmer Al-Sayed and contributors
+(Apache-2.0), which provides tabs, history, bookmarks, search, content blocking and settings.
+Everything above that layer — the visual identity, the agent, the panel, the safety gates — is new.
 
 ## See it run
 
@@ -302,10 +304,11 @@ takeover). No test talks to a real model server.
 
 ## Branding and attribution
 
-Iris has its own look: a plain white interface with a black dark mode, its own icon
-(`icons/source/iris.svg`, rasterised by `scripts/renderIcon.js`), a compact two-row toolbar with a
-bookmarks bar, and its own panel and settings. Min's `LICENSE`, copyright notices and attribution
-remain in place.
+Iris has its own look: a white interface with a dark mode, its own mark and icon (four aurora
+petals and a pointer: `js/iris/logo.js`, `icons/source/iris.svg` → `node ./scripts/buildIcons.js`),
+tabs with site icons, a new tab page, an account button (your details stay on this Mac), and its
+own panel and settings. Settings → About Iris and the app menu's About name the author and Min.
+Min's license and attribution remain in place: `LICENSE.txt`, and `NOTICE.txt` for Iris's changes.
 
 ## Known limitations
 
@@ -314,4 +317,4 @@ verified only by unit tests (because it needs a real vision model), and what is 
 
 ## License
 
-Apache-2.0, same as Min. See `LICENSE` and `docs/UPSTREAM.md`.
+Apache-2.0, same as Min. See `LICENSE.txt`, `NOTICE.txt` and `docs/UPSTREAM.md`.

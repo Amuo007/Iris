@@ -42,7 +42,11 @@ const tabEditor = {
 
     searchbar.show(tabEditor.input)
 
-    if (showSearchbar !== false) {
+    // a new, empty tab: the address bar takes the typing, but the list waits until something is typed
+    // (it used to open by itself with history and leftovers like "Return to your previous task")
+    if (!editingValue && !currentURL) {
+      searchbar.el.hidden = true
+    } else if (showSearchbar !== false) {
       if (editingValue) {
         searchbar.showResults(editingValue, null)
       } else {
@@ -98,6 +102,11 @@ const tabEditor = {
         // This input will instead be handled during the compositionend event
         return
       }
+
+      // a new tab's list stays closed while the address bar is empty
+      const tab = tabs.get(tabs.getSelected())
+      searchbar.el.hidden = !this.value && !(tab && tab.url)
+      if (searchbar.el.hidden) return
 
       // handles all inputs except for the case where the selection is moved (since we call preventDefault() there)
       searchbar.showResults(this.value, {

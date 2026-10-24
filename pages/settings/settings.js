@@ -1004,7 +1004,10 @@ window.addEventListener('message', function (e) {
   if (e.data.message === 'irisSettingsActionResult') {
     var d = e.data.data || {}
     var r = d.result || {}
-    if (d.action === 'modelProbe') {
+    if (d.action === 'appInfo') {
+      document.getElementById('iris-about-version').textContent = 'Version ' + (r.version || '')
+      document.getElementById('iris-about-engine').textContent = 'Chromium ' + (r.chrome || '') + ' · Electron ' + (r.electron || '')
+    } else if (d.action === 'modelProbe') {
       irisShowProbe(r)
     } else if (d.action === 'defaultStatus' || d.action === 'makeDefault') {
       document.getElementById('iris-default-status').textContent = r.isDefault ? 'Iris is your default browser.' : 'Open links from other apps in Iris.'
@@ -2041,3 +2044,4 @@ function irisRenderDownloads (r) {
 }
 
 irisAction('downloadsList')
+irisAction('appInfo')

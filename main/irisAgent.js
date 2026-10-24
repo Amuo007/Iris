@@ -1367,32 +1367,14 @@ function irisAttachEvents (computer, obs) {
   return obs
 }
 
-/* the search page of the engine chosen in Settings → Search engine (Google unless changed); %s is the query */
-const IRIS_SEARCH_URLS = {
-  Google: 'https://www.google.com/search?q=%s',
-  DuckDuckGo: 'https://duckduckgo.com/?q=%s',
-  Bing: 'https://www.bing.com/search?q=%s',
-  Yahoo: 'https://search.yahoo.com/search?p=%s',
-  StartPage: 'https://www.startpage.com/do/search?q=%s',
-  Ecosia: 'https://www.ecosia.org/search?q=%s',
-  Qwant: 'https://www.qwant.com/?q=%s',
-  Wikipedia: 'https://wikipedia.org/w/index.php?search=%s',
-  Yandex: 'https://yandex.com/search/?text=%s',
-  Baidu: 'https://www.baidu.com/s?wd=%s'
-}
-function irisSearchUrl (query) {
-  const chosen = settings.get('searchEngine') || {}
-  let url = IRIS_SEARCH_URLS[chosen.name]
-  if (!url && chosen.url && chosen.url.indexOf('%s') !== -1) url = chosen.url
-  return (url || IRIS_SEARCH_URLS.Google).replace('%s', encodeURIComponent(query))
-}
-
 /* Plain words → a web search; anything that looks like an address → that address. */
 function irisResolveUrl (text) {
   const t = String(text || '').trim()
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t) || /^(about|data|mailto):/i.test(t)) return t
   if (/^[^\s]+\.[a-z]{2,}(:\d+)?(\/\S*)?$/i.test(t) || /^localhost(:\d+)?(\/|$)/i.test(t)) return (/^localhost/i.test(t) ? 'http://' : 'https://') + t.replace(/^\/+/, '')
-  return irisSearchUrl(t)
+  // the agent keeps searching with DuckDuckGo whatever the address bar uses: it rarely puts up a CAPTCHA for
+  // automated browsing, which Google does (the address bar itself searches with the engine in Settings)
+  return 'https://duckduckgo.com/?q=' + encodeURIComponent(t)
 }
 
 /**
@@ -2851,6 +2833,22 @@ function irisCalendarHint (now) {
  * stays byte-identical during a run, so the model server reuses its cache; whatever changes while
  * Iris works (a project's latest notes, the jobs handled so far) is the live part, sent last.
  */
+/* macOS: who made Iris (the app menu's About), and the Iris mark in the Dock while it runs (a pinned Dock
+   icon can keep the old picture until macOS refreshes its icon cache) */
+app.whenReady().then(function () {
+  if (process.platform !== 'darwin') return
+  app.setAboutPanelOptions({
+    applicationName: 'Iris',
+    applicationVersion: app.getVersion(),
+    credits: 'Made by Amrinder Singh (github.com/Amuo007).\nBuilt on Min by Palmer Al-Sayed and contributors, under the Apache License 2.0.',
+    copyright: '© 2026 Amrinder Singh'
+  })
+  try {
+    const icon = path.join(__dirname, 'icons', 'icon512.png')
+    if (fs.existsSync(icon) && app.dock) app.dock.setIcon(icon)
+  } catch (e) { DBUG('dock icon: ' + e.message) }
+})
+
 /*
  * The model's context window: the number set in Settings, or what its server says (asked once per server and
  * model, in the background; a failed ask is tried again a minute later), or a known size for Claude models.
@@ -3412,6 +3410,17 @@ ipc.on('iris-agent-answer', function (event, text) {
   }
 })
 
+/* the account button and the new tab page: the name and email from My info (they stay on this Mac) */
+ipc.on('iris-profile-summary', function (event) {
+  const fields = irisProfileLoad()
+  const find = function (re) { const f = fields.find(function (x) { return re.test(x.label) && x.value && !x.secret }); return f ? f.value.trim() : '' }
+  let name = find(/^(full name|name)$/i) || [find(/^first name$/i), find(/^last name$/i)].filter(Boolean).join(' ')
+  if (!name) {
+    try { name = String((irisCareerLoad().basics || {}).name || '').trim() } catch (e) { name = '' }
+  }
+  event.reply('iris-profile-summary-reply', { name: name, email: find(/^e-?mail$/i) })
+})
+
 ipc.on('iris-agent-status', function (event) {
   event.reply('iris-agent-status-reply', agentStatus())
 })
@@ -3510,6 +3519,8 @@ ipc.on('iris-settings-action', async function (event, data) {
         return reply({ sites: await irisCookieSites() })
       case 'bridgeInfo':
         return reply(irisBridgeInfo())
+      case 'appInfo':
+        return reply({ version: app.getVersion(), electron: process.versions.electron, chrome: process.versions.chrome })
       case 'modelProbe': {
         // from here, not the settings page: a cloud API refuses a page's own request (CORS), and the key stays out of the page's network log
         const a = data.args || {}

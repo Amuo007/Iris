@@ -866,3 +866,403 @@ body.iris-has-bookmarks-bar #iris-bookmarks-bar {
     animation: none;
   }
 }
+
+/* ----------------------------------------------------------------------------
+   Tabs, like other browsers: the site's icon, one line of title, a close button
+   -------------------------------------------------------------------------- */
+
+#navbar .tab-item {
+  height: 30px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px 0 10px;
+}
+.tab-item .tab-favicon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--iris-text-3);
+  order: -1;
+}
+.tab-item .tab-favicon img {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  object-fit: contain;
+}
+.tab-item .tab-favicon .iris-logo {
+  --logo-cut: var(--iris-bg);
+  width: 15px;
+  height: 15px;
+}
+.tab-item:hover .tab-favicon .iris-logo {
+  --logo-cut: var(--iris-bg-subtle);
+}
+.tab-item.active .tab-favicon .iris-logo {
+  --logo-cut: var(--iris-bg-muted);
+}
+/* loading: a small spinner in the icon's place */
+.tab-item.is-loading .tab-favicon > * {
+  opacity: 0;
+}
+.tab-item.is-loading .tab-favicon::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--iris-text-3) 35%, transparent);
+  border-top-color: var(--logo-1b, #2f7bff);
+  animation: iris-spin 0.8s linear infinite;
+}
+.tab-item .title-container {
+  display: block;
+  height: auto;
+  padding: 0;
+  overflow: hidden;
+}
+#navbar .tab-item .title {
+  position: static;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 30px;
+  transform: none !important;
+  opacity: 1 !important;
+}
+.tab-item .url-element {
+  display: none !important;
+}
+.tab-item .tab-icon-area {
+  order: 3;
+}
+/* a thin line between inactive tabs, as in Chrome */
+.tab-item:not(.active):not(:hover) + .tab-item:not(.active):not(:hover)::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  top: 8px;
+  bottom: 8px;
+  width: 1px;
+  background: var(--iris-border-strong);
+}
+.tab-item {
+  position: relative;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tab-item.is-loading .tab-favicon::after {
+    animation-duration: 2s;
+  }
+}
+
+/* the + sits right after the last tab: the tab list only takes the room its tabs need */
+#tabs #tabs-inner {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+#tabs .navbar-right-actions {
+  order: 1;
+  flex: none;
+  margin: 0 0 0 4px;
+}
+
+/* ----------------------------------------------------------------------------
+   Account button and its card (js/iris/profileMenu.js)
+   -------------------------------------------------------------------------- */
+
+.iris-profile-button {
+  order: 6;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin: 0 2px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--iris-fast);
+}
+.iris-profile-button:hover,
+.iris-profile-button.is-open {
+  background: var(--iris-bg-muted);
+}
+.iris-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4cc3ff, #1757e8 55%, #059669);
+  color: #ffffff;
+  font-size: 10.5px !important;
+  font-weight: 650;
+  letter-spacing: 0.02em !important;
+}
+.iris-avatar svg {
+  color: #ffffff;
+}
+.iris-avatar.is-large {
+  width: 40px;
+  height: 40px;
+  font-size: 15px !important;
+}
+.iris-avatar.is-large svg {
+  width: 22px;
+  height: 22px;
+}
+.iris-profile-menu {
+  position: fixed;
+  z-index: 60;
+  width: 290px;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid var(--iris-border);
+  border-radius: var(--iris-r-lg);
+  background: var(--iris-bg);
+  box-shadow: var(--iris-shadow-lg);
+  color: var(--iris-text);
+  animation: iris-menu-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* movement only: the card is readable from its first frame */
+@keyframes iris-menu-in {
+  from { transform: translateY(-4px) scale(0.98); }
+  to { transform: none; }
+}
+.iris-profile-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 10px;
+}
+.iris-profile-who {
+  min-width: 0;
+}
+.iris-profile-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px !important;
+  font-weight: 650;
+}
+.iris-profile-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px !important;
+  color: var(--iris-text-2);
+}
+.iris-profile-note {
+  margin: 0 8px 8px;
+  padding: 8px 10px;
+  border-radius: var(--iris-r-sm);
+  background: var(--iris-bg-subtle);
+  font-size: 11.5px !important;
+  line-height: 1.4;
+  color: var(--iris-text-2);
+}
+.iris-profile-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--iris-r-sm);
+  background: transparent;
+  color: var(--iris-text);
+  text-align: left;
+  cursor: pointer;
+}
+.iris-profile-item:hover {
+  background: var(--iris-bg-muted);
+}
+.iris-profile-item-label {
+  font-size: 13px !important;
+}
+.iris-profile-item-sub {
+  font-size: 11.5px !important;
+  color: var(--iris-text-3);
+}
+.iris-profile-sep {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--iris-border);
+}
+
+/* ----------------------------------------------------------------------------
+   New tab page (js/iris/newTab.js)
+   -------------------------------------------------------------------------- */
+
+.iris-ntp {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px 16px 64px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  color: var(--iris-text);
+}
+body.ntp-has-background .iris-ntp {
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.iris-ntp-logo .iris-logo {
+  width: 76px;
+  height: 76px;
+}
+.iris-ntp-logo .iris-logo-ripple {
+  border-width: 3px;
+}
+.iris-ntp-greeting {
+  margin: 0 0 4px;
+  font-size: 28px !important;
+  font-weight: 650;
+  letter-spacing: -0.01em !important;
+  text-align: center;
+}
+.iris-ntp-search {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(580px, 100%);
+  height: 50px;
+  padding: 0 20px;
+  border: 1px solid var(--iris-border-strong);
+  border-radius: 25px;
+  background: var(--iris-bg-subtle);
+  color: var(--iris-text-3);
+  box-shadow: var(--iris-shadow-sm);
+  cursor: text;
+  transition: border-color var(--iris-fast), box-shadow var(--iris-fast), background var(--iris-fast);
+}
+.iris-ntp-search:hover {
+  border-color: var(--iris-text-3);
+  background: var(--iris-bg);
+  box-shadow: var(--iris-shadow-md);
+}
+.iris-ntp-search-label {
+  font-size: 15px !important;
+}
+.iris-ntp-sites {
+  display: grid;
+  grid-template-columns: repeat(4, 104px);
+  gap: 6px;
+  margin-top: 8px;
+}
+.iris-ntp-sites[hidden] {
+  display: none;
+}
+.iris-ntp-site {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 6px 10px;
+  border: none;
+  border-radius: var(--iris-r-md);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--iris-fast), transform var(--iris-fast);
+}
+.iris-ntp-site:hover {
+  background: var(--iris-bg-muted);
+}
+.iris-ntp-site:active {
+  transform: scale(0.97);
+}
+.iris-ntp-site-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--iris-bg-muted);
+}
+.iris-ntp-site-icon img {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  opacity: 0;
+}
+.iris-ntp-site-icon.has-image img {
+  opacity: 1;
+}
+.iris-ntp-site-icon.has-image .iris-ntp-site-letter {
+  opacity: 0;
+}
+.iris-ntp-site-letter {
+  font-size: 18px !important;
+  font-weight: 600;
+  color: var(--iris-text-2);
+}
+.iris-ntp-site-name {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px !important;
+  color: var(--iris-text-2);
+}
+.iris-ntp-ask {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 16px 0 12px;
+  border: 1px solid var(--iris-border);
+  border-radius: 18px;
+  background: transparent;
+  color: var(--iris-text-2);
+  cursor: pointer;
+  transition: background var(--iris-fast), color var(--iris-fast);
+}
+.iris-ntp-ask:hover {
+  background: var(--iris-bg-muted);
+  color: var(--iris-text);
+}
+.iris-ntp-ask span {
+  font-size: 13px !important;
+}
+.iris-ntp-ask .iris-logo {
+  width: 18px;
+  height: 18px;
+}
+.iris-ntp > * {
+  animation: iris-ntp-in 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.iris-ntp > :nth-child(2) { animation-delay: 60ms; }
+.iris-ntp > :nth-child(3) { animation-delay: 110ms; }
+.iris-ntp > :nth-child(4) { animation-delay: 160ms; }
+.iris-ntp > :nth-child(5) { animation-delay: 210ms; }
+@keyframes iris-ntp-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@media (max-width: 560px) {
+  .iris-ntp-sites {
+    grid-template-columns: repeat(4, 76px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .iris-ntp > * {
+    animation: none;
+  }
+}
+/* the active tab always shows its close button, as in Chrome; the others on hover */
+body:not(.touch) .tab-item.active .tab-close-button {
+  display: inline-block;
+}

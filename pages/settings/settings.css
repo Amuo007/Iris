@@ -2096,98 +2096,95 @@ body.dark-mode {
   font-size: inherit;
 }
 
-/* the Iris mark in the sidebar (same drawing and colours as js/iris/logo.js, still) */
-.iris-settings-brand .iris-logo {
+/* the Iris mark in the sidebar and on About (same drawing and colours as js/iris/logo.js, still) */
+:is(.iris-settings-brand, .iris-about-mark) .iris-logo {
   position: relative;
   display: inline-block;
   flex: none;
   width: 20px;
   height: 20px;
 }
-.iris-settings-brand .iris-logo svg {
+:is(.iris-settings-brand, .iris-about-mark) .iris-logo svg {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   overflow: visible;
 }
-.iris-settings-brand .iris-logo-petals path {
+:is(.iris-settings-brand, .iris-about-mark) .iris-logo-petals path {
   stroke: var(--s-side);
   stroke-width: 0.8px;
   vector-effect: non-scaling-stroke;
 }
-.iris-settings-brand .iris-logo-ripple {
+.iris-about-mark .iris-logo-petals path {
+  stroke: var(--s-card);
+}
+:is(.iris-settings-brand, .iris-about-mark) .iris-logo-ripple {
   display: none;
 }
-.iris-settings-brand .iris-stop-1a { stop-color: #4cc3ff; }
-.iris-settings-brand .iris-stop-1b { stop-color: #1757e8; }
-.iris-settings-brand .iris-stop-2a { stop-color: #2fd9c2; }
-.iris-settings-brand .iris-stop-2b { stop-color: #0786a6; }
-.iris-settings-brand .iris-stop-3a { stop-color: #6fdcff; }
-.iris-settings-brand .iris-stop-3b { stop-color: #0a78e0; }
-.iris-settings-brand .iris-stop-4a { stop-color: #45e0a0; }
-.iris-settings-brand .iris-stop-4b { stop-color: #059669; }
-body.dark-mode .iris-settings-brand .iris-stop-1a { stop-color: #8fd8ff; }
-body.dark-mode .iris-settings-brand .iris-stop-1b { stop-color: #2f7bff; }
-body.dark-mode .iris-settings-brand .iris-stop-2a { stop-color: #67f0dc; }
-body.dark-mode .iris-settings-brand .iris-stop-2b { stop-color: #0aa6c8; }
-body.dark-mode .iris-settings-brand .iris-stop-3a { stop-color: #b3f0ff; }
-body.dark-mode .iris-settings-brand .iris-stop-3b { stop-color: #1e9bff; }
-body.dark-mode .iris-settings-brand .iris-stop-4a { stop-color: #8af5c0; }
-body.dark-mode .iris-settings-brand .iris-stop-4b { stop-color: #10b981; }
-.iris-settings-brand .iris-stop-pa { stop-color: #ffffff; }
-.iris-settings-brand .iris-stop-pb { stop-color: #d6efff; }
-.iris-settings-brand .iris-logo-pointer path {
+:is(.iris-settings-brand, .iris-about-mark) .iris-stop-1a { stop-color: #4cc3ff; }
+:is(.iris-settings-brand, .iris-about-mark) .iris-stop-1b { stop-color: #1757e8; }
+:is(.iris-settings-brand, .iris-about-mark) .iris-stop-2a { stop-color: #2fd9c2; }
+:is(.iris-settings-brand, .iris-about-mark) .iris-stop-2b { stop-color: #0786a6; }
+:is(.iris-settings-brand, .iris-about-mark) .iris-stop-3a { stop-color: #6fdcff; }
+:is(.iris-settings-brand, .iris-about-mark) .iris-stop-3b { stop-color: #0a78e0; }
+:is(.iris-settings-brand, .iris-about-mark) .iris-stop-4a { stop-color: #45e0a0; }
+:is(.iris-settings-brand, .iris-about-mark) .iris-stop-4b { stop-color: #059669; }
+body.dark-mode :is(.iris-settings-brand, .iris-about-mark) .iris-stop-1a { stop-color: #8fd8ff; }
+body.dark-mode :is(.iris-settings-brand, .iris-about-mark) .iris-stop-1b { stop-color: #2f7bff; }
+body.dark-mode :is(.iris-settings-brand, .iris-about-mark) .iris-stop-2a { stop-color: #67f0dc; }
+body.dark-mode :is(.iris-settings-brand, .iris-about-mark) .iris-stop-2b { stop-color: #0aa6c8; }
+body.dark-mode :is(.iris-settings-brand, .iris-about-mark) .iris-stop-3a { stop-color: #b3f0ff; }
+body.dark-mode :is(.iris-settings-brand, .iris-about-mark) .iris-stop-3b { stop-color: #1e9bff; }
+body.dark-mode :is(.iris-settings-brand, .iris-about-mark) .iris-stop-4a { stop-color: #8af5c0; }
+body.dark-mode :is(.iris-settings-brand, .iris-about-mark) .iris-stop-4b { stop-color: #10b981; }
+:is(.iris-settings-brand, .iris-about-mark) .iris-stop-pa { stop-color: #ffffff; }
+:is(.iris-settings-brand, .iris-about-mark) .iris-stop-pb { stop-color: #d6efff; }
+:is(.iris-settings-brand, .iris-about-mark) .iris-logo-pointer path {
   stroke: #0b1324;
   stroke-width: 1.2px;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
 }
 
-/* base.css gives every element 16px; inside a section, text without its own size takes the section's size
-   (zero specificity: any rule that sets a size still wins) */
-.iris-settings .settings-container {
-  font-size: 13.5px;
-}
-:where(.iris-settings .settings-container) :where(div, details, ul, ol, a, summary, span, button, p, li, b, small, em, strong) {
-  font-size: inherit;
-}
+/* --- About Iris ------------------------------------------------------------ */
 
-/* the Iris mark in the sidebar (same drawing as js/iris/logo.js, still) */
-.iris-settings-brand .iris-logo {
-  position: relative;
-  display: inline-block;
-  flex: none;
-  width: 18px;
-  height: 18px;
-  color: var(--s-text);
+.iris-about-hero {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 4px 0 14px;
 }
-.iris-settings-brand .iris-logo svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
+.iris-settings .iris-about-mark .iris-logo {
+  width: 64px;
+  height: 64px;
 }
-.iris-settings-brand .iris-logo-petals path {
-  fill: currentColor;
-  stroke: var(--s-side);
-  stroke-width: 0.8px;
-  vector-effect: non-scaling-stroke;
+.iris-about-name {
+  font-size: 22px;
+  font-weight: 700;
 }
-.iris-settings-brand .iris-petal-2 {
-  opacity: 0.78;
+.iris-about-version {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--s-text-2);
 }
-.iris-settings-brand .iris-petal-3 {
-  opacity: 0.56;
+.iris-settings .iris-about-lede {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--s-text-2);
 }
-.iris-settings-brand .iris-petal-4 {
-  opacity: 0.38;
+.iris-about-rows {
+  border-top: 1px solid var(--s-line);
 }
-.iris-settings-brand .iris-logo-pointer path {
-  fill: var(--s-side);
-  stroke: currentColor;
-  stroke-width: 1.4px;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
+.iris-about-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--s-line);
+  font-size: 13px;
+}
+.iris-about-row > span:first-child {
+  color: var(--s-text-2);
 }

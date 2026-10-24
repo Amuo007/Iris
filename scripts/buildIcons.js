@@ -46,5 +46,7 @@ run('iconutil', ['-c', 'icns', setDir, '-o', path.join(root, 'icons', 'icon.icns
 
 // the plain PNG that Linux builds and the dev tools pick up
 run('sips', ['-z', '256', '256', source, '--out', path.join(root, 'icons', 'icon256.png')])
+// the Dock picture Iris sets while it runs (main/irisAgent.js)
+run('sips', ['-z', '512', '512', source, '--out', path.join(root, 'icons', 'icon512.png')])
 
-console.log('icons/icon.icns and icons/icon256.png rebuilt from icons/source/iris.svg')
+console.log('icons/icon.icns, icons/icon256.png and icons/icon512.png rebuilt from icons/source/iris.svg')

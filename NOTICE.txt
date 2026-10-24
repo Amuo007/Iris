@@ -1,0 +1,6 @@
+Iris
+Copyright 2026 Amrinder Singh (https://github.com/Amuo007)
+
+Iris is a modified version of Min (https://github.com/minbrowser/min),
+by Palmer Al-Sayed and contributors, licensed under the Apache License,
+Version 2.0 (LICENSE.txt). Iris's changes are offered under the same license.

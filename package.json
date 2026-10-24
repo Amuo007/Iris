@@ -1,7 +1,10 @@
 {
   "name": "iris-browser",
   "productName": "Iris",
-  "author": "PalmerAL",
+  "author": "Amrinder Singh (https://github.com/Amuo007)",
+  "contributors": [
+    "Palmer Al-Sayed and the Min contributors (https://github.com/minbrowser/min)"
+  ],
   "version": "0.1.0",
   "description": "Iris - an agentic web browser for macOS. Browse normally, or hand a task to Iris and watch it work.",
   "electronVersion": "43.4.1",

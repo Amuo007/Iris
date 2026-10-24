@@ -440,7 +440,7 @@ function buildAppMenu (options = {}) {
         {
           label: l('appMenuViewGithub'),
           click: function () {
-            openTabInWindow('https://github.com/minbrowser/min')
+            openTabInWindow('https://github.com/Amuo007/Iris')
           }
         },
         ...(process.platform !== 'darwin' ? [{ type: 'separator' }] : []),

@@ -11,6 +11,10 @@ const urlParser = require('util/urlParser.js')
 const tabEditor = require('navbar/tabEditor.js')
 const progressBar = require('navbar/progressBar.js')
 const permissionRequests = require('navbar/permissionRequests.js')
+const { logoMarkup } = require('iris/logo.js')
+
+// a page with no icon of its own: a small globe
+const IRIS_TAB_GLOBE = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M1.8 8h12.4M8 1.8c1.8 1.7 2.7 3.8 2.7 6.2S9.8 12.5 8 14.2C6.2 12.5 5.3 10.4 5.3 8S6.2 3.5 8 1.8z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>'
 
 var lastTabDeletion = 0 // TODO get rid of this
 
@@ -76,6 +80,12 @@ const tabBar = {
     iconArea.appendChild(closeTabButton)
 
     tabEl.appendChild(iconArea)
+
+    // the site's icon, like every other browser: its favicon, a spinner while it loads, the Iris mark on a new tab
+
+    var favicon = document.createElement('span')
+    favicon.className = 'tab-favicon'
+    tabEl.appendChild(favicon)
 
     // title
 
@@ -167,6 +177,32 @@ const tabBar = {
     }
 
     tabEl.querySelector('.url-element').textContent = tabUrl
+    // one line: the title, and the address on hover
+    tabEl.title = tabTitle + (tabUrl && !isNewTab ? '\n' + tabUrl : '') + (tabData.private ? ' (' + l('privateTab') + ')' : '')
+
+    var faviconEl = tabEl.querySelector('.tab-favicon')
+    if (faviconEl) {
+      var iconKey = isNewTab ? 'new' : (tabData.favicon && tabData.favicon.url) || 'globe'
+      if (faviconEl.dataset.icon !== iconKey) {
+        faviconEl.dataset.icon = iconKey
+        faviconEl.textContent = ''
+        if (iconKey === 'new') {
+          faviconEl.innerHTML = logoMarkup()
+        } else if (iconKey === 'globe') {
+          faviconEl.innerHTML = IRIS_TAB_GLOBE
+        } else {
+          var img = document.createElement('img')
+          img.alt = ''
+          img.draggable = false
+          img.addEventListener('error', function () {
+            faviconEl.dataset.icon = 'globe'
+            faviconEl.innerHTML = IRIS_TAB_GLOBE
+          })
+          img.src = iconKey
+          faviconEl.appendChild(img)
+        }
+      }
+    }
 
     if (tabUrl && !urlParser.isInternalURL(tabData.url)) {
       tabEl.classList.add('has-url')
@@ -280,17 +316,19 @@ settings.listen('showDividerBetweenTabs', function (dividerPreference) {
 /* tab loading and progress bar status */
 webviews.bindEvent('did-start-loading', function (tabId) {
   progressBar.update(tabBar.getTab(tabId).querySelector('.progress-bar'), 'start')
+  tabBar.getTab(tabId).classList.add('is-loading')
   tabs.update(tabId, { loaded: false })
 })
 
 webviews.bindEvent('did-stop-loading', function (tabId) {
   progressBar.update(tabBar.getTab(tabId).querySelector('.progress-bar'), 'finish')
+  tabBar.getTab(tabId).classList.remove('is-loading')
   tabs.update(tabId, { loaded: true })
   tabBar.updateTab(tabId)
 })
 
 tasks.on('tab-updated', function (id, key) {
-  var updateKeys = ['title', 'secure', 'url', 'muted', 'hasAudio']
+  var updateKeys = ['title', 'secure', 'url', 'muted', 'hasAudio', 'favicon']
   if (updateKeys.includes(key)) {
     tabBar.updateTab(id)
   }
