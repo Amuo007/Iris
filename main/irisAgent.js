@@ -1070,6 +1070,12 @@ function irisCanReset () {
   return s.accountMode !== 'login' && !!s.emailAccess
 }
 
+/* {{account:site}} where Iris keeps no password */
+function irisNoSavedSignIn (site) {
+  return 'not typed — Settings → Accounts has no saved sign-in for ' + site + ', so {{account:' + site + '}} has nothing to type. ' +
+    'If you just made the account here, sign in with {{New password}} (the password made for this site); if that is refused, use "Forgot password" and type {{New password}} as the new one. If there is no account here, make one with {{New password}}.'
+}
+
 /* what to do when no saved password works */
 function irisResetSteps (site) {
   return irisCanReset()
@@ -1431,11 +1437,12 @@ IrisComputer.prototype.withNewPassword = function (wc, text) {
   let typed = text
   if (typed && /\{\{\s*new password\s*\}\}/i.test(typed)) {
     // a strong password made for this one site (the same one again for "confirm password"); saved with the account
-    let site = irisSiteOf(wc.getURL()) || 'site'
-    // a reset link that opens on another address than the sign-in page: the new password is for that account
+    // always the site of the page it is typed on (a real night: a reset offered for HPE filed the next site's new
+    // account, Rochester, under HPE, and Rochester then had no saved sign-in; Workday's reset pages are on the site's
+    // own address, so a reset needs no other site)
+    const site = irisSiteOf(wc.getURL()) || 'site'
     const reset = this.resetFor
     const live = reset && Date.now() - reset.at < 30 * 60 * 1000
-    if (live && site !== reset.site && !irisAccountsLib.findSite(irisAccountsLoad(), site)) site = reset.site
     this.newPasswords = this.newPasswords || {}
     // the first {{New password}} after "Forgot password": a fresh one (one made earlier here was never set)
     const forReset = !!(live && site === reset.site && !reset.made)
@@ -1767,7 +1774,9 @@ IrisComputer.prototype.act = async function (action) {
         const secret = action.type === 'fill' && /\{\{[^}]+\}\}/.test(String(action.text || ''))
         if (secret) this.noteAccountTyped(action.text)
         const text = secret ? irisFillSecrets(this.withNewPassword(wc, action.text)) : action.text
-        r = action.type === 'choose' ? await irisChooseField(this, wc, action.field, action.option) : await irisFillField(this, wc, action.field, text)
+        const unsaved = secret && irisAccountsLib.accountRef(text)
+        r = unsaved ? { ok: false, error: irisNoSavedSignIn(unsaved.site) }
+          : action.type === 'choose' ? await irisChooseField(this, wc, action.field, action.option) : await irisFillField(this, wc, action.field, text)
         // a password or other secret is never read back into the notes (they reach the model and the logs)
         if (secret && r && r.note) r.note = 'Filled "' + String(action.field || '').slice(0, 60) + '" with ' + String(action.text).match(/\{\{[^}]+\}\}/)[0] + ' (a secret: not shown).'
       } finally {
@@ -1793,8 +1802,9 @@ IrisComputer.prototype.act = async function (action) {
             ' If you already did that and it truly failed, log this again with what happened.' }
         }
       }
-      // this job is done: a later job's needs_you is not about that sign-in
+      // this job is done: a later job's needs_you is not about that sign-in, nor its reset
       this.lastSignIn = null
+      this.resetFor = null
       // "applied" only for an application whose confirmation page was seen (a real run: Skydio logged as submitted
       // while its form still sat there unsent). Asked again for the same job, it is taken — noted as unconfirmed.
       // (a job already logged "applied" — logged again to add its LinkedIn names — is no new claim: no check. A real run
@@ -2015,6 +2025,10 @@ IrisComputer.prototype.act = async function (action) {
   typed = this.withNewPassword(wc, typed)
   if (action.type === 'type') this.noteAccountTyped(typed)
   let real = action.type === 'type' ? Object.assign({}, action, { text: irisFillSecrets(typed) }, /\{\{[^}]+\}\}/.test(String(typed || '')) ? { secret: true } : {}) : action
+  // {{account:site}} with no saved password there: the placeholder itself is never typed (a real night typed
+  // "{{account:rochester…}}" letter by letter into Workday's password box, three sign-ins refused)
+  const unsaved = action.type === 'type' && irisAccountsLib.accountRef(real.text)
+  if (unsaved) return { ok: false, error: irisNoSavedSignIn(unsaved.site) }
   // a jump of more than about two screens skips whole parts of a form (real run: 15 down, 15 up, again and again)
   if (action.type === 'scroll' && (action.amount || 3) > 12) real = Object.assign({}, real, { amount: 12 })
   // "select all" before typing is for the text already in a field. When the spot is not a text box (the
