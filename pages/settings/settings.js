@@ -1801,11 +1801,20 @@ window.irisAccountControls = function (a) {
   return wrap
 }
 
+function irisAccountJob (a) {
+  var apps = (window.irisApplicationsData || {}).items || []
+  var job = apps.filter(function (x) {
+    try { return x.url && new URL(x.url).hostname === a.site } catch (e) { return false }
+  })[0]
+  if (job) return 'For: ' + (job.title || 'a job') + (job.company ? ' — ' + job.company : '')
+  return a.title && !/^(create account|sign in|sign up|log ?in|register|account|home|reset password|forgot|verify|email verification)\b/i.test(a.title) ? a.title.slice(0, 80) : ''
+}
+
 function irisAccountDate (ms) {
   return ms ? new Date(ms).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : ''
 }
 
-function irisRenderAccounts (data) {
+function irisRenderAccounts (data, fromApplications) {
   if (data) {
     window.irisAccountItems = data.accounts || []
     window.irisAccountRevealed = data.revealed || null
@@ -1840,8 +1849,9 @@ function irisRenderAccounts (data) {
     site.appendChild(siteName)
     var meta = document.createElement('span')
     meta.className = 'iris-list-sub'
-    // the job page's title says what the account was for (the purpose field holds the whole task's text)
-    meta.textContent = [a.title ? a.title.slice(0, 80) : '', a.created ? 'Created ' + irisAccountDate(a.created) : ''].filter(Boolean).join(' · ')
+    // what the account was for: the job applied to on that site (Applications), else the page's own title when it
+    // says more than "Create Account" (the purpose field holds the whole task's text)
+    meta.textContent = [irisAccountJob(a), a.created ? 'Created ' + irisAccountDate(a.created) : ''].filter(Boolean).join(' · ')
     if (meta.textContent) site.appendChild(meta)
     var user = document.createElement('span')
     user.className = 'iris-account-user'
@@ -1859,9 +1869,11 @@ function irisRenderAccounts (data) {
     row.appendChild(del)
     irisAccountsList.appendChild(row)
   })
-  // Applications show each job's sign-in: draw them again with the new data
-  if (window.irisRenderApplications && window.irisApplicationsData) window.irisRenderApplications(window.irisApplicationsData)
+  // Applications show each job's sign-in: draw them again with the new data (not when they asked for this)
+  if (!fromApplications && window.irisRenderApplications && window.irisApplicationsData) window.irisRenderApplications(window.irisApplicationsData, true)
 }
+// Applications arrived: the sign-ins can now name their jobs
+window.irisAccountsRefresh = function () { irisRenderAccounts(null, true) }
 
 irisAccountsSearch.addEventListener('input', function () { irisRenderAccounts() })
 

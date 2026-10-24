@@ -499,10 +499,12 @@ document.getElementById('iris-jobs-start').addEventListener('click', function ()
 
 var IRIS_STATUS_TEXT = { applied: 'Applied', skipped: 'Skipped', needs_you: 'Needs you', failed: 'Failed' }
 
-function irisRenderApplications (r) {
-  // kept for Accounts (it redraws this list when sign-ins change) and Usage (applications per project)
+function irisRenderApplications (r, fromAccounts) {
+  // kept for Accounts (each sign-in names its job; it redraws this list when sign-ins change) and Usage (applications
+  // per project)
   window.irisApplicationsData = r
   if (window.irisRenderUsage) window.irisRenderUsage()
+  if (!fromAccounts && window.irisAccountsRefresh) window.irisAccountsRefresh()
   var items = r.items || []
   var list = document.getElementById('iris-applications-list')
   var counts = { applied: 0, skipped: 0, needs_you: 0, failed: 0 }

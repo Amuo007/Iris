@@ -1027,14 +1027,6 @@ const IRIS_CONFIRM_PEEK = `(function () {
   var dialog = [].slice.call(document.querySelectorAll('[role=dialog], [role=alertdialog], [aria-modal=true], dialog[open]')).filter(function (d) { var r = d.getBoundingClientRect(); return r.width > 0 && r.height > 0 }).map(function (d) { return d.innerText || '' }).join('\\n').slice(0, 3000)
   return { text: String(document.body && document.body.innerText || '').slice(0, 20000), heads: heads, dialog: dialog, submit: submit }
 })()`
-/* What is at a click point, when it is a human check: its frame's address or title, else '' */
-const IRIS_HUMAN_CHECK_AT = function (x, y) {
-  return '(function () { var e = document.elementFromPoint(' + Number(x) + ', ' + Number(y) + '); if (!e) return ""; ' +
-    // only the check's own frame (its tick box, its puzzle): a Submit button marked "g-recaptcha" (an invisible check) is clicked as usual
-    'if (e.tagName !== "IFRAME") return ""; var s = [e.src, e.getAttribute("title")].join(" "); ' +
-    'return /recaptcha|hcaptcha|turnstile|challenges\\.cloudflare|captcha/i.test(s) ? s.slice(0, 80) : "" })()'
-}
-
 /* The boxes of a form, by id or name: a new step of a multi-step form at the same address shows a new set */
 const IRIS_FORM_IDS = `(function () {
   return [].slice.call(document.querySelectorAll('input, select, textarea')).filter(function (e) {
@@ -1883,12 +1875,6 @@ IrisComputer.prototype.act = async function (action) {
     }
   }
 
-  // a human check (reCAPTCHA, hCaptcha, Cloudflare): never clicked by Iris — the user does those (a real run ticked a
-  // reCAPTCHA box on Healthpeak and submitted)
-  if ((action.type === 'click' || action.type === 'double_click') && action.x !== undefined) {
-    const check = await withTimeout(wc.executeJavaScript(IRIS_HUMAN_CHECK_AT(action.x, action.y)), 800, 'human check').catch(function () { return '' })
-    if (check) return { ok: false, error: 'not clicked: that is a human check (CAPTCHA) — only the user does those. Leave this form as it is, log_application "needs_you" (note: "CAPTCHA"), and open the next job in a new tab.' }
-  }
   // LinkedIn: a click on the very spot clicked a moment ago — a Connect clicked there is now Pending, and a second
   // click opens "Withdraw invitation" (a real run did it twice in one company): held back once, to look first
   if (action.type === 'click' && this.jobsMode && /linkedin\.com/i.test(wc.getURL())) {
