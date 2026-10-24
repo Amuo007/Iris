@@ -77,8 +77,8 @@ function menuItem (label, sub, section) {
 
 function openMenu () {
   closeMenu()
-  // the page is a separate layer that would cover the card: show a picture of it meanwhile
-  webviews.requestPlaceholder('profileMenu')
+  // the page is a separate layer that would cover the card: a sharp picture of it stands in meanwhile
+  webviews.requestSharpPlaceholder('profileMenu')
   menu = el('div', 'iris-profile-menu')
   menu.setAttribute('role', 'menu')
   const head = el('div', 'iris-profile-head')
@@ -124,7 +124,12 @@ function initialize () {
   ipc.on('iris-profile-summary-reply', function (e, data) {
     profile = { name: String((data && data.name) || '').trim(), email: String((data && data.email) || '').trim() }
     renderButton()
-    if (menu) openMenu()
+    if (menu) {
+      // the card is open: refresh its name and email in place
+      menu.querySelector('.iris-profile-name').textContent = profile.name || 'Your profile'
+      menu.querySelector('.iris-profile-email').textContent = profile.email || 'Add your name and email in My info'
+      menu.querySelector('.iris-profile-head').replaceChild(avatar('is-large'), menu.querySelector('.iris-profile-head .iris-avatar'))
+    }
   })
   ipc.send('iris-profile-summary')
   // My info may change in Settings: look again when the window comes back to the front

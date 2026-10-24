@@ -1592,3 +1592,67 @@ body.dark-mode {
     background: none;
   }
 }
+
+/* the status bar: what Iris is doing on one line, the counters under it */
+.iris-statusbar {
+  height: auto;
+  min-height: 46px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+.iris-status-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.iris-status-col .iris-status-text {
+  flex: none;
+}
+.iris-status-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.iris-status-sub .iris-status-time {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: 0;
+  font-size: 11.5px !important;
+}
+.iris-status-sub .iris-status-meter {
+  flex: none;
+  margin-right: 0;
+}
+
+/* step numbers past 99 widen into a pill instead of spilling out of the circle */
+.iris-step-num {
+  width: auto;
+  min-width: 22px;
+  padding: 0 5px;
+  border-radius: 11px;
+}
+.iris-step {
+  grid-template-columns: minmax(22px, auto) 1fr auto;
+}
+
+/* the folder button lights up when the chat is in a project */
+.iris-panel-header .iris-icon-btn.is-on {
+  color: var(--logo-1b);
+}
+.iris-projectbar[hidden] {
+  display: none;
+}
+/* long counters wrap to a second row instead of being cut */
+.iris-status-sub {
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+.iris-status-sub .iris-status-time {
+  overflow: visible;
+}

@@ -75,10 +75,10 @@ function closeMenu () {
   webviews.hidePlaceholder('bookmarksMenu')
 }
 
-/* A folder's items drop down over the page: Min shows a picture of the page meanwhile. */
+/* A folder's items drop down over the page: a sharp picture of the page stands in meanwhile. */
 function openMenu (anchor, items) {
   closeMenu()
-  webviews.requestPlaceholder('bookmarksMenu')
+  webviews.requestSharpPlaceholder('bookmarksMenu')
   menu = el('div', 'iris-bm-menu')
   items.forEach(function (b) {
     const row = el('button', 'iris-bm-menu-item')

@@ -288,12 +288,42 @@ const webviews = {
       }
     }, 0)
   },
+  /* A menu dropping over the page: a full-size, sharp picture of the page stands in for it while the menu is open
+     (the usual one is a tenth of the size and blurred, which made the whole page blur as the menu opened). */
+  requestSharpPlaceholder: function (reason) {
+    var id = webviews.selectedId
+    var tab = tabs.get(id)
+    var done = false
+    var onCapture = function (e, data) {
+      if (data.id === id) finish()
+    }
+    var finish = function () {
+      if (done) return
+      done = true
+      ipc.removeListener('captureData', onCapture)
+      document.body.classList.add('iris-sharp-placeholder')
+      webviews.requestPlaceholder(reason)
+    }
+    if (!tab || tab.private || !tab.url || !webviews.hasViewForTab(id) || webviews.placeholderRequests.length > 0) {
+      finish()
+      return
+    }
+    var bounds = webviews.getViewBounds()
+    ipc.on('captureData', onCapture)
+    ipc.send('getCapture', {
+      id: id,
+      width: Math.round(bounds.width * window.devicePixelRatio),
+      height: Math.round(bounds.height * window.devicePixelRatio)
+    })
+    setTimeout(finish, 300)
+  },
   hidePlaceholder: function (reason) {
     if (webviews.placeholderRequests.includes(reason)) {
       webviews.placeholderRequests.splice(webviews.placeholderRequests.indexOf(reason), 1)
     }
 
     if (webviews.placeholderRequests.length === 0) {
+      document.body.classList.remove('iris-sharp-placeholder')
       // multiple things can request a placeholder at the same time, but we should only show the view again if nothing requires a placeholder anymore
       if (webviews.hasViewForTab(webviews.selectedId)) {
         ipc.send('setView', {

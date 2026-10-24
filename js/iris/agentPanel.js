@@ -56,6 +56,7 @@ const ICONS = {
   play: '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5L8 5.5z" fill="currentColor"/></svg>',
   check: '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   search: '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M15 15l5 5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>',
+  folder: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
   cross: '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>'
 }
 
@@ -107,6 +108,10 @@ let projectSelect = null
 let projectNewRow = null
 let projects = []
 let currentProjectId = null
+// the Project row shows only for a chat in a project, or when opened from the header's folder button
+let projectBar = null
+let projectButton = null
+let projectBarOpen = false
 let streamEl = null
 let historyEl = null
 let statusBar = null
@@ -176,6 +181,12 @@ function buildPanel () {
   header.appendChild(title)
   modelBadge = el('span', 'iris-model-badge', '')
   header.appendChild(modelBadge)
+  projectButton = iconButton('', ICONS.folder, 'Projects: chats that share a plan, notes and downloads')
+  projectButton.addEventListener('click', function () {
+    projectBarOpen = !projectBarOpen
+    renderProjectBar()
+  })
+  header.appendChild(projectButton)
   const newBtn = iconButton('', ICONS.plus, 'New chat')
   newBtn.addEventListener('click', newChat)
   header.appendChild(newBtn)
@@ -191,7 +202,8 @@ function buildPanel () {
   panelEl.appendChild(header)
 
   // project: chats in a project share one plan and one memory
-  const projectBar = el('div', 'iris-projectbar')
+  projectBar = el('div', 'iris-projectbar')
+  projectBar.hidden = true
   projectBar.appendChild(el('span', 'iris-projectbar-label', 'Project'))
   projectSelect = document.createElement('select')
   projectSelect.className = 'iris-project-select'
@@ -247,10 +259,16 @@ function buildPanel () {
   })
   stopButton = iconButton('iris-ctl iris-ctl-stop', ICONS.stop, 'Stop')
   stopButton.addEventListener('click', function () { ipc.send('iris-agent-stop') })
+  // two lines, so the counters never squeeze what Iris is doing down to one letter:
+  // "Filling the form…" above, "10 applied · 1 need you · 42:37 · 71 tok/s" below
+  const statusCol = el('div', 'iris-status-col')
+  const statusSub = el('div', 'iris-status-sub')
+  statusCol.appendChild(statusText)
+  statusSub.appendChild(statusTime)
+  statusSub.appendChild(statusMeter)
+  statusCol.appendChild(statusSub)
   statusBar.appendChild(dot)
-  statusBar.appendChild(statusText)
-  statusBar.appendChild(statusTime)
-  statusBar.appendChild(statusMeter)
+  statusBar.appendChild(statusCol)
   statusBar.appendChild(pauseButton)
   statusBar.appendChild(stopButton)
   panelEl.appendChild(statusBar)
@@ -395,7 +413,7 @@ function renderProjects () {
   projectSelect.innerHTML = ''
   const none = document.createElement('option')
   none.value = ''
-  none.textContent = 'None'
+  none.textContent = 'No project'
   projectSelect.appendChild(none)
   projects.forEach(function (p) {
     const o = document.createElement('option')
@@ -409,6 +427,14 @@ function renderProjects () {
   projectSelect.appendChild(add)
   if (currentProjectId && !projects.some(function (p) { return p.id === currentProjectId })) currentProjectId = null
   projectSelect.value = currentProjectId || ''
+  renderProjectBar()
+}
+
+function renderProjectBar () {
+  if (!projectBar) return
+  projectBar.hidden = !currentProjectId && !projectBarOpen
+  projectButton.classList.toggle('is-on', !!currentProjectId)
+  projectButton.setAttribute('aria-pressed', String(!projectBar.hidden))
 }
 
 function setProject (id) {
@@ -417,7 +443,9 @@ function setProject (id) {
     return
   }
   currentProjectId = id
+  if (!id) projectBarOpen = false
   settings.set('irisAI', Object.assign({}, settings.get('irisAI') || {}, { currentProject: id }))
+  renderProjectBar()
   newChat()
 }
 
@@ -814,20 +842,22 @@ function addThought (payload) {
   if (payload.modelMs) rec.row.title = 'Decided in ' + (payload.modelMs / 1000).toFixed(1) + ' s'
 }
 
-function formatTokens (n) {
-  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + 'M'
-  if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'k'
-  return String(n || 0)
-}
-
 function showUsage (payload) {
   runTokens.input += payload.input || 0
   runTokens.output += payload.output || 0
   if (!statusMeter) return
   // the status line keeps only the speed; the Context button has the rest
-  statusMeter.textContent = payload.speed ? Math.round(payload.speed) + ' tok/s' : ''
-  statusMeter.hidden = !payload.speed
-  statusMeter.title = 'How fast the model wrote its last reply (output tokens per second)'
+  // this chat so far: ↓ tokens the model read (input), ↑ tokens it wrote (output), and its speed
+  const sess = payload.session || {}
+  const parts = []
+  if (sess.requests) parts.push('↓' + formatK(sess.input) + ' ↑' + formatK(sess.output))
+  if (payload.speed) parts.push(Math.round(payload.speed) + ' tok/s')
+  statusMeter.textContent = parts.join(' · ')
+  statusMeter.hidden = !parts.length
+  statusMeter.title = sess.requests
+    ? 'This chat: ' + formatK(sess.input) + ' input tokens (read) and ' + formatK(sess.output) + ' output tokens (written) in ' + sess.requests + ' steps' +
+      (payload.speed ? '\nLast reply: ' + Math.round(payload.speed) + ' tokens per second' : '')
+    : 'How fast the model wrote its last reply (output tokens per second)'
   if (payload.context) {
     showContext({ sessionId: payload.sessionId, context: payload.context, speed: payload.speed, session: payload.session, model: payload.model })
   } else if (contextState) {
@@ -1217,8 +1247,9 @@ function addResultCard (payload, elapsedMs) {
   head.appendChild(el('span', 'iris-result-title', status === 'done' ? 'Done' : (status === 'stopped' ? 'Stopped' : 'Could not finish')))
   const ms = elapsedMs || (runStartedAt ? Date.now() - runStartedAt : 0)
   const used = runTokens.input + runTokens.output
-  const meta = el('span', 'iris-result-meta', (payload.steps || 0) + ' steps' + (ms ? ' · ' + formatElapsed(ms) : '') + (used ? ' · ' + formatTokens(used) + ' tokens' : ''))
-  if (used) meta.title = formatTokens(runTokens.input) + ' tokens read, ' + formatTokens(runTokens.output) + ' written'
+  const meta = el('span', 'iris-result-meta', (payload.steps || 0) + ' steps' + (ms ? ' · ' + formatElapsed(ms) : '') +
+    (used ? ' · ↓' + formatK(runTokens.input) + ' ↑' + formatK(runTokens.output) : ''))
+  if (used) meta.title = formatK(runTokens.input) + ' input tokens (read), ' + formatK(runTokens.output) + ' output tokens (written)'
   head.appendChild(meta)
   card.appendChild(head)
   const text = status === 'done' ? (payload.answer || 'Task complete.') : (payload.reason || payload.answer || '')
@@ -1628,6 +1659,7 @@ function initialize () {
     renderProjects()
   })
   currentProjectId = (settings.get('irisAI') || {}).currentProject || null
+  renderProjectBar()
   ipc.send('iris-projects')
 
   window.addEventListener('keydown', function (e) {

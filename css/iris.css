@@ -1266,3 +1266,8 @@ body.ntp-has-background .iris-ntp {
 body:not(.touch) .tab-item.active .tab-close-button {
   display: inline-block;
 }
+
+/* behind an open menu the page's picture stays sharp (see webviews.requestSharpPlaceholder) */
+body.iris-sharp-placeholder #webview-placeholder {
+  filter: none;
+}
