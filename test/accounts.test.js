@@ -3,7 +3,7 @@
 const test = require('node:test')
 const assert = require('node:assert')
 
-const { saveAccount, confirmPassword, findSite, passwords, accountRef, emailTaken, accountCreated, signInRefused } = require('../iris/agent/accounts')
+const { saveAccount, confirmPassword, markAccount, findSite, passwords, accountRef, emailTaken, accountCreated, signInRefused, noSuchAccount, passwordChanged } = require('../iris/agent/accounts')
 
 // stand-ins for the keychain: stored text never equals the password, and two saves of one password match
 let clock = 1000
@@ -69,7 +69,8 @@ test('save_account with the made password confirms it the same way', () => {
   const a = one(list)
   assert.strictEqual(opts.decrypt(a.password), 'B')
   assert.strictEqual(opts.decrypt(a.previous), 'A')
-  assert.deepStrictEqual(passwords(a, opts), ['B', 'A'])
+  // P, the one before A, is no longer dropped: it goes to history
+  assert.deepStrictEqual(passwords(a, opts), ['B', 'A', 'P'])
 })
 
 test('a first account is saved at once, marked unconfirmed until the site accepts it', () => {
@@ -183,4 +184,95 @@ test('a refused sign-in', () => {
     'The email field is invalid; fixing it.',
     'Signed in. Now the application form.'
   ]) assert.ok(!signInRefused(t), t)
+})
+
+test('no password is ever dropped: older ones go to history, newest first, and are still offered', () => {
+  // P, then A, then C, then D in use: P and A used to be lost when previous moved on
+  let list = saveAccount(working(), { site, username: user, password: 'C' }, opts)
+  list = saveAccount(list, { site, username: user, password: 'D' }, opts)
+  const a = one(list)
+  assert.strictEqual(opts.decrypt(a.password), 'D')
+  assert.strictEqual(opts.decrypt(a.previous), 'C')
+  assert.deepStrictEqual(a.history.map(h => opts.decrypt(h.password)), ['A', 'P'])
+  assert.deepStrictEqual(passwords(a, opts), ['D', 'C', 'A', 'P'])
+  // going back to one in history keeps all of them
+  const back = one(saveAccount(list, { site, username: user, password: 'P' }, opts))
+  assert.deepStrictEqual(passwords(back, opts).slice().sort(), ['A', 'C', 'D', 'P'])
+})
+
+test('a pending password replaced by another pending one is kept (a late email may have set it)', () => {
+  let list = saveAccount(working(), { site, username: user, password: 'B', unconfirmed: true }, opts)
+  list = saveAccount(list, { site, username: user, password: 'E', unconfirmed: true }, opts)
+  const a = one(list)
+  assert.strictEqual(opts.decrypt(a.password), 'A')
+  assert.strictEqual(opts.decrypt(a.pending), 'E')
+  assert.deepStrictEqual(passwords(a, opts), ['A', 'E', 'P', 'B'])
+})
+
+test('the broken double-save records keep their one password, once', () => {
+  const broken = [{ site, username: user, password: opts.encrypt('B'), previous: opts.encrypt('B'), created: 1, previousCreated: 1 }]
+  const a = one(saveAccount(broken, { site, username: user, password: 'R' }, opts))
+  assert.deepStrictEqual(passwords(a, opts), ['R', 'B'])
+  assert.strictEqual(a.history, undefined)
+})
+
+test('what the site said is kept on the record, and cleared once a password is put in use', () => {
+  let list = markAccount(working(), 'www.' + site, user, { refused: 5 })
+  assert.strictEqual(one(list).refused, 5)
+  // other sites untouched; a pending save does not clear it (the site has not taken that one yet)
+  assert.strictEqual(markAccount(list, 'other.test', user, { refused: 9 })[0].refused, 5)
+  list = saveAccount(list, { site, username: user, password: 'N', unconfirmed: true }, opts)
+  assert.strictEqual(one(list).refused, 5)
+  // the reset password put in use: refused and noAccount go, every old password stays
+  list = saveAccount(markAccount(list, site, user, { noAccount: 6 }), { site, username: user, password: 'R' }, opts)
+  const a = one(list)
+  assert.strictEqual(a.refused, undefined)
+  assert.strictEqual(a.noAccount, undefined)
+  assert.deepStrictEqual(passwords(a, opts).slice().sort(), ['A', 'N', 'P', 'R'])
+  // null clears a field
+  assert.strictEqual(one(markAccount(markAccount(list, site, null, { confirmed: 7 }), site, user, { confirmed: null })).confirmed, undefined)
+})
+
+test('a sign-up the site accepts is marked confirmed', () => {
+  const list = saveAccount(markAccount(working(), site, user, { noAccount: 3 }), { site, username: user, password: 'B', unconfirmed: true }, opts)
+  const a = one(confirmPassword(list, site, 'B', opts).list)
+  assert.ok(a.confirmed > 0)
+  assert.strictEqual(a.noAccount, undefined)
+  assert.strictEqual(opts.decrypt(a.password), 'B')
+})
+
+test('the site has no account for that email', () => {
+  for (const t of [
+    "Saved Energy Transfer account refused ('does not correspond to a registered user'); fields cleared.",
+    'The site says this email is not a registered user.',
+    'No account found with that email address.',
+    'There is no account with this email.',
+    'Error: user not found.',
+    "We couldn't find an account with that email.",
+    'The email address is not registered.'
+  ]) assert.ok(noSuchAccount(t), t)
+  for (const t of [
+    'Invalid email or password.',
+    'Email or password not recognized.',
+    "Don't have an account? Sign up — I will sign in instead.",
+    'No account yet? Create one. I have a saved account, so I sign in.',
+    'The password is incorrect.'
+  ]) assert.ok(!noSuchAccount(t), t)
+})
+
+test('the site shows a new password was set', () => {
+  for (const t of [
+    'Your password has been reset. Sign in now.',
+    'The password was changed successfully.',
+    'Password reset successful.',
+    'I successfully reset the password; now signing in.',
+    'The new password has been saved.'
+  ]) assert.ok(passwordChanged(t), t)
+  for (const t of [
+    'I will click Forgot password to reset it.',
+    'The password reset email has not arrived yet.',
+    'The account was not created: the password needs a symbol.',
+    'Open the password reset link from the email.',
+    'I need to reset the password.'
+  ]) assert.ok(!passwordChanged(t), t)
 })

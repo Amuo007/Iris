@@ -27,6 +27,7 @@ const irisPrompts = require('./iris/agent/prompts.js')
 const irisMemoryLib = require('./iris/agent/memory.js')
 const irisLookupLib = require('./iris/agent/lookup.js')
 const irisAccountsLib = require('./iris/agent/accounts.js')
+const irisAccountsStore = require('./iris/agent/accountsStore.js')
 const irisUsageLib = require('./iris/agent/usage.js')
 const irisContextMeter = require('./iris/agent/contextMeter.js')
 
@@ -477,12 +478,14 @@ function irisAccountsPath () {
   return path.join(userDataPath, 'iris-accounts.json')
 }
 
+/* read through iris/agent/accountsStore.js: a file that cannot be read falls back to its newest backup */
 function irisAccountsLoad () {
-  try { return JSON.parse(fs.readFileSync(irisAccountsPath(), 'utf8')).accounts || [] } catch (e) { return [] }
+  try { return irisAccountsStore.load(irisAccountsPath()) } catch (e) { DBUG('accounts: ' + e.message); return [] }
 }
 
-function irisAccountsWrite (list) {
-  fs.writeFileSync(irisAccountsPath(), JSON.stringify({ accounts: list }, null, 1), { mode: 0o600 })
+/* backed up first, written whole or not at all, and never with a saved sign-in missing (opts.remove: deleted on purpose) */
+function irisAccountsWrite (list, opts) {
+  irisAccountsStore.write(irisAccountsPath(), list, opts)
 }
 
 /* the password a record uses: kept here encrypted, or a {{Label}} from My info */
@@ -1046,8 +1049,32 @@ IrisComputer.prototype.noteSavedAccount = function (url) {
   this.accountHinted[site] = true
   try {
     const a = irisAccountsLib.findSite(irisAccountsLoad(), site)
-    if (a) this.notes = (this.notes || []).concat('Settings → Accounts has an account for ' + a.site + ' (' + a.username + '), saved ' + new Date(a.created).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + '. If this site asks you to sign in, use that email and {{account:' + a.site + '}}; do not create a new account here.')
+    if (!a) return
+    const day = function (ms) { return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }
+    let note = 'Settings → Accounts has an account for ' + a.site + ' (' + a.username + '), saved ' + day(a.created) + '. '
+    // what the site said last time: a real night signed in again with a password refused before and gave up
+    if (a.noAccount) {
+      note += 'On ' + day(a.noAccount) + ' this site said no account exists for that email (that sign-up never finished): make the account now — Create Account with the same email and {{New password}} — instead of signing in. Iris keeps the old password too.'
+    } else if (a.refused) {
+      note += 'Its saved password was refused on ' + day(a.refused) + ', so do not sign in with it again. ' + irisResetSteps(a.site)
+    } else {
+      note += 'If this site asks you to sign in, use that email and {{account:' + a.site + '}}; do not create a new account here. A refused sign-in, or "no such account", is not the end: Iris tells you the next step (another kept password, Forgot password, or a new account) — do not log needs_you for it.'
+    }
+    this.notes = (this.notes || []).concat(note)
   } catch (e) { /* only a hint */ }
+}
+
+/* Iris may reset a password itself: it makes accounts, and may open the user's inbox for the email */
+function irisCanReset () {
+  const s = irisSettings()
+  return s.accountMode !== 'login' && !!s.emailAccess
+}
+
+/* what to do when no saved password works */
+function irisResetSteps (site) {
+  return irisCanReset()
+    ? 'Reset it: on the sign-in page click "Forgot password" (or "Reset password"), enter the same email, then open the email inbox in a new tab, open the newest reset email from this site, follow its link, and type {{New password}} into the new-password boxes. Iris saves that password and keeps every old one, so nothing is lost. Then sign in with the same email and {{account:' + site + '}}. Only if no reset email comes (look twice, about a minute apart) or the site has no reset: log needs_you ("password reset needed") and go on.'
+    : 'Do not try again (sites lock accounts after a few tries) and never make one up: log needs_you ("sign-in refused: reset the password") and go on.'
 }
 
 IrisComputer.prototype.noteNewFormStep = async function (wc, url) {
@@ -1404,25 +1431,37 @@ IrisComputer.prototype.withNewPassword = function (wc, text) {
   let typed = text
   if (typed && /\{\{\s*new password\s*\}\}/i.test(typed)) {
     // a strong password made for this one site (the same one again for "confirm password"); saved with the account
-    const site = irisSiteOf(wc.getURL()) || 'site'
+    let site = irisSiteOf(wc.getURL()) || 'site'
+    // a reset link that opens on another address than the sign-in page: the new password is for that account
+    const reset = this.resetFor
+    const live = reset && Date.now() - reset.at < 30 * 60 * 1000
+    if (live && site !== reset.site && !irisAccountsLib.findSite(irisAccountsLoad(), site)) site = reset.site
     this.newPasswords = this.newPasswords || {}
+    // the first {{New password}} after "Forgot password": a fresh one (one made earlier here was never set)
+    const forReset = !!(live && site === reset.site && !reset.made)
+    if (forReset) { reset.made = true; delete this.newPasswords[site] }
     if (!this.newPasswords[site]) {
       this.newPasswords[site] = irisNewPassword()
       // saved the moment it is made, here where it exists (a real run: TikTok's account made, nothing saved — the
       // earlier save ran when the step was announced, before the password was made, and skipped the placeholder)
-      let user = this.lastTypedEmail || ''
+      let user = (forReset && reset.username) || this.lastTypedEmail || ''
       if (!user) { try { user = String((irisCareerLoad().basics || {}).email || '').trim() } catch (e) {} }
       // an account saved before for this site: the site may already know this email
       const had = user ? irisAccountsLoad().find(function (a) { return a.site === site && a.username === user }) : null
-      if (had) this.notes = (this.notes || []).concat('An account for ' + site + ' (' + user + ') was already saved on ' + new Date(had.created).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ': if the site says this email is taken, sign in with {{account:' + site + '}} (the earlier password is kept).')
+      const resetting = !!(had && forReset)
+      if (had && !resetting) this.notes = (this.notes || []).concat('An account for ' + site + ' (' + user + ') was already saved on ' + new Date(had.created).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ': if the site says this email is taken, sign in with {{account:' + site + '}} (the earlier password is kept).')
       if (user) {
         try {
           // unconfirmed: a saved account keeps its working password in use until the site shows this one was taken
-          // (a real run: saved at once, the site said the email was taken, and {{account:…}} typed a password it never had)
-          irisAccountSave({ site: site, username: user, password: this.newPasswords[site], url: wc.getURL(), title: wc.getTitle(), purpose: this.taskTitle || '', unconfirmed: true })
-          this.notes = (this.notes || []).concat(had
-            ? 'The password just made for ' + site + ' is kept too: it becomes the one in use once the site shows the account was created (record it then with save_account).'
-            : 'The new ' + site + ' account (' + user + ') is saved in Settings → Accounts with the password just made.')
+          // (a real run: saved at once, the site said the email was taken, and {{account:…}} typed a password it never had).
+          // A reset is the other way round: the old passwords were all refused, so the new one goes in use at once and
+          // the old ones are kept behind it
+          irisAccountSave({ site: site, username: user, password: this.newPasswords[site], url: wc.getURL(), title: wc.getTitle(), purpose: this.taskTitle || '', unconfirmed: !resetting })
+          this.notes = (this.notes || []).concat(resetting
+            ? 'The new password for ' + site + ' is saved (the old ones are kept). Once the site says the password was changed, sign in with the same email and {{account:' + site + '}}.'
+            : had
+              ? 'The password just made for ' + site + ' is kept too: it becomes the one in use once the site shows the account was created (record it then with save_account).'
+              : 'The new ' + site + ' account (' + user + ') is saved in Settings → Accounts with the password just made.')
         } catch (e) { DBUG('account save failed: ' + e.message) }
       }
     }
@@ -1435,8 +1474,21 @@ IrisComputer.prototype.withNewPassword = function (wc, text) {
 IrisComputer.prototype.noteAccountTyped = function (text) {
   const ref = irisAccountsLib.accountRef(text)
   if (!ref) return
-  const pw = irisAccountsLib.passwords(irisAccountsLib.findSite(irisAccountsLoad(), ref.site), irisAccountOpts())[ref.n - 1]
-  if (pw) this.accountTyped = { site: ref.site, pw: pw, at: Date.now() }
+  const a = irisAccountsLib.findSite(irisAccountsLoad(), ref.site)
+  const pw = irisAccountsLib.passwords(a, irisAccountOpts())[ref.n - 1]
+  if (pw) this.accountTyped = { site: ref.site, username: a.username, pw: pw, at: Date.now() }
+  // the last sign-in with a saved account, for the needs_you check in log_application
+  if (pw) this.lastSignIn = { site: ref.site, username: a.username, at: Date.now() }
+}
+
+/* no saved password works for site: remembered on the record (the next run goes straight to the reset), and the
+   reset steps, or needs_you when Iris may not reset */
+IrisComputer.prototype.offerReset = function (site, username) {
+  try { irisAccountsWrite(irisAccountsLib.markAccount(irisAccountsLoad(), site, username, { refused: Date.now() })) } catch (e) { DBUG('account mark failed: ' + e.message) }
+  if (irisCanReset()) this.resetFor = { site: site, username: username, at: Date.now() }
+  this.resetOffered = this.resetOffered || {}
+  this.resetOffered[site] = true
+  return irisResetSteps(site)
 }
 
 /* What the model read after a sign-up or a sign-in with a saved password (Iris reads no page text: its thought is
@@ -1454,28 +1506,43 @@ IrisComputer.prototype.accountOutcome = function (thought) {
     this.refusedPasswords[site] = (this.refusedPasswords[site] || []).concat(made)
     const others = irisAccountsLib.passwords(irisAccountsLib.findSite(irisAccountsLoad(), site), irisAccountOpts()).filter(function (p) { return p !== made })
     const own = irisProfileLoad().find(function (f) { return f.secret && /^password$/i.test(f.label) && f.value })
+    const user = (irisAccountsLib.findSite(irisAccountsLoad(), site) || {}).username || this.lastTypedEmail || ''
     this.notes = (this.notes || []).concat(others.length
       ? site + ' already has an account for this email, so the password just made was never set there. Sign in with the same email and {{account:' + site + '}}: Iris kept the earlier password and types that one.'
       : site + ' already has an account for this email, and Iris has no earlier password for it (the one just made was never set there). ' +
-        (own ? 'Sign in once with the same email and {{' + own.label + '}} (the user\'s own); if that is refused, use ask_user.' : 'Do not make one up or keep trying: use ask_user.'))
+        (own ? 'Sign in once with the same email and {{' + own.label + '}} (the user\'s own). If that is refused: ' : '') + this.offerReset(site, user))
   } else if (made && !this.takenSites[site] && irisAccountsLib.accountCreated(thought)) {
     try {
       const r = irisAccountsLib.confirmPassword(irisAccountsLoad(), site, made, irisAccountOpts())
       if (r.changed) irisAccountsWrite(r.list)
     } catch (e) { DBUG('account confirm failed: ' + e.message) }
   }
+  // after "Forgot password": the site shows the new password was set
+  const reset = this.resetFor
+  if (reset && reset.made && !reset.done && Date.now() - reset.at < 30 * 60 * 1000 && irisAccountsLib.passwordChanged(thought)) {
+    reset.done = true
+    try { irisAccountsWrite(irisAccountsLib.markAccount(irisAccountsLoad(), reset.site, reset.username, { confirmed: Date.now(), refused: null, noAccount: null })) } catch (e) { DBUG('account mark failed: ' + e.message) }
+    this.notes = (this.notes || []).concat('The new password for ' + reset.site + ' is saved and in use. Sign in with the same email and {{account:' + reset.site + '}}, then go on with the application.')
+  }
   const t = this.accountTyped
-  if (t && Date.now() - t.at < 5 * 60 * 1000 && irisAccountsLib.signInRefused(thought)) {
+  if (t && Date.now() - t.at < 5 * 60 * 1000 && irisAccountsLib.noSuchAccount(thought)) {
+    // the saved sign-up never finished there: make the account (the old record and its password are kept)
+    this.accountTyped = null
+    try { irisAccountsWrite(irisAccountsLib.markAccount(irisAccountsLoad(), t.site, t.username, { noAccount: Date.now() })) } catch (e) { DBUG('account mark failed: ' + e.message) }
+    this.resetOffered = this.resetOffered || {}
+    this.resetOffered[t.site] = true
+    this.notes = (this.notes || []).concat(t.site + ' has no account for ' + (t.username || 'that email') + ': the saved sign-up never finished there. Make the account now — Create Account / Sign Up with the same email and {{New password}} — then go on with the application. Iris keeps the old saved password too, so nothing is lost. Do not log needs_you for this.')
+  } else if (t && Date.now() - t.at < 5 * 60 * 1000 && irisAccountsLib.signInRefused(thought)) {
     this.accountTyped = null
     const refused = this.refusedPasswords[t.site] = this.refusedPasswords[t.site] || []
     if (refused.indexOf(t.pw) < 0) refused.push(t.pw)
     const kept = irisAccountsLib.passwords(irisAccountsLib.findSite(irisAccountsLoad(), t.site), irisAccountOpts())
     const left = kept.filter(function (p) { return refused.indexOf(p) < 0 })
-    const next = left.length ? '{{account:' + t.site + '#' + (kept.indexOf(left[0]) + 1) + '}}' : ''
+    // at most three passwords per site in a run: sites lock accounts after a few tries; then the reset
+    const next = left.length && refused.length < 3 ? '{{account:' + t.site + '#' + (kept.indexOf(left[0]) + 1) + '}}' : ''
     this.notes = (this.notes || []).concat(next
-      ? 'That password for ' + t.site + ' was refused. Iris kept another one for this account: sign in once more with the same email and ' + next + ' (not the same password again). If it works, record it with save_account (password "' + next + '") so it is used first next time.' +
-        (left.length > 1 ? '' : ' If it is refused too, stop and use ask_user: more tries can lock the account.')
-      : 'That password for ' + t.site + ' was refused, and Iris has no other password for it to try. If the page asks you to verify the email first, do that and sign in again; otherwise do not try again (sites lock accounts after a few tries) and never make one up: use ask_user.')
+      ? 'That password for ' + t.site + ' was refused. Iris kept another one for this account: sign in once more with the same email and ' + next + ' (not the same password again). If it works, record it with save_account (password "' + next + '") so it is used first next time. If it is refused too, Iris tells you the next step.'
+      : 'That password for ' + t.site + ' was refused' + (left.length ? ' (' + refused.length + ' tried: no more, or the account locks)' : ', and Iris has no other password for it to try') + '. If the page asks you to verify the email first, do that and sign in again. Otherwise: ' + this.offerReset(t.site, t.username))
   }
 }
 
@@ -1712,6 +1779,22 @@ IrisComputer.prototype.act = async function (action) {
       return { ok: true }
     }
     case 'log_application': {
+      // needs_you for a refused sign-in, once per site: first the reset (a real night logged L3Harris, Energy Transfer
+      // and others as "needs you" right after one refused sign-in, in the same step — no reset was ever tried)
+      const lastIn = this.lastSignIn
+      if (this.jobsMode && (action.status === 'needs_you' || action.status === 'failed') && lastIn && Date.now() - lastIn.at < 20 * 60 * 1000 &&
+          irisCanReset() && /sign[ -]?in|log[ -]?in|login|password|credential|account|registered/i.test(String(action.note || ''))) {
+        this.signInGated = this.signInGated || {}
+        if (!this.signInGated[lastIn.site]) {
+          this.signInGated[lastIn.site] = true
+          const known = this.resetOffered && this.resetOffered[lastIn.site]
+          return { ok: false, error: 'not logged yet — a refused sign-in or "no such account" on ' + lastIn.site + ' is not a reason for needs_you while the account can still be fixed. ' +
+            (known ? 'Do the step Iris gave you for it (reset the password, or make the account), then go on with this application.' : this.offerReset(lastIn.site, lastIn.username)) +
+            ' If you already did that and it truly failed, log this again with what happened.' }
+        }
+      }
+      // this job is done: a later job's needs_you is not about that sign-in
+      this.lastSignIn = null
       // "applied" only for an application whose confirmation page was seen (a real run: Skydio logged as submitted
       // while its form still sat there unsent). Asked again for the same job, it is taken — noted as unconfirmed.
       // (a job already logged "applied" — logged again to add its LinkedIn names — is no new claim: no check. A real run
@@ -3603,7 +3686,8 @@ ipc.on('iris-account-copy', function (event, data) {
 
 ipc.on('iris-account-delete', function (event, data) {
   const list = irisAccountsLoad().filter(function (a) { return !(a.site === data.site && a.username === data.username) })
-  try { fs.writeFileSync(irisAccountsPath(), JSON.stringify({ accounts: list }, null, 1), { mode: 0o600 }) } catch (e) { /* ignore */ }
+  // the file as it was goes to iris-accounts-backups/ first, so a deleted sign-in can still be found there
+  try { irisAccountsWrite(list, { remove: [{ site: data.site, username: data.username }] }) } catch (e) { DBUG('account delete: ' + e.message) }
   event.reply('iris-accounts-data', { tabId: data && data.tabId, accounts: irisAccountsForPage() })
 })
 
