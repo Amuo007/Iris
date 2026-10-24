@@ -367,3 +367,11 @@ test('the school start year comes from the saved answer; the month stays empty',
   assert.strictEqual(p('Start date month').do, 'leave')
   assert.strictEqual(plan('Start date year').do, 'leave')
 })
+
+test('pickOption: the closest of several matches, not the first in the list', () => {
+  const o = 'United States'
+  const patterns = [new RegExp('^' + o + '$', 'i'), new RegExp('^' + o + '\\b(?!\\s*[-–(,:]\\s*\\w)', 'i'), new RegExp('^' + o, 'i')]
+  assert.strictEqual(af.pickOption(['United Kingdom', 'United States Minor Outlying Islands', 'United States of America'], patterns), 2)
+  assert.strictEqual(af.pickOption(['United States Minor Outlying Islands', 'United States'], patterns), 1)
+  assert.strictEqual(af.pickOption(['Yes, I have a degree', 'Yes'], [/^yes\b/i]), 1)
+})

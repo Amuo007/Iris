@@ -1013,6 +1013,20 @@ const IRIS_FORM_IDS = `(function () {
 })()`
 /* A real run (Tesla, 4 steps at one address) autofilled step 1 and filled steps 2 and 3 by hand: once the form shows
    a mostly new set of boxes after an autofill there, a note to autofill first. */
+/* The first look at a site with a saved account, once per run: the prompt lists only the newest 40 of them, and a
+   real run made new accounts (overwriting the saved password) on sites whose account had dropped off that list. */
+IrisComputer.prototype.noteSavedAccount = function (url) {
+  const site = irisSiteOf(url)
+  if (!site) return
+  this.accountHinted = this.accountHinted || {}
+  if (this.accountHinted[site]) return
+  this.accountHinted[site] = true
+  try {
+    const a = irisAccountsLib.findSite(irisAccountsLoad(), site)
+    if (a) this.notes = (this.notes || []).concat('Settings → Accounts has an account for ' + a.site + ' (' + a.username + '), saved ' + new Date(a.created).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + '. If this site asks you to sign in, use that email and {{account:' + a.site + '}}; do not create a new account here.')
+  } catch (e) { /* only a hint */ }
+}
+
 IrisComputer.prototype.noteNewFormStep = async function (wc, url) {
   const runs = this.autofillRuns
   if (!this.jobsMode || !runs || !runs.ids || runs.n >= 4 || runs.url !== String(url).split('#')[0]) return
@@ -1082,6 +1096,7 @@ IrisComputer.prototype.screenshot = async function () {
   this.watch(wc)
   await this.noteConfirmation(wc, url)
   await this.noteNewFormStep(wc, url)
+  this.noteSavedAccount(url)
   const info = irisTabInfo(this.tabId)
   const tabNote = this.tabNote
   this.tabNote = null
@@ -1684,9 +1699,14 @@ IrisComputer.prototype.act = async function (action) {
         // the company's own site counts too: Workday names it short ("bah", "amfam", "bbinsurance"), never "boozal…"
         const site = action.url ? irisSiteKey(action.url) : ''
         const ids = action.url ? irisJobIds(action.url) : []
+        // the page in front of Iris right now, when Iris itself saw it as a confirmation (a real run: PACCAR's
+        // SuccessFactors page "Successfully Applied to …" at an opaque URL with no company name or job number, while
+        // the log named jobs.paccar.com — refused three times, filed as "needs you")
+        const here = wc.getURL()
         const seen = (this.confirmations || []).some(function (c) {
           const k = irisJobKey(c.url).replace(/\/(thanks|thank-you|confirmation|submitted|success)$/, '')
-          return Date.now() - c.at < 45 * 60000 && ((want && (k === want || k.indexOf(want) === 0 || want.indexOf(k) === 0)) || (co && squash(c.url).indexOf(co) >= 0) || (site && irisSiteKey(c.url) === site) ||
+          return Date.now() - c.at < 45 * 60000 && ((here && c.url === here && Date.now() - c.at < 10 * 60000) ||
+            (want && (k === want || k.indexOf(want) === 0 || want.indexOf(k) === 0)) || (co && squash(c.url).indexOf(co) >= 0) || (site && irisSiteKey(c.url) === site) ||
             // the same posting number: a company page's ?gh_jid=N confirmed on Greenhouse's embed ?token=N
             (ids.length && irisJobIds(c.url).some(function (x) { return ids.indexOf(x) >= 0 })))
         })

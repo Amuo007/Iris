@@ -167,12 +167,16 @@ function isPlaceholderOption (t) {
   return /^(-+.*|select\b.*|choose\b.*|please select.*|none selected)?$/i.test(clean(t))
 }
 
+/* The first pattern any option matches wins; among its matches the shortest option, the closest one ("United States"
+   picks "United States of America", not "United States Minor Outlying Islands" above it — a real run did). */
 function pickOption (options, patterns, avoid) {
   const list = (options || []).map(function (o) { return clean(typeof o === 'string' ? o : o.text) })
   for (const re of patterns) {
+    let best = -1
     for (let i = 0; i < list.length; i++) {
-      if (re.test(list[i]) && !(avoid && avoid.test(list[i]))) return i
+      if (re.test(list[i]) && !(avoid && avoid.test(list[i])) && (best < 0 || list[i].length < list[best].length)) best = i
     }
+    if (best >= 0) return best
   }
   return -1
 }
