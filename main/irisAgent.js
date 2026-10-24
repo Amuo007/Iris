@@ -28,6 +28,7 @@ const irisMemoryLib = require('./iris/agent/memory.js')
 const irisLookupLib = require('./iris/agent/lookup.js')
 const irisAccountsLib = require('./iris/agent/accounts.js')
 const irisUsageLib = require('./iris/agent/usage.js')
+const irisContextMeter = require('./iris/agent/contextMeter.js')
 
 const IRIS_SETTINGS_VERSION = 2
 
@@ -40,6 +41,7 @@ const IRIS_DEFAULT_SETTINGS = {
   baseUrl: 'http://192.168.1.252:8731/v1',
   model: 'halogen-qwen3.8-flash-next',
   apiKey: '',
+  contextWindow: 0, // tokens; 0 = ask the model's server (Settings shows what it found)
   providers: {},
   thinking: 'low', // off | low | medium | full
   accountMode: 'signup', // login: log in only · signup: log in, or create an account with My info
@@ -97,7 +99,8 @@ function irisResolveProvider (cfg) {
     provider: provider,
     baseUrl: own.baseUrl || top.baseUrl || base.baseUrl,
     model: own.model || top.model || base.model,
-    apiKey: own.apiKey !== undefined ? own.apiKey : (top.apiKey || '')
+    apiKey: own.apiKey !== undefined ? own.apiKey : (top.apiKey || ''),
+    contextWindow: Number(own.contextWindow !== undefined ? own.contextWindow : top.contextWindow) || 0
   })
 }
 
@@ -765,7 +768,9 @@ function irisUsageRecord (kind, data) {
     const usage = Object.assign({}, data || {})
     delete usage.ms
     delete usage.session
+    delete usage.context
     ctx = {
+      context: (data && data.context) || null,
       usage: usage,
       ms: (data && data.ms) || 0,
       session: session ? { id: session.id, title: session.title } : null,
@@ -787,7 +792,8 @@ function irisUsageRecord (kind, data) {
       session: sum.session,
       project: sum.project,
       provider: ctx.provider,
-      model: ctx.model
+      model: ctx.model,
+      context: ctx.context
     })
   }
   if (!irisUsageTimer) {
@@ -2825,6 +2831,24 @@ function irisCalendarHint (now) {
  * stays byte-identical during a run, so the model server reuses its cache; whatever changes while
  * Iris works (a project's latest notes, the jobs handled so far) is the live part, sent last.
  */
+/*
+ * The model's context window: the number set in Settings, or what its server says (asked once per server and
+ * model, in the background; a failed ask is tried again a minute later), or a known size for Claude models.
+ */
+const irisContextWindows = {}
+function irisContextWindow (cfg) {
+  if (Number(cfg.contextWindow) > 0) return Number(cfg.contextWindow)
+  const key = cfg.provider + '|' + cfg.baseUrl + '|' + cfg.model
+  if (!(key in irisContextWindows)) {
+    irisContextWindows[key] = irisContextMeter.knownContextWindow(cfg.model)
+    irisModelClient.probeServer({ provider: cfg.provider, baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, model: cfg.model, timeoutMs: 5000 }).then(function (r) {
+      if (r.ok && r.contextWindow) irisContextWindows[key] = r.contextWindow
+      else setTimeout(function () { if (!irisContextWindows[key]) delete irisContextWindows[key] }, 60000)
+    }).catch(function () {})
+  }
+  return irisContextWindows[key] || 0
+}
+
 function irisSystemExtra (mode, task, projectId, sessionId) {
   const parts = []
   const live = []
@@ -2954,12 +2978,15 @@ function startAgent (task, options) {
       timeoutMs: cfg.modelTimeoutMs
     }), cfg.baseUrl)
 
+  irisContextWindow(cfg) // start finding out the model's context window before the first step
   const agent = irisLoop.createAgent({
     model: model,
     computer: computer,
     lookup: cfg.lookups === false ? null : irisDoLookup,
     config: {
       systemExtra: function () { return irisSystemExtra(mode, session.title + '\n' + task, session.projectId, session.id) },
+      provider: cfg.provider,
+      contextWindow: function () { return irisContextWindow(cfg) },
       maxServerWaitMs: unlimited ? 0 : 10 * 60 * 1000,
       askTimeoutMs: unlimited ? 10 * 60 * 1000 : 0, // an overnight run does not wait all night for an answer
       // job applications: the user wants them done without being asked (real run: a salary question waited 10 minutes)
@@ -3182,7 +3209,9 @@ function startAgent (task, options) {
       // a non-stop run picks itself up after a failure: only tell the user when it really ends
       if (type === 'run:end' && payload.status !== 'stopped' && !(unlimited && payload.status === 'failed')) irisNotify(payload.status === 'done' ? 'Iris finished' : 'Iris could not finish', (payload.status === 'done' ? payload.answer : payload.reason) || session.title)
       // the plan's own model call counts too
-      if ((type === 'thought' || type === 'plan') && payload.usage) irisUsageRecord('request', Object.assign({ ms: payload.modelMs, session: session }, payload.usage))
+      if ((type === 'thought' || type === 'plan') && payload.usage) irisUsageRecord('request', Object.assign({ ms: payload.modelMs, session: session, context: payload.context || null }, payload.usage))
+      // the Context card shows the last step's context again when this chat is reopened
+      if (type === 'thought' && payload.context) session.context = Object.assign({ model: cfg.model }, payload.context)
       if (type === 'thought' && payload.usage) {
         // one line per model call: how long the prefill (screenshot + new text) and the answer took
         try {
@@ -3308,7 +3337,7 @@ function irisScheduleRepeat (task, options) {
 }
 
 function irisSessionHeader (s) {
-  return s ? { id: s.id, title: s.title, created: s.created, updated: s.updated, status: s.status } : null
+  return s ? { id: s.id, title: s.title, created: s.created, updated: s.updated, status: s.status, context: s.context || null } : null
 }
 
 function agentStatus () {
@@ -3385,7 +3414,7 @@ ipc.on('iris-agent-session-open', function (event, id) {
     irisSession = s
     irisAgent = null
   }
-  event.reply('iris-agent-session-data', s ? { id: s.id, title: s.title, status: s.status, items: s.items } : null)
+  event.reply('iris-agent-session-data', s ? { id: s.id, title: s.title, status: s.status, items: s.items, context: s.context || null } : null)
 })
 
 ipc.on('iris-agent-session-delete', function (event, id) {
@@ -3466,8 +3495,8 @@ ipc.on('iris-settings-action', async function (event, data) {
         const a = data.args || {}
         const cfg = irisSettings()
         const provider = a.provider || cfg.provider
-        const result = await irisModelClient.probeServer({ provider: provider, baseUrl: a.baseUrl || cfg.baseUrl, apiKey: a.apiKey !== undefined ? a.apiKey : cfg.apiKey })
-        return reply(Object.assign({ provider: provider }, result))
+        const result = await irisModelClient.probeServer({ provider: provider, baseUrl: a.baseUrl || cfg.baseUrl, apiKey: a.apiKey !== undefined ? a.apiKey : cfg.apiKey, model: a.model || cfg.model })
+        return reply(Object.assign({ provider: provider, quiet: !!a.quiet }, result))
       }
       case 'downloadsList':
         return reply({ dir: irisDownloadDir(), files: irisRecentDownloads(40) })

@@ -15,7 +15,8 @@ test('a request counts for the day, its session and its project', () => {
   let s = emptyStore()
   s = record(s, 'request', { usage: reply(1000, 50, { gen_ms: 1000 }), ms: 3000, session: { id: 's1', title: 'Apply to jobs' }, project: { id: 'p1', name: 'Jobs' }, provider: 'local', model: 'q' }, NOW)
   s = record(s, 'request', { usage: reply(2000, 150, { gen_ms: 3000 }), ms: 5000, session: { id: 's1' }, project: { id: 'p1' }, provider: 'local', model: 'q' }, NOW)
-  assert.deepStrictEqual(s.days['2026-10-23'], { tasks: 0, requests: 2, input: 3000, output: 200, ms: 8000 })
+  assert.deepStrictEqual(s.days['2026-10-23'], { tasks: 0, requests: 2, input: 3000, output: 200, cached: 0, ms: 8000, genMs: 4000, genOut: 200 })
+  assert.strictEqual(speedOf(s.days['2026-10-23']), 50)
   const sess = s.sessions.s1
   assert.strictEqual(sess.title, 'Apply to jobs')
   assert.strictEqual(sess.project, 'p1')

@@ -39,6 +39,13 @@ function textPart (text) {
 }
 
 const KEEP_KINDS = new Set(['task', 'followup', 'plan'])
+
+// Iris's own instructions never change during a run: measure them once
+let baseLen = 0
+function baseLength () {
+  if (!baseLen) baseLen = prompts.systemPrompt().length
+  return baseLen
+}
 const KEEP_FOLLOWUPS = 6 // a repeating run adds one per repeat: only the newest few are pinned
 
 function createHistory (options) {
@@ -53,6 +60,7 @@ function createHistory (options) {
   let digestDropped = 0
   let observationCount = 0
   let sites = {} // host -> { steps, last: thought on that site, order } : where this task has been
+  let lastLayout = null // the size of each part of the last request, for the panel's Context card
 
   function hostOf (url) {
     const m = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]+)/i.exec(String(url || ''))
@@ -209,6 +217,8 @@ function createHistory (options) {
         tabs: obs && obs.tabs ? obs.tabs : null,
         skills: obs && obs.skills && obs.skills.tips && obs.skills.tips.length ? obs.skills : null,
         dataUrl: obs && obs.dataUrl ? obs.dataUrl : null,
+        width: obs && obs.width,
+        height: obs && obs.height,
         url: obs && obs.url,
         loading: !!(obs && obs.loading)
       })
@@ -256,6 +266,9 @@ function createHistory (options) {
       const newest = obs[obs.length - 1]
 
       const out = [{ role: 'system', content: prompts.systemPrompt(systemExtra) }]
+      // characters per part (Context card): Iris's own instructions, the user's info, the task, past steps, this step
+      const layout = { instructions: baseLength(), info: 0, task: 0, steps: 0, page: 0, images: [] }
+      layout.info = Math.max(0, out[0].content.length - layout.instructions)
       // the summary of forgotten steps sits right after the task and plan: it changes only when Iris
       // forgets a chunk of steps (which changes the prompt right there anyway), so the server keeps it
       // cached between those times instead of reading ~2,000 tokens again on every step
@@ -264,7 +277,10 @@ function createHistory (options) {
 
       for (let ei = 0; ei < entries.length; ei++) {
         const e = entries[ei]
-        if (ei === digestAt && digest.length) out.push({ role: 'user', content: prompts.digestText(digest, digestDropped) })
+        if (ei === digestAt && digest.length) {
+          out.push({ role: 'user', content: prompts.digestText(digest, digestDropped) })
+          layout.steps += out[out.length - 1].content.length
+        }
         if (e.kind === 'observation') {
           let text = e.text
           if (e === newest) {
@@ -277,21 +293,41 @@ function createHistory (options) {
             if (notes.length) text += '\n' + prompts.notesText(notes.slice(-cfg.notesShown), Math.max(0, notes.length - cfg.notesShown))
             const plan = entries.find(x => x.kind === 'plan')
             if (plan) { const r = prompts.planReminder(plan.plan); if (r) text += '\n' + r }
-            if (liveExtra) text += '\n' + liveExtra
+            if (liveExtra) {
+              text += '\n' + liveExtra
+              layout.task += liveExtra.length + 1
+            }
           }
+          layout[e === newest ? 'page' : 'steps'] += text.length - (e === newest && liveExtra ? liveExtra.length + 1 : 0)
           const parts = [textPart(text)]
-          if (e.dataUrl && withImage.has(e) && e.dataUrl !== 'omitted') parts.push(imagePart(e.dataUrl))
-          else if (e.dataUrl) parts.push(textPart('[older screenshot omitted]'))
+          if (e.dataUrl && withImage.has(e) && e.dataUrl !== 'omitted') {
+            parts.push(imagePart(e.dataUrl))
+            layout.images.push({ width: e.width || 0, height: e.height || 0 })
+          } else if (e.dataUrl) {
+            parts.push(textPart('[older screenshot omitted]'))
+            layout.steps += 26
+          }
           out.push({ role: 'user', content: parts })
         } else if (e.kind === 'assistant') {
           out.push({ role: 'assistant', content: e.text })
+          layout.steps += String(e.text || '').length
         } else {
           out.push({ role: 'user', content: e.text })
+          layout[KEEP_KINDS.has(e.kind) ? 'task' : 'steps'] += String(e.text || '').length
         }
       }
-      if (digestAt === entries.length && digest.length) out.push({ role: 'user', content: prompts.digestText(digest, digestDropped) })
+      if (digestAt === entries.length && digest.length) {
+        out.push({ role: 'user', content: prompts.digestText(digest, digestDropped) })
+        layout.steps += out[out.length - 1].content.length
+      }
+      lastLayout = layout
 
       return out
+    },
+
+    /** How big each part of the last request was (characters, and the screenshot's size). */
+    layout () {
+      return lastLayout
     },
 
     /** Text-only copy for saving a session (screenshots are dropped). */

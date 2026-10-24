@@ -114,6 +114,10 @@ let statusTime = null
 let statusMeter = null
 // tokens this run used (input + output), for the result card
 let runTokens = { input: 0, output: 0 }
+// the Context button (composer row) and its card: what fills the model's context window
+let contextBtn = null
+let contextCard = null
+let contextState = null // { sessionId, context, speed, session, model } of the newest step
 let pauseButton = null
 let stopButton = null
 let modelBadge = null
@@ -287,6 +291,16 @@ function buildPanel () {
   meta.appendChild(thinkingSelect.label)
   modeSelect = selectControl(ICONS.loop, RUN_MODES, 'Once: until the task is done. Non-stop: no step or time limit. Repeat: runs again on a timer until you press Stop.')
   meta.appendChild(modeSelect.label)
+  contextBtn = el('button', 'iris-context-btn')
+  contextBtn.type = 'button'
+  contextBtn.hidden = true
+  contextBtn.setAttribute('aria-haspopup', 'dialog')
+  contextBtn.addEventListener('click', function (e) {
+    e.stopPropagation()
+    if (contextCard.hidden) openContextCard()
+    else closeContextCard()
+  })
+  meta.appendChild(contextBtn)
   planToggle = el('button', 'iris-plan-toggle')
   planToggle.type = 'button'
   planToggle.innerHTML = '<span class="iris-switch" aria-hidden="true"></span><span>Smart</span>'
@@ -315,7 +329,15 @@ function buildPanel () {
   })
   smartGroup.appendChild(smartLevelBtn)
   composer.appendChild(meta)
+  contextCard = el('div', 'iris-context-card')
+  contextCard.hidden = true
+  contextCard.setAttribute('role', 'dialog')
+  contextCard.setAttribute('aria-label', 'Context window')
+  contextCard.addEventListener('click', function (e) { e.stopPropagation() })
+  composer.appendChild(contextCard)
   panelEl.appendChild(composer)
+  document.addEventListener('click', function () { if (contextCard && !contextCard.hidden) closeContextCard() })
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && contextCard && !contextCard.hidden) closeContextCard() })
 
   document.body.appendChild(panelEl)
 
@@ -467,6 +489,7 @@ function newChat () {
   if (isBusy()) return
   ipc.send('iris-agent-new-chat')
   currentSessionId = null
+  showContext(null)
   repeatAt = 0
   tally = { kept: 0, files: 0 }
   showHistory(false)
@@ -595,6 +618,7 @@ function renderHistory (list) {
 function renderSession (data) {
   if (!data) return
   currentSessionId = data.id
+  showContext(data.context ? { sessionId: data.id, context: data.context } : null)
   showHistory(false)
   streamEl.innerHTML = ''
   steps = {}
@@ -784,20 +808,158 @@ function showUsage (payload) {
   runTokens.input += payload.input || 0
   runTokens.output += payload.output || 0
   if (!statusMeter) return
-  const sess = payload.session || {}
-  // context: what the model read for its last reply (prompt + history + screenshot); total: every reply of
-  // this session added up — each step sends the whole context again, so the total grows much faster
-  const parts = []
-  if (payload.speed) parts.push(Math.round(payload.speed) + ' tok/s')
-  if (payload.input) parts.push('ctx ' + formatTokens(payload.input))
-  if (sess.requests) parts.push(formatTokens((sess.input || 0) + (sess.output || 0)) + ' total')
-  statusMeter.textContent = parts.join(' · ')
-  statusMeter.hidden = !parts.length
-  const lines = ['Context of the last reply: ' + formatTokens(payload.input) + ' tokens read, ' + formatTokens(payload.output) + ' written' + (payload.speed ? ', ' + Math.round(payload.speed) + ' tok/s' : '')]
-  if (sess.requests) lines.push('This session: ' + sess.requests + ' replies, ' + formatTokens(sess.input) + ' read and ' + formatTokens(sess.output) + ' written in all (each reply reads its whole context again)' + (sess.speed ? ', ' + Math.round(sess.speed) + ' tok/s on average' : ''))
-  if (payload.project && payload.project.requests) lines.push('Project "' + payload.project.name + '": ' + formatTokens(payload.project.input + payload.project.output) + ' tokens')
-  if (payload.model) lines.push('Model: ' + payload.model)
-  statusMeter.title = lines.join('\n')
+  // the status line keeps only the speed; the Context button has the rest
+  statusMeter.textContent = payload.speed ? Math.round(payload.speed) + ' tok/s' : ''
+  statusMeter.hidden = !payload.speed
+  statusMeter.title = 'How fast the model wrote its last reply (output tokens per second)'
+  if (payload.context) {
+    showContext({ sessionId: payload.sessionId, context: payload.context, speed: payload.speed, session: payload.session, model: payload.model })
+  } else if (contextState) {
+    // the plan's own call: no page context, but the session totals still move
+    contextState.session = payload.session || contextState.session
+    if (!contextCard.hidden) renderContextCard()
+  }
+}
+
+/* ---- Context: the button in the composer row and its card ------------------------------- */
+
+const CONTEXT_RING = 2 * Math.PI * 6
+
+/* 812 → "812", 22,614 → "22.6k", 262,144 → "262k", 9,310,000 → "9.3M" */
+function formatK (n) {
+  n = Math.max(0, Math.round(n || 0))
+  if (n < 1000) return String(n)
+  if (n < 100000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
+  if (n < 1e6) return Math.round(n / 1000) + 'k'
+  return (n / 1e6).toFixed(n < 1e7 ? 1 : 0).replace(/\.0$/, '') + 'M'
+}
+
+function formatPct (p) {
+  if (!(p > 0)) return '0%'
+  if (p < 0.1) return '<0.1%'
+  return (p < 10 ? p.toFixed(1).replace(/\.0$/, '') : String(Math.round(p))) + '%'
+}
+
+function contextRing (pct) {
+  // a sliver stays visible for a nearly empty window; the number beside it is exact
+  const shown = pct === null ? 0 : Math.min(100, Math.max(pct, pct > 0 ? 4 : 0))
+  return '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">' +
+    '<circle class="iris-ring-track" cx="8" cy="8" r="6"/>' +
+    '<circle class="iris-ring-fill" cx="8" cy="8" r="6" transform="rotate(-90 8 8)" stroke-dasharray="' +
+    (CONTEXT_RING * shown / 100).toFixed(2) + ' ' + CONTEXT_RING.toFixed(2) + '"/></svg>'
+}
+
+function showContext (state) {
+  contextState = state && state.context ? state : null
+  if (!contextBtn) return
+  const c = contextState && contextState.context
+  if (!c) {
+    contextBtn.hidden = true
+    closeContextCard()
+    return
+  }
+  const pct = c.window ? (c.used / c.window) * 100 : null
+  contextBtn.hidden = false
+  contextBtn.classList.toggle('is-high', pct !== null && pct >= 60 && pct < 85)
+  contextBtn.classList.toggle('is-full', pct !== null && pct >= 85)
+  contextBtn.innerHTML = contextRing(pct) + '<span>' + (pct === null ? formatK(c.used) : formatPct(pct)) + '</span>'
+  contextBtn.title = 'Context: ' + formatK(c.used) + (c.window ? ' of ' + formatK(c.window) + ' tokens' : ' tokens (window size unknown)')
+  if (!contextCard.hidden) renderContextCard()
+}
+
+function openContextCard () {
+  renderContextCard()
+  contextCard.hidden = false
+  contextBtn.setAttribute('aria-expanded', 'true')
+}
+
+function closeContextCard () {
+  contextCard.hidden = true
+  contextBtn.setAttribute('aria-expanded', 'false')
+}
+
+function contextRow (swatch, label, value, pct, extraClass) {
+  const row = el('div', 'iris-ctx-row' + (extraClass ? ' ' + extraClass : ''))
+  const dot = el('span', 'iris-ctx-dot')
+  if (swatch) dot.style.background = swatch
+  row.appendChild(dot)
+  row.appendChild(el('span', 'iris-ctx-label', label))
+  row.appendChild(el('span', 'iris-ctx-num', value))
+  row.appendChild(el('span', 'iris-ctx-pct', pct))
+  return row
+}
+
+function contextStat (label, value) {
+  const row = el('div', 'iris-ctx-stat')
+  row.appendChild(el('span', 'iris-ctx-stat-label', label))
+  row.appendChild(el('span', 'iris-ctx-stat-value', value))
+  return row
+}
+
+function renderContextCard () {
+  const st = contextState || {}
+  const c = st.context
+  if (!c) return
+  contextCard.textContent = ''
+  const whole = c.window || c.used || 1
+  const pct = c.window ? (c.used / c.window) * 100 : null
+
+  const head = el('div', 'iris-ctx-head')
+  head.appendChild(el('span', 'iris-ctx-title', 'Context'))
+  const model = st.model || c.model || ''
+  if (model) {
+    const m = el('span', 'iris-ctx-model', model)
+    m.title = model
+    head.appendChild(m)
+  }
+  contextCard.appendChild(head)
+
+  const sum = el('div', 'iris-ctx-sum')
+  sum.appendChild(el('span', 'iris-ctx-big', pct === null ? formatK(c.used) + ' tokens' : formatPct(pct) + ' used'))
+  sum.appendChild(el('span', 'iris-ctx-of', c.window ? formatK(c.used) + ' / ' + formatK(c.window) : 'window size unknown'))
+  contextCard.appendChild(sum)
+
+  // one bar: each part in its colour, the free space as the track, a tick where Iris starts forgetting
+  const bar = el('div', 'iris-ctx-bar')
+  ;(c.parts || []).forEach(function (p, i) {
+    if (!(p.tokens > 0)) return
+    const seg = el('span', 'iris-ctx-seg')
+    seg.style.width = Math.max(0.6, (p.tokens / whole) * 100) + '%'
+    seg.style.background = 'var(--iris-ctx-' + (i + 1) + ')'
+    seg.title = p.label + ': ' + formatK(p.tokens)
+    bar.appendChild(seg)
+  })
+  if (c.window && c.compactAt) {
+    const tick = el('span', 'iris-ctx-tick')
+    tick.style.left = ((c.compactAt / c.window) * 100) + '%'
+    tick.title = 'Iris forgets its oldest steps here'
+    bar.appendChild(tick)
+  }
+  contextCard.appendChild(bar)
+
+  const rows = el('div', 'iris-ctx-rows')
+  ;(c.parts || []).forEach(function (p, i) {
+    rows.appendChild(contextRow('var(--iris-ctx-' + (i + 1) + ')', p.label, formatK(p.tokens), formatPct((p.tokens / whole) * 100)))
+  })
+  if (c.window) {
+    rows.appendChild(contextRow('', 'Free space', formatK(c.free), formatPct((c.free / c.window) * 100), 'is-free'))
+    rows.appendChild(contextRow('', 'Forgets old steps at', formatK(c.compactAt), formatPct((c.compactAt / c.window) * 100), 'is-limit'))
+  }
+  contextCard.appendChild(rows)
+
+  const stats = el('div', 'iris-ctx-stats')
+  const reply = [formatK(c.output) + ' tokens']
+  if (st.speed) reply.push(Math.round(st.speed) + ' tok/s')
+  stats.appendChild(contextStat('Last reply', reply.join(' · ')))
+  if (c.used && c.cached) stats.appendChild(contextStat('Read from cache', formatPct((c.cached / c.used) * 100) + ' of this context'))
+  const sess = st.session
+  if (sess && sess.requests) {
+    stats.appendChild(contextStat('This chat', sess.requests + (sess.requests === 1 ? ' reply · ' : ' replies · ') + formatK(sess.input) + ' read · ' + formatK(sess.output) + ' written'))
+  }
+  contextCard.appendChild(stats)
+
+  contextCard.appendChild(el('p', 'iris-ctx-note', 'Every step sends this whole context again, so the chat total grows fast. ' +
+    'The total is the server\'s count; the split is estimated.'))
 }
 
 function actionDetail (action, description) {
@@ -1063,6 +1225,10 @@ function handleEvent (payload) {
   switch (payload.type) {
     case 'session':
       currentSessionId = payload.session && payload.session.id
+      // another chat: its last context (or none yet)
+      if (!contextState || contextState.sessionId !== currentSessionId) {
+        showContext(payload.session && payload.session.context ? { sessionId: currentSessionId, context: payload.session.context } : null)
+      }
       break
     case 'run:start':
       if (!payload.followUp) tally = { kept: 0, files: 0 }
@@ -1091,6 +1257,9 @@ function handleEvent (payload) {
       break
     case 'usage':
       showUsage(payload)
+      break
+    case 'compact':
+      addNote('The context was ' + formatPct((payload.used / payload.window) * 100) + ' full, so Iris forgot its oldest steps. The task, plan and notes stay.', 'memo')
       break
     case 'remember':
       if (!payload.automatic) addNote('Noted: ' + payload.note, 'memo')

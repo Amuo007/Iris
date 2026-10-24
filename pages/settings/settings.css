@@ -1317,3 +1317,517 @@ body.dark-mode .iris-status-needs_you {
 #iris-career-answers .iris-row-delete {
   padding-top: 5px;
 }
+
+/* ==========================================================================
+   One section at a time (the sidebar is the page list), search, grouped
+   model settings and the usage dashboard
+   ========================================================================== */
+
+:root {
+  --s-chart: #2a78d6;
+  --s-chart-hover: #1c5cab;
+  --s-seg-on: #ffffff;
+}
+body.dark-mode {
+  --s-chart: #3987e5;
+  --s-chart-hover: #6da7ec;
+  --s-seg-on: #2a2a2a;
+}
+
+.iris-settings.is-paged .iris-settings-main > .settings-container:not(.is-shown) {
+  display: none !important;
+}
+/* the page title names the section, so its card does not repeat it */
+.iris-settings.is-paged:not(.is-searching) .settings-container > h3:first-child,
+.iris-settings.is-paged:not(.is-searching) .iris-usage-top > h3 {
+  display: none;
+}
+.iris-settings.is-searching .iris-settings-group {
+  display: none;
+}
+.iris-settings .iris-settings-nav a[hidden] {
+  display: none;
+}
+.iris-settings .iris-settings-title {
+  margin: 6px 0 18px;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.iris-settings input[type="search"].iris-settings-search {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  height: 30px;
+  margin: 0 0 12px;
+  padding: 0 10px;
+  border: 1px solid var(--s-line) !important;
+  border-radius: 8px;
+  background: var(--s-muted) !important;
+  color: var(--s-text) !important;
+  font-size: 13px;
+  outline: none;
+}
+.iris-settings input[type="search"].iris-settings-search:focus {
+  border-color: var(--s-text-3) !important;
+  background: var(--s-bg) !important;
+  box-shadow: 0 0 0 3px rgba(127, 127, 127, 0.18);
+}
+
+/* --- Iris AI: Model, Behaviour, Advanced ---------------------------------- */
+
+.iris-settings .iris-group-title {
+  margin: 22px 0 10px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--s-text);
+  text-align: left;
+  opacity: 1;
+}
+.iris-settings .settings-container > .setting-secondary-label + .iris-group-title {
+  margin-top: 6px;
+}
+.iris-settings .iris-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  margin: 0;
+}
+.iris-settings .iris-form-grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.iris-settings .iris-span-all {
+  grid-column: 1 / -1;
+  margin-top: -6px;
+}
+.iris-settings .iris-form-grid .iris-setting label {
+  display: block;
+  padding: 0 0 5px;
+  font-size: 12px;
+  color: var(--s-text-2);
+  opacity: 1;
+}
+.iris-settings .settings-container[id^="iris-"] .iris-form-grid .iris-setting input,
+.iris-settings .settings-container[id^="iris-"] .iris-form-grid .iris-setting select {
+  width: 100%;
+  max-width: none;
+}
+.iris-settings .iris-field-hint {
+  margin-top: 5px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--s-text-3);
+  opacity: 1;
+}
+.iris-settings .iris-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+.iris-settings .iris-actions .iris-button {
+  margin: 0;
+}
+.iris-settings .iris-toggles {
+  margin-top: 14px;
+  border-top: 1px solid var(--s-line);
+}
+.iris-settings .iris-toggles .setting-section {
+  display: flex;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--s-line);
+}
+.iris-settings .iris-advanced {
+  margin-top: 18px;
+}
+.iris-settings .iris-advanced > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--s-text-2);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.iris-settings .iris-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+.iris-settings .iris-advanced > summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+.iris-settings .iris-advanced[open] > summary::before {
+  transform: rotate(45deg);
+}
+.iris-settings .iris-advanced > summary:hover {
+  color: var(--s-text);
+}
+.iris-settings .iris-advanced > .iris-form-grid {
+  margin-top: 12px;
+}
+
+/* --- Usage ---------------------------------------------------------------- */
+
+.iris-settings .iris-usage-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.iris-settings .iris-usage-top > h3 {
+  margin: 0;
+}
+.iris-settings.is-paged:not(.is-searching) .iris-usage-top {
+  justify-content: flex-end;
+  margin: 0 0 -26px;
+}
+.iris-settings.is-paged:not(.is-searching) #iris-usage-container > .setting-secondary-label {
+  max-width: calc(100% - 250px);
+  min-height: 26px;
+}
+
+.iris-segmented {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--s-muted);
+}
+.iris-settings .iris-segmented button {
+  height: 24px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--s-text-2);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.iris-settings .iris-segmented button:hover {
+  color: var(--s-text);
+}
+.iris-settings .iris-segmented button[aria-selected="true"] {
+  background: var(--s-seg-on);
+  color: var(--s-text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.iris-settings .iris-segmented-small button {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11.5px;
+}
+
+.iris-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 4px 0 12px;
+}
+.iris-tile {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--s-line);
+  border-radius: 12px;
+}
+.iris-tile-label {
+  font-size: 12px;
+  color: var(--s-text-2);
+}
+.iris-tile-value {
+  margin: 4px 0 2px;
+  font-size: 22px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.iris-tile-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--s-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.iris-chart-card {
+  padding: 12px 16px 10px;
+  border: 1px solid var(--s-line);
+  border-radius: 12px;
+}
+.iris-chart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.iris-settings .iris-chart-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.iris-chart {
+  position: relative;
+  height: 190px;
+  margin-left: 46px;
+}
+.iris-chart-grid,
+.iris-chart-bars {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 22px;
+}
+.iris-chart-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--s-line);
+}
+.iris-chart-line span {
+  position: absolute;
+  right: calc(100% + 8px);
+  top: 0;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: var(--s-text-3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.iris-chart-bars {
+  display: flex;
+  align-items: stretch;
+  gap: 3px;
+}
+.iris-chart-bars.is-dense {
+  gap: 1px;
+}
+.iris-chart-col {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: flex-end;
+  justify-content: center;
+  border-radius: 4px;
+}
+.iris-chart-col.is-hover {
+  background: var(--s-muted);
+}
+.iris-chart-bar {
+  width: 100%;
+  max-width: 26px;
+  border-radius: 4px 4px 0 0;
+  background: var(--s-chart);
+  transition: background 0.1s;
+}
+.iris-chart-col.is-hover .iris-chart-bar {
+  background: var(--s-chart-hover);
+}
+.iris-chart-axis {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 16px;
+}
+.iris-chart-date {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: var(--s-text-3);
+  white-space: nowrap;
+}
+.iris-chart-date.is-first {
+  transform: none;
+}
+.iris-chart-date.is-last {
+  transform: translateX(-100%);
+}
+.iris-chart-tip {
+  position: absolute;
+  top: 4px;
+  z-index: 2;
+  min-width: 150px;
+  padding: 8px 10px;
+  border: 1px solid var(--s-line);
+  border-radius: 8px;
+  background: var(--s-card);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+  pointer-events: none;
+  white-space: nowrap;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.iris-chart-tip[hidden] {
+  display: none;
+}
+.iris-chart-tip b {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.iris-chart-tip div {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  color: var(--s-text-2);
+}
+.iris-chart-tip div span:last-child {
+  color: var(--s-text);
+}
+.iris-chart-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  margin-left: -46px;
+  font-size: 12.5px;
+  color: var(--s-text-3);
+}
+
+.iris-usage-list {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.iris-ulist-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2.4fr) minmax(40px, 1fr) 56px 56px 66px 70px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--s-line);
+}
+.iris-ulist-row > span:nth-child(n + 3) {
+  text-align: right;
+  white-space: nowrap;
+}
+.iris-ulist-head {
+  padding: 0 0 6px;
+  font-size: 11.5px;
+  color: var(--s-text-3);
+}
+.iris-ulist-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.iris-ulist-name small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11.5px;
+  color: var(--s-text-3);
+}
+.iris-ulist-meter {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--s-muted);
+  overflow: hidden;
+}
+.iris-ulist-head .iris-ulist-meter,
+.iris-ulist-head > span:nth-child(2) {
+  background: none;
+}
+.iris-ulist-meter i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--s-chart);
+}
+.iris-settings .iris-usage-empty {
+  padding: 4px 0 8px;
+  font-size: 12.5px;
+  color: var(--s-text-3);
+  opacity: 1;
+}
+
+@media (max-width: 900px) {
+  .iris-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .iris-settings .iris-form-grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .iris-settings .iris-form-grid,
+  .iris-settings .iris-form-grid-3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .iris-ulist-row {
+    grid-template-columns: minmax(0, 1fr) 56px 56px 66px;
+  }
+  .iris-ulist-row > span:nth-child(2),
+  .iris-ulist-row > span:nth-child(6) {
+    display: none;
+  }
+  .iris-settings.is-paged:not(.is-searching) .iris-usage-top {
+    margin: 0 0 10px;
+  }
+  .iris-settings.is-paged:not(.is-searching) #iris-usage-container > .setting-secondary-label {
+    max-width: none;
+  }
+}
+
+/* narrow (a small window, or the Iris panel open beside the page): the page list becomes a strip on top */
+@media (max-width: 760px) {
+  .iris-settings {
+    flex-direction: column;
+  }
+  .iris-settings .iris-settings-nav {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    width: auto;
+    height: auto;
+    padding: 8px 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: none;
+    border-bottom: 1px solid var(--s-line);
+    background: var(--s-bg);
+  }
+  .iris-settings .iris-settings-brand,
+  .iris-settings .iris-settings-group {
+    display: none;
+  }
+  .iris-settings .iris-settings-nav a {
+    flex: none;
+    white-space: nowrap;
+  }
+  .iris-settings input[type="search"].iris-settings-search {
+    flex: none;
+    width: 150px;
+    margin: 0 6px 0 0;
+  }
+}
+
+/* base.css gives every element 16px: the dashboard's text sets its own size */
+.iris-usage-list .iris-ulist-row > span {
+  font-size: 13px;
+}
+.iris-usage-list .iris-ulist-head > span {
+  font-size: 11.5px;
+}
+.iris-chart-tip b,
+.iris-chart-tip div,
+.iris-chart-tip span {
+  font-size: 12px;
+}

@@ -7,7 +7,7 @@
  * each model: what Settings → Usage shows and what the panel's status line reads.
  *
  * One store object, saved as iris-usage.json:
- *   days:     { 'YYYY-MM-DD': { tasks, requests, input, output, ms, lookups } }
+ *   days:     { 'YYYY-MM-DD': { tasks, requests, input, output, ms, lookups, cached, genMs, genOut } }
  *   sessions: { <id>: { title, project, provider, model, requests, input, output, cached, ms, genMs, genOut, first, last } }
  *   projects: { <id>: { name, requests, input, output, cached, ms, genMs, genOut, last } }
  * genMs / genOut add up only the replies whose generation time is known, so their ratio is a true
@@ -85,10 +85,7 @@ function record (store, kind, data, now) {
   if (kind !== 'request') return s
 
   const usage = d.usage || {}
-  day.requests++
-  day.input += usage.prompt_tokens || 0
-  day.output += usage.completion_tokens || 0
-  day.ms += d.ms || 0
+  addReply(day, usage, d.ms)
 
   const t = when.getTime()
   if (d.session && d.session.id) {

@@ -27,6 +27,8 @@
  * Tests inject a fake model with the same `next()` shape; `fetch` can be injected too.
  */
 
+const contextMeter = require('./contextMeter')
+
 const DEFAULT_TIMEOUT_MS = 180 * 1000
 
 const MAX_TOKENS_BY_THINKING = {
@@ -440,20 +442,42 @@ async function probeServer (config) {
     const anthropic = wireFormat(config.provider) === 'anthropic'
     const res = await fetchImpl(joinUrl(config.baseUrl, anthropic ? 'models?limit=100' : 'models'), {
       headers: anthropic ? anthropicHeaders(config.apiKey) : (config.apiKey ? { Authorization: 'Bearer ' + config.apiKey } : {}),
-      signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined
+      signal: AbortSignal.timeout ? AbortSignal.timeout(config.timeoutMs || 8000) : undefined
     })
     if (!res.ok) return { ok: false, error: 'HTTP ' + res.status }
     const json = await res.json()
-    const ids = Array.isArray(json.data) ? json.data.map(m => m.id) : []
-    return { ok: true, models: ids }
+    const list = Array.isArray(json.data) ? json.data : []
+    const ids = list.map(m => m.id)
+    // each model's context window, where the server says it (most local servers and Claude do; OpenAI does not)
+    const windows = {}
+    list.forEach(m => { const n = contextMeter.windowFromModelEntry(m); if (m.id && n) windows[m.id] = n })
+    let contextWindow = config.model ? windows[config.model] || 0 : 0
+    if (!contextWindow && config.model && !anthropic) contextWindow = await serverContextSize(fetchImpl, config.baseUrl)
+    if (!contextWindow) contextWindow = contextMeter.knownContextWindow(config.model)
+    return { ok: true, models: ids, windows, contextWindow }
   } catch (err) {
     return { ok: false, error: err.message }
+  }
+}
+
+/* llama.cpp's /props (at the server root, beside /v1) states the context it was started with */
+async function serverContextSize (fetchImpl, baseUrl) {
+  try {
+    const root = String(baseUrl || '').replace(/\/+$/, '').replace(/\/v1$/, '')
+    const res = await fetchImpl(joinUrl(root, 'props'), { signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined })
+    if (!res.ok) return 0
+    const json = await res.json()
+    const gen = json.default_generation_settings || {}
+    return Number(gen.n_ctx) || Number(json.n_ctx) || 0
+  } catch (e) {
+    return 0
   }
 }
 
 module.exports = {
   createModelClient,
   probeServer,
+  serverContextSize,
   normalizeResponse,
   cleanContent,
   thinkingFields,

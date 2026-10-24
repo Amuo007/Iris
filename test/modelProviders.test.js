@@ -175,13 +175,42 @@ test('Messages API usage counts cache reads and writes as input', () => {
 test('probe: each provider gets its own headers and model list path', async () => {
   const fetch = fakeFetch([() => new Response(JSON.stringify({ data: [{ id: 'claude-opus-5-5' }] }), { status: 200 })])
   const a = await probeServer({ provider: 'anthropic', baseUrl: 'https://api.anthropic.com/v1', apiKey: 'k', fetch })
-  assert.deepStrictEqual(a, { ok: true, models: ['claude-opus-5-5'] })
+  assert.deepStrictEqual(a, { ok: true, models: ['claude-opus-5-5'], windows: {}, contextWindow: 0 })
   assert.strictEqual(fetch.calls[0].url, 'https://api.anthropic.com/v1/models?limit=100')
   assert.strictEqual(fetch.calls[0].headers['x-api-key'], 'k')
   const fetch2 = fakeFetch([() => new Response(JSON.stringify({ data: [{ id: 'q' }] }), { status: 200 })])
   await probeServer({ provider: 'local', baseUrl: 'http://127.0.0.1:1234/v1', apiKey: '', fetch: fetch2 })
   assert.strictEqual(fetch2.calls[0].url, 'http://127.0.0.1:1234/v1/models')
   assert.deepStrictEqual(fetch2.calls[0].headers, {})
+})
+
+test('probe: the model\'s context window from its /models entry, then /props, then what is known', async () => {
+  // Halogen / vLLM / Lemonade style: the window is on the model entry
+  const f1 = fakeFetch([() => new Response(JSON.stringify({ data: [{ id: 'q', context_length: 262144, meta: { n_ctx: 262144 } }, { id: 'other', max_model_len: 32768 }] }), { status: 200 })])
+  const r1 = await probeServer({ provider: 'local', baseUrl: 'http://h:8731/v1', model: 'q', fetch: f1 })
+  assert.strictEqual(r1.contextWindow, 262144)
+  assert.deepStrictEqual(r1.windows, { q: 262144, other: 32768 })
+  assert.strictEqual(f1.calls.length, 1)
+  // plain llama.cpp: nothing on the entry, so /props at the server root (beside /v1)
+  const f2 = fakeFetch([
+    () => new Response(JSON.stringify({ data: [{ id: 'q' }] }), { status: 200 }),
+    () => new Response(JSON.stringify({ default_generation_settings: { n_ctx: 65536 } }), { status: 200 })
+  ])
+  const r2 = await probeServer({ provider: 'local', baseUrl: 'http://h:8080/v1/', model: 'q', fetch: f2 })
+  assert.strictEqual(f2.calls[1].url, 'http://h:8080/props')
+  assert.strictEqual(r2.contextWindow, 65536)
+  // Claude: the Models API's max_input_tokens, else the known size; /props is never asked
+  const f3 = fakeFetch([() => new Response(JSON.stringify({ data: [{ id: 'claude-opus-5-5', max_input_tokens: 1000000 }] }), { status: 200 })])
+  assert.strictEqual((await probeServer({ provider: 'anthropic', baseUrl: 'https://api.anthropic.com/v1', apiKey: 'k', model: 'claude-opus-5-5', fetch: f3 })).contextWindow, 1000000)
+  const f4 = fakeFetch([() => new Response(JSON.stringify({ data: [] }), { status: 200 })])
+  assert.strictEqual((await probeServer({ provider: 'anthropic', baseUrl: 'https://api.anthropic.com/v1', apiKey: 'k', model: 'claude-haiku-4-5', fetch: f4 })).contextWindow, 200000)
+  assert.strictEqual(f4.calls.length, 1)
+  // an OpenAI-style cloud that states nothing and has no /props: unknown (0), not a guess
+  const f5 = fakeFetch([
+    () => new Response(JSON.stringify({ data: [{ id: 'gpt-x' }] }), { status: 200 }),
+    () => new Response('not found', { status: 404 })
+  ])
+  assert.strictEqual((await probeServer({ provider: 'openai', baseUrl: 'https://api.example.com/v1', apiKey: 'k', model: 'gpt-x', fetch: f5 })).contextWindow, 0)
 })
 
 /* A real HTTP server on 127.0.0.1 speaking both wire formats, so the client runs over a socket with real SSE framing. */

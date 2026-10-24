@@ -75,6 +75,7 @@ timeline without typing. The real model server is never contacted by any test.
 | Thinking | **Fast** (no thinking) · **Balanced** · **Careful** · **Deep** |
 | Run | **Once** · **Non-stop** (no step or time limit, resumes itself after errors) · **Every 15 min … every day** |
 | Smart | Off, **Quick** or **Deep** — see below |
+| Context | The ring beside **Smart** shows how full the model's context window is. Click it for what fills it (Iris's instructions, your info, the task, earlier steps, this step, the screenshot), the free space, the last reply's speed and what the chat has used. Near 85 % Iris forgets its oldest steps (the task, plan and notes stay) |
 
 Each step shows what Iris did, why, and the screenshot it decided from (click the thumbnail).
 
@@ -172,26 +173,32 @@ typed by Iris), `iris_accounts` (`{{account:site.com}}`), `iris_save_account`, `
 
 ### Settings
 
+One section at a time: pick it in the sidebar, or type in **Search settings** to see every section
+that mentions a word.
+
 - **General, Bookmarks, History, Cookies & site data, Appearance, Privacy, Search engine,
   Passwords, Browsing** — the usual browser settings
-- **Iris AI:** the model provider, then its server, model and API key, thinking level, Smart
-  default, steps and minutes per task, screenshot size, when a site needs an account. Providers:
+- **Iris AI:** *Model* (provider, server, model, API key, context window), *Behaviour* (thinking
+  level, Smart default, when a site needs an account, the pointer and pause switches) and, folded
+  away, *Advanced* (steps and minutes per task, answer timeout, temperature, screenshots). Providers:
   - **Local model** — any OpenAI-compatible server you run (llama.cpp, LM Studio, Ollama, Lemonade);
     nothing leaves your network
   - **OpenAI-compatible API** — OpenAI, OpenRouter, Groq or any `/v1/chat/completions` endpoint, with your key
   - **Claude** — the Anthropic Messages API (`/v1/messages`), with your key
 
-  Each provider keeps its own URL, model and key, so switching back and forth loses nothing. Test
-  connection asks the server for its models (from the app, so cloud APIs work too) and offers them
-  in the Model field. The model has to read images: Iris works from screenshots.
+  Each provider keeps its own URL, model, key and context window, so switching back and forth loses
+  nothing. Test connection asks the server for its models (from the app, so cloud APIs work too) and
+  offers them in the Model field. The model has to read images: Iris works from screenshots.
+  The context window is found by itself (the server's model list, llama.cpp's `/props`, or the
+  known size of Claude models); type a number only when the server does not say.
 - **Look-ups:** on/off, how many per task, sites never to contact
 - **My info:** your details for forms and logins. Secret fields are encrypted with the macOS
   keychain and never shown to the model: it types `{{Password}}` and Iris fills in the real value
-- **Accounts, Rules, Schedule, Skills, Coding agents, Usage** (tasks, requests, tokens, look-ups,
-  time per step — today, 7 and 30 days, all time; then tokens and output speed per project and for
-  the last sessions). While a task runs, the panel's status line shows the model's speed
-  (`61 tok/s`), the context of its last reply (`ctx 7.5k`) and what the session has used so far;
-  the result card adds the run's tokens
+- **Accounts, Rules, Schedule, Skills, Coding agents**
+- **Usage:** totals for 7 days, 30 days or all time (tokens read and written, model replies and
+  seconds per step, tasks and look-ups, output speed and how much was read from the cache), a bar
+  per day (tokens, replies or model time; hover a bar for the day's figures), then tokens and speed
+  per project and for the latest chats
 - **Jobs:** Career profile, Applying (roles, places, fit needed, submit on its own or ask first,
   per-day limit, answers for application forms), Resume template (built-in or your LaTeX, try it),
   Applications
@@ -266,6 +273,7 @@ Every technique, with before/after numbers: [docs/TECHNIQUES.md](docs/TECHNIQUES
 | `iris/agent/coordinateMapper.js` | Image px ⇄ view CSS px |
 | `iris/agent/modelClient.js` | Streaming model client: OpenAI-style and Claude Messages API, thinking levels, abort |
 | `iris/agent/usage.js` | Token use per day, session and project, and output speed |
+| `iris/agent/contextMeter.js` | What fills the context window each step; screenshot token counts; window sizes |
 | `main/irisAgent.js` | The Electron side: the "computer", tabs, downloads, sessions, projects, accounts, skills |
 | `main/irisJobs.js` | Jobs on the Electron side: storage, LaTeX builds, tailoring, applications log |
 | `main/irisBridge.js`, `bin/iris-mcp.js` | Coding-agent bridge and its MCP server |
@@ -283,7 +291,8 @@ node --test test/*.test.js      # no Electron, no network, a few seconds
 ```
 
 Covered: the action grammar, coordinate mapping, every safety stop, input planning, the model
-client (both wire formats, against a local mock server too), usage tracking, memory and duplicate detection, look-up parsers, Chrome bookmark import, the MCP server,
+client (both wire formats, against a local mock server too), usage tracking, the context meter (its
+split of a real job step is checked against the server's tokenizer), memory and duplicate detection, look-up parsers, Chrome bookmark import, the MCP server,
 the Jobs core (LaTeX import of a Jake-style resume, template rendering, tailoring checks, one-page
 fitting), the cross-window model lock, and
 the loop itself (Smart planning with look-ups, quizzes, judging, compaction, budgets, pause, stop,

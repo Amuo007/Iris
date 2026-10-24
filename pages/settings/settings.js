@@ -685,6 +685,7 @@ var IRIS_AI_DEFAULTS = {
   baseUrl: 'http://192.168.1.252:8731/v1',
   model: 'halogen-qwen3.8-flash-next',
   apiKey: '',
+  contextWindow: 0,
   providers: {},
   thinking: 'low',
   accountMode: 'signup',
@@ -747,7 +748,7 @@ function irisProviderOf (cfg) {
 function irisRememberProvider () {
   var p = irisProviderOf(irisAI)
   irisAI.providers = Object.assign({}, irisAI.providers || {})
-  irisAI.providers[p] = { baseUrl: irisAI.baseUrl, model: irisAI.model, apiKey: irisAI.apiKey }
+  irisAI.providers[p] = { baseUrl: irisAI.baseUrl, model: irisAI.model, apiKey: irisAI.apiKey, contextWindow: irisAI.contextWindow || 0 }
 }
 
 function irisRenderProvider () {
@@ -762,7 +763,8 @@ function irisRenderProvider () {
   info.presets.forEach(function (pr, i) {
     var o = document.createElement('option')
     o.value = String(i)
-    o.textContent = pr.name + ' — ' + pr.url
+    o.textContent = pr.name
+    o.title = pr.url
     preset.appendChild(o)
     if (String(irisAI.baseUrl).replace(/\/+$/, '') === pr.url) chosen = String(i)
   })
@@ -777,6 +779,7 @@ var irisFields = [
   { key: 'baseUrl', id: 'iris-base-url', type: 'string' },
   { key: 'model', id: 'iris-model', type: 'string' },
   { key: 'apiKey', id: 'iris-api-key', type: 'string' },
+  { key: 'contextWindow', id: 'iris-context-window', type: 'int' },
   { key: 'thinking', id: 'iris-thinking', type: 'string' },
   { key: 'accountMode', id: 'iris-account-mode', type: 'string' },
   { key: 'maxSteps', id: 'iris-max-steps', type: 'int' },
@@ -806,6 +809,8 @@ function irisRenderAll () {
   irisFields.forEach(function (field) {
     var value = irisAI[field.key]
     if (field.scale && typeof value === 'number') value = Math.round(value / field.scale)
+    // a context window of 0 means "ask the server": the field shows its "Auto" placeholder
+    if (field.key === 'contextWindow' && !value) value = ''
     document.getElementById(field.id).value = value === undefined || value === null ? '' : value
   })
   irisMarkerCheckbox.checked = irisAI.markerEnabled !== false
@@ -839,10 +844,12 @@ irisFields.forEach(function (field) {
       irisAI[field.key] = raw
     }
 
-    if (field.key === 'baseUrl' || field.key === 'model' || field.key === 'apiKey') {
+    if (field.key === 'baseUrl' || field.key === 'model' || field.key === 'apiKey' || field.key === 'contextWindow') {
       irisRememberProvider()
       if (field.key === 'baseUrl') irisRenderProvider()
+      if (field.key !== 'apiKey') irisContextHint(null)
     }
+    if (field.key === 'contextWindow' && !irisAI.contextWindow) input.value = ''
     irisSave()
   })
 })
@@ -856,7 +863,9 @@ document.getElementById('iris-provider').addEventListener('change', function () 
   irisAI.baseUrl = own.baseUrl || first.url
   irisAI.model = own.model || first.model || ''
   irisAI.apiKey = own.apiKey || ''
+  irisAI.contextWindow = Number(own.contextWindow) || 0
   irisRememberProvider()
+  irisContextHint(null)
   document.getElementById('iris-model-list').textContent = ''
   document.getElementById('iris-connection-status').textContent = next === 'local' || irisAI.apiKey ? '' : 'Add your API key, then Test connection.'
   irisRenderAll()
@@ -909,11 +918,31 @@ document.getElementById('iris-reset-defaults').addEventListener('click', functio
 /* asked of the main process: a cloud API refuses a request from this page (CORS) */
 document.getElementById('iris-test-connection').addEventListener('click', function () {
   document.getElementById('iris-connection-status').textContent = 'Checking…'
-  irisAction('modelProbe', { provider: irisProviderOf(irisAI), baseUrl: irisAI.baseUrl, apiKey: irisAI.apiKey })
+  irisAction('modelProbe', { provider: irisProviderOf(irisAI), baseUrl: irisAI.baseUrl, apiKey: irisAI.apiKey, model: irisAI.model })
 })
+
+/* what the server said about the model's context window (null: not asked yet) */
+function irisContextHint (found) {
+  var hint = document.getElementById('iris-context-hint')
+  var own = Number(irisAI.contextWindow) || 0
+  var n = function (x) { return Number(x).toLocaleString() }
+  if (found === null || found === undefined) {
+    hint.textContent = own ? 'Iris uses ' + n(own) + ' tokens. Clear the field to let Iris ask the server.' : 'Auto: Iris asks the model\'s server.'
+  } else if (found > 0) {
+    hint.textContent = own && own !== found ? 'You set ' + n(own) + '. The server says ' + n(found) + '.' : 'Auto: ' + n(found) + ' tokens, from the server.'
+  } else {
+    hint.textContent = own ? 'Iris uses ' + n(own) + ' tokens (the server does not say).' : 'The server does not say. Type it here if you know it; Iris works without it.'
+  }
+}
 
 function irisShowProbe (r) {
   var status = document.getElementById('iris-connection-status')
+  if (r && r.quiet) {
+    // the page asked on its own (on open): only the context window hint changes
+    if (r.ok) irisContextHint(r.contextWindow || 0)
+    return
+  }
+  if (r && r.ok) irisContextHint(r.contextWindow || 0)
   if (!r || !r.ok) {
     var why = (r && r.error) || 'no answer'
     status.textContent = /HTTP 401|HTTP 403/.test(why)
@@ -940,6 +969,7 @@ function irisShowProbe (r) {
     : 'Connected, but "' + irisAI.model + '" is not in its list of ' + ids.length + ' models: pick one from the Model field.'
 }
 
+var irisQuietProbed = false
 settings.listen('irisAI', function (value) {
   var stored = value || {}
   irisAI = Object.assign({}, IRIS_AI_DEFAULTS)
@@ -953,6 +983,12 @@ settings.listen('irisAI', function (value) {
     })
   }
   irisRenderAll()
+  irisContextHint(null)
+  // a local server is asked once, quietly, so the context window hint shows its real size
+  if (!irisQuietProbed && irisProviderOf(irisAI) === 'local') {
+    irisQuietProbed = true
+    irisAction('modelProbe', { provider: 'local', baseUrl: irisAI.baseUrl, apiKey: irisAI.apiKey, model: irisAI.model, quiet: true })
+  }
 })
 
 /* --- General, Bookmarks, Clear data --------------------------------------- */
@@ -1151,57 +1187,117 @@ document.getElementById('iris-cookies-clear').addEventListener('click', function
 })
 irisAction('cookiesList')
 
-/* sidebar: highlight the section in view */
+/* sidebar: one section at a time, like System Settings; search shows every section that matches */
 var irisNavLinks = Array.prototype.slice.call(document.querySelectorAll('#iris-settings-nav a'))
 var irisSections = irisNavLinks.map(function (a) { return document.querySelector(a.getAttribute('href')) }).filter(Boolean)
-var irisSpy = new IntersectionObserver(function (entries) {
-  entries.forEach(function (en) {
-    if (!en.isIntersecting) return
-    irisNavLinks.forEach(function (a) { a.classList.toggle('is-current', a.getAttribute('href') === '#' + en.target.id) })
-  })
-}, { rootMargin: '-8% 0px -88% 0px' })
-irisSections.forEach(function (sec) { irisSpy.observe(sec) })
+var irisSettingsRoot = document.querySelector('.iris-settings')
+var irisSettingsTitle = document.querySelector('.iris-settings-title')
+var irisSettingsSearch = document.getElementById('iris-settings-search')
+// "Iris settings" in the agent panel links to #iris-ai
+var IRIS_SECTION_ALIASES = { 'iris-ai': 'iris-ai-settings-container' }
 
-/* --- Usage ------------------------------------------------------------- */
-
-function irisFormatCount (n) {
-  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + 'M'
-  if (n >= 1e4) return Math.round(n / 1e3) + 'K'
-  return String(n)
+function irisSectionFromHash () {
+  var id = decodeURIComponent((location.hash || '').slice(1))
+  id = IRIS_SECTION_ALIASES[id] || id
+  var el = id && document.getElementById(id)
+  return el && irisSections.indexOf(el) !== -1 ? id : irisSections[0].id
 }
 
-function irisRenderUsage (usage) {
-  var days = (usage && usage.days) || {}
-  var keyOf = function (d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') }
-  var sum = function (n) {
-    var t = { tasks: 0, requests: 0, input: 0, output: 0, ms: 0, lookups: 0 }
-    Object.keys(days).forEach(function (k) {
-      if (n !== null) {
-        var cutoff = new Date()
-        cutoff.setDate(cutoff.getDate() - (n - 1))
-        if (k < keyOf(cutoff)) return
-      }
-      Object.keys(t).forEach(function (f) { t[f] += days[k][f] || 0 })
-    })
-    return t
-  }
-  var rows = [['Today', sum(1)], ['Last 7 days', sum(7)], ['Last 30 days', sum(30)], ['All time', sum(null)]]
-  var html = '<tr><th></th><th>Tasks</th><th>Requests</th><th>Input tokens</th><th>Output tokens</th><th>Look-ups</th><th>Avg. per step</th></tr>'
-  rows.forEach(function (r) {
-    var t = r[1]
-    html += '<tr><th>' + r[0] + '</th><td>' + irisFormatCount(t.tasks) + '</td><td>' + irisFormatCount(t.requests) + '</td><td>' + irisFormatCount(t.input) +
-      '</td><td>' + irisFormatCount(t.output) + '</td><td>' + irisFormatCount(t.lookups) + '</td><td>' + (t.requests ? (t.ms / t.requests / 1000).toFixed(1) + ' s' : '–') + '</td></tr>'
+function irisShowSection (id, keepScroll) {
+  irisSettingsRoot.classList.add('is-paged')
+  irisSettingsRoot.classList.remove('is-searching')
+  irisSections.forEach(function (sec) { sec.classList.toggle('is-shown', sec.id === id) })
+  irisNavLinks.forEach(function (a) {
+    var on = a.getAttribute('href') === '#' + id
+    a.hidden = false
+    a.classList.toggle('is-current', on)
+    if (on) {
+      a.setAttribute('aria-current', 'page')
+      irisSettingsTitle.textContent = a.textContent
+    } else {
+      a.removeAttribute('aria-current')
+    }
   })
-  document.getElementById('iris-usage-table').innerHTML = html
-  irisRenderUsageGroups(usage || {})
+  if (!keepScroll) window.scrollTo(0, 0)
+}
+
+irisNavLinks.forEach(function (a) {
+  a.addEventListener('click', function (e) {
+    e.preventDefault()
+    var id = a.getAttribute('href').slice(1)
+    irisSettingsSearch.value = ''
+    window.history.replaceState(null, '', '#' + id)
+    irisShowSection(id)
+  })
+})
+window.addEventListener('hashchange', function () { irisShowSection(irisSectionFromHash()) })
+
+function irisRunSearch () {
+  var raw = irisSettingsSearch.value.trim()
+  var q = raw.toLowerCase()
+  if (!q) return irisShowSection(irisSectionFromHash())
+  irisSettingsRoot.classList.add('is-searching')
+  var found = 0
+  irisSections.forEach(function (sec) {
+    var link = irisNavLinks.filter(function (a) { return a.getAttribute('href') === '#' + sec.id })[0]
+    var hit = (link && link.textContent.toLowerCase().indexOf(q) !== -1) || sec.textContent.toLowerCase().indexOf(q) !== -1
+    sec.classList.toggle('is-shown', hit)
+    if (link) {
+      link.hidden = !hit
+      link.classList.remove('is-current')
+    }
+    if (hit) found++
+  })
+  irisSettingsTitle.textContent = found ? 'Results for “' + raw + '”' : 'Nothing matches “' + raw + '”'
+  window.scrollTo(0, 0)
+}
+irisSettingsSearch.addEventListener('input', irisRunSearch)
+irisSettingsSearch.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') {
+    irisSettingsSearch.value = ''
+    irisRunSearch()
+  }
+})
+irisShowSection(irisSectionFromHash(), true)
+
+/* --- Usage: four totals, a bar per day, then projects and chats ------------ */
+
+var irisUsageData = null
+var irisUsageRange = 30 // days; 0 = all time
+var irisUsageMetric = 'tokens'
+
+/* 812 → "812", 22,614 → "22.6k", 262,144 → "262k", 9,310,000 → "9.3M" (the panel writes them the same way) */
+function irisFormatK (n) {
+  n = Math.max(0, Math.round(n || 0))
+  if (n < 1000) return String(n)
+  if (n < 100000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
+  if (n < 1e6) return Math.round(n / 1000) + 'k'
+  if (n < 1e9) return (n / 1e6).toFixed(n < 1e7 ? 1 : 0).replace(/\.0$/, '') + 'M'
+  return (n / 1e9).toFixed(1).replace(/\.0$/, '') + 'B'
+}
+
+function irisFormatDuration (ms) {
+  var min = Math.round((ms || 0) / 60000)
+  if (min < 60) return min + ' min'
+  var h = Math.floor(min / 60)
+  return h + ' h' + (min % 60 ? ' ' + (min % 60) + ' min' : '')
+}
+
+function irisDayKey (d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
 }
 
 function irisEscape (text) {
   return String(text == null ? '' : text).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] })
 }
 
+function irisSpeedOf (t) {
+  return t && t.genMs > 0 && t.genOut > 0 ? t.genOut / (t.genMs / 1000) : 0
+}
+
 function irisSpeed (t) {
-  return t && t.genMs > 0 && t.genOut > 0 ? Math.round(t.genOut / (t.genMs / 1000)) + ' tok/s' : '–'
+  var v = irisSpeedOf(t)
+  return v ? Math.round(v) + ' tok/s' : '–'
 }
 
 function irisWhen (ms) {
@@ -1215,32 +1311,188 @@ function irisWhen (ms) {
 
 var IRIS_PROVIDER_NAMES = { local: 'Local', openai: 'OpenAI-compatible', anthropic: 'Claude' }
 
+/* the days of the chosen period, oldest first (all time starts at the first day with use) */
+function irisUsagePeriod (days) {
+  var today = new Date()
+  today.setHours(0, 0, 0, 0)
+  var start = new Date(today)
+  if (irisUsageRange) {
+    start.setDate(start.getDate() - (irisUsageRange - 1))
+  } else {
+    var first = Object.keys(days).sort()[0]
+    if (first) start = new Date(first + 'T00:00:00')
+    // at least a week, so a new install's chart is not one fat bar
+    var weekAgo = new Date(today)
+    weekAgo.setDate(weekAgo.getDate() - 6)
+    if (start > weekAgo) start = weekAgo
+  }
+  var list = []
+  var count = Math.round((today - start) / 86400000) + 1
+  for (var i = 0; i < count; i++) {
+    var d = new Date(start)
+    d.setDate(d.getDate() + i)
+    var key = irisDayKey(d)
+    list.push({ key: key, date: d, t: days[key] || {} })
+  }
+  return list
+}
+
+function irisRenderUsage (usage) {
+  if (usage !== undefined) irisUsageData = usage || {}
+  var data = irisUsageData || {}
+  var period = irisUsagePeriod(data.days || {})
+  var sum = { tasks: 0, requests: 0, input: 0, output: 0, cached: 0, ms: 0, lookups: 0, genMs: 0, genOut: 0 }
+  period.forEach(function (p) { Object.keys(sum).forEach(function (f) { sum[f] += p.t[f] || 0 }) })
+  // days recorded before speeds were kept per day: the chats used in the period know theirs
+  if (!sum.genMs && period.length) {
+    var from = period[0].date.getTime()
+    var sessions = data.sessions || {}
+    Object.keys(sessions).forEach(function (id) {
+      var t = sessions[id]
+      if ((t.last || 0) >= from) { sum.genMs += t.genMs || 0; sum.genOut += t.genOut || 0 }
+    })
+  }
+  irisRenderTiles(sum)
+  irisRenderChart(period)
+  irisRenderUsageGroups(data)
+}
+
+function irisTile (label, value, sub) {
+  return '<div class="iris-tile"><div class="iris-tile-label">' + label + '</div><div class="iris-tile-value">' + value +
+    '</div><div class="iris-tile-sub">' + (sub || '&nbsp;') + '</div></div>'
+}
+
+function irisRenderTiles (t) {
+  var speed = irisSpeedOf(t)
+  var cachedShare = t.input && t.cached ? Math.round((t.cached / t.input) * 100) : 0
+  document.getElementById('iris-usage-tiles').innerHTML =
+    irisTile('Tokens', irisFormatK(t.input + t.output), irisFormatK(t.input) + ' read · ' + irisFormatK(t.output) + ' written') +
+    irisTile('Model replies', irisFormatK(t.requests), t.requests ? (t.ms / t.requests / 1000).toFixed(1) + ' s per step' : '') +
+    irisTile('Tasks', irisFormatK(t.tasks), t.lookups ? irisFormatK(t.lookups) + ' look-ups' : '') +
+    irisTile('Speed', speed ? Math.round(speed) + ' tok/s' : '–', cachedShare ? cachedShare + '% of reading from cache' : 'output tokens per second')
+}
+
+/* round up to 1, 2, 2.5 or 5 × 10^n so the gridlines land on plain numbers */
+function irisNiceMax (v) {
+  if (!(v > 0)) return 1
+  var p = Math.pow(10, Math.floor(Math.log10(v)))
+  var steps = [1, 2, 2.5, 5, 10]
+  for (var i = 0; i < steps.length; i++) if (steps[i] * p >= v) return steps[i] * p
+  return 10 * p
+}
+
+var IRIS_METRICS = {
+  tokens: { title: 'Tokens per day', value: function (t) { return (t.input || 0) + (t.output || 0) }, label: irisFormatK },
+  requests: { title: 'Model replies per day', value: function (t) { return t.requests || 0 }, label: irisFormatK },
+  time: { title: 'Model time per day', value: function (t) { return t.ms || 0 }, label: function (v) { return v ? irisFormatDuration(v) : '0' } }
+}
+
+function irisRenderChart (period) {
+  var metric = IRIS_METRICS[irisUsageMetric]
+  var box = document.getElementById('iris-usage-chart')
+  document.getElementById('iris-chart-title').textContent = metric.title
+  var values = period.map(function (p) { return metric.value(p.t) })
+  var top = irisNiceMax(Math.max.apply(null, values.concat([0])))
+  var html = '<div class="iris-chart-grid">'
+  ;[1, 0.5, 0].forEach(function (f) {
+    html += '<div class="iris-chart-line" style="bottom:' + (f * 100) + '%"><span>' + metric.label(top * f) + '</span></div>'
+  })
+  html += '</div><div class="iris-chart-bars' + (period.length > 45 ? ' is-dense' : '') + '">'
+  period.forEach(function (p, i) {
+    var h = values[i] > 0 ? Math.max(1.5, (values[i] / top) * 100) : 0
+    html += '<div class="iris-chart-col" data-i="' + i + '" aria-label="' + irisEscape(p.date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ': ' + metric.label(values[i])) + '">' +
+      '<div class="iris-chart-bar" style="height:' + h + '%"></div></div>'
+  })
+  html += '</div><div class="iris-chart-axis">'
+  // a date under the first, middle and last bars
+  var marks = period.length > 1 ? [0, Math.floor((period.length - 1) / 2), period.length - 1] : [0]
+  marks.forEach(function (i, n) {
+    if (!period[i]) return
+    var where = period.length > 1 ? (i / (period.length - 1)) * 100 : 50
+    html += '<span class="iris-chart-date' + (n === marks.length - 1 && period.length > 1 ? ' is-last' : n === 0 ? ' is-first' : '') + '" style="left:' + where + '%">' +
+      (irisDayKey(period[i].date) === irisDayKey(new Date()) ? 'Today' : period[i].date.toLocaleDateString([], { month: 'short', day: 'numeric' })) + '</span>'
+  })
+  html += '</div><div class="iris-chart-tip" hidden></div>'
+  box.innerHTML = values.some(function (v) { return v > 0 }) ? html : '<div class="iris-chart-empty">Nothing used in this period yet.</div>'
+  box._period = period
+}
+
+/* hover: the day's figures in a small card over the bar */
+function irisChartHover (e) {
+  var box = document.getElementById('iris-usage-chart')
+  var col = e.target.closest && e.target.closest('.iris-chart-col')
+  var tip = box.querySelector('.iris-chart-tip')
+  box.querySelectorAll('.iris-chart-col.is-hover').forEach(function (c) { if (c !== col) c.classList.remove('is-hover') })
+  if (!col || !tip || !box._period) {
+    if (tip) tip.hidden = true
+    return
+  }
+  var p = box._period[Number(col.dataset.i)]
+  var t = p.t
+  col.classList.add('is-hover')
+  tip.innerHTML = '<b>' + p.date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + '</b>' +
+    '<div><span>Read</span><span>' + irisFormatK(t.input) + '</span></div>' +
+    '<div><span>Written</span><span>' + irisFormatK(t.output) + '</span></div>' +
+    '<div><span>Replies</span><span>' + irisFormatK(t.requests) + '</span></div>' +
+    '<div><span>Model time</span><span>' + (t.ms ? irisFormatDuration(t.ms) : '–') + '</span></div>' +
+    '<div><span>Tasks</span><span>' + (t.tasks || 0) + '</span></div>'
+  tip.hidden = false
+  // beside the bar, never over it: to its left on the right half of the chart, to its right otherwise
+  var boxRect = box.getBoundingClientRect()
+  var colRect = col.getBoundingClientRect()
+  var x = colRect.left - boxRect.left
+  var left = x > boxRect.width / 2 ? x - tip.offsetWidth - 8 : x + colRect.width + 8
+  tip.style.left = Math.max(-40, Math.min(left, boxRect.width - tip.offsetWidth)) + 'px'
+}
+
 function irisRenderUsageGroups (usage) {
   var projects = usage.projects || {}
   var sessions = usage.sessions || {}
   var newest = function (obj) { return Object.keys(obj).sort(function (a, b) { return (obj[b].last || 0) - (obj[a].last || 0) }) }
-  var head = '<tr><th></th><th>Requests</th><th>Input tokens</th><th>Output tokens</th><th>Speed</th><th>Last used</th></tr>'
+  var total = function (t) { return (t.input || 0) + (t.output || 0) }
+  var head = '<div class="iris-ulist-row iris-ulist-head"><span>Name</span><span></span><span>Tokens</span><span>Replies</span><span>Speed</span><span>Last used</span></div>'
+
+  var row = function (name, sub, t, max) {
+    return '<div class="iris-ulist-row"><span class="iris-ulist-name" title="' + irisEscape(name) + '">' + irisEscape(name) +
+      (sub ? '<small>' + irisEscape(sub) + '</small>' : '') + '</span>' +
+      '<span class="iris-ulist-meter"><i style="width:' + (max ? Math.max(2, (total(t) / max) * 100) : 0) + '%"></i></span>' +
+      '<span>' + irisFormatK(total(t)) + '</span><span>' + irisFormatK(t.requests || 0) + '</span><span>' + irisSpeed(t) + '</span><span>' + irisWhen(t.last) + '</span></div>'
+  }
 
   var pIds = newest(projects)
-  var pHtml = head
-  pIds.forEach(function (id) {
-    var t = projects[id]
-    pHtml += '<tr><td class="iris-usage-name">' + irisEscape(t.name || 'Project') + '</td><td>' + irisFormatCount(t.requests || 0) + '</td><td>' + irisFormatCount(t.input || 0) +
-      '</td><td>' + irisFormatCount(t.output || 0) + '</td><td>' + irisSpeed(t) + '</td><td>' + irisWhen(t.last) + '</td></tr>'
-  })
-  document.getElementById('iris-usage-projects').innerHTML = pIds.length ? pHtml : '<tr><td class="iris-usage-empty">No project work counted yet.</td></tr>'
+  var pMax = Math.max.apply(null, pIds.map(function (id) { return total(projects[id]) }).concat([0]))
+  document.getElementById('iris-usage-projects').innerHTML = pIds.length
+    ? head + pIds.map(function (id) { return row(projects[id].name || 'Project', '', projects[id], pMax) }).join('')
+    : '<div class="iris-usage-empty">Work in a project shows here.</div>'
 
   var sIds = newest(sessions).slice(0, 15)
-  var sHtml = '<tr><th></th><th>Model</th><th>Requests</th><th>Input tokens</th><th>Output tokens</th><th>Speed</th><th>Last used</th></tr>'
-  sIds.forEach(function (id) {
-    var t = sessions[id]
-    var model = (IRIS_PROVIDER_NAMES[t.provider] || '') + (t.model ? ' · ' + t.model : '')
-    sHtml += '<tr><td class="iris-usage-name" title="' + irisEscape(t.title || '') + '">' + irisEscape(t.title || id) + '</td><td class="iris-usage-name">' + irisEscape(model || '–') +
-      '</td><td>' + irisFormatCount(t.requests || 0) + '</td><td>' + irisFormatCount(t.input || 0) + '</td><td>' + irisFormatCount(t.output || 0) +
-      '</td><td>' + irisSpeed(t) + '</td><td>' + irisWhen(t.last) + '</td></tr>'
-  })
-  document.getElementById('iris-usage-sessions').innerHTML = sIds.length ? sHtml : '<tr><td class="iris-usage-empty">Sessions show here after their first model reply.</td></tr>'
+  var sMax = Math.max.apply(null, sIds.map(function (id) { return total(sessions[id]) }).concat([0]))
+  document.getElementById('iris-usage-sessions').innerHTML = sIds.length
+    ? head + sIds.map(function (id) {
+      var t = sessions[id]
+      var model = (IRIS_PROVIDER_NAMES[t.provider] || '') + (t.model ? ' · ' + t.model : '')
+      return row(t.title || 'Chat', model, t, sMax)
+    }).join('')
+    : '<div class="iris-usage-empty">Chats show here after their first model reply.</div>'
 }
+
+function irisSegmented (id, attr, onPick) {
+  var group = document.getElementById(id)
+  group.addEventListener('click', function (e) {
+    var b = e.target.closest('button')
+    if (!b) return
+    group.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-selected', String(x === b)) })
+    onPick(b.dataset[attr])
+  })
+}
+irisSegmented('iris-usage-range', 'days', function (v) { irisUsageRange = Number(v) || 0; irisRenderUsage() })
+irisSegmented('iris-usage-metric', 'metric', function (v) { irisUsageMetric = IRIS_METRICS[v] ? v : 'tokens'; irisRenderUsage() })
+document.getElementById('iris-usage-chart').addEventListener('mousemove', irisChartHover)
+document.getElementById('iris-usage-chart').addEventListener('mouseleave', function () {
+  var tip = document.querySelector('#iris-usage-chart .iris-chart-tip')
+  if (tip) tip.hidden = true
+  document.querySelectorAll('#iris-usage-chart .iris-chart-col.is-hover').forEach(function (c) { c.classList.remove('is-hover') })
+})
 
 settings.listen('irisUsage', irisRenderUsage)
 
@@ -1583,11 +1835,6 @@ settings.listen('irisSchedules', function (value) {
   irisSchedules = list.map(function (s) { return Object.assign({}, s) })
   if (!irisScheduleRows.contains(document.activeElement)) irisRenderSchedules()
 })
-
-// "Iris settings" in the agent panel deep-links here
-if (location.hash === '#iris-ai') {
-  document.getElementById('iris-ai-settings-container').scrollIntoView()
-}
 
 /* --- Coding agents (MCP bridge) ------------------------------------------ */
 

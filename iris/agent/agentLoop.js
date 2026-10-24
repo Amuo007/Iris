@@ -29,6 +29,7 @@ const { createSafetyGate } = require('./safety')
 const { createHistory } = require('./history')
 const prompts = require('./prompts')
 const { parseLookups } = require('./lookup')
+const contextMeter = require('./contextMeter')
 
 const DEFAULTS = {
   maxAutoWaits: 4,
@@ -45,6 +46,8 @@ const DEFAULTS = {
   maxServerWaitMs: 10 * 60 * 1000, // 0 = wait for the model server forever (non-stop runs)
   askTimeoutMs: 0, // non-stop runs: if a question is not answered in time, carry on without it (0 = wait)
   noAsk: '', // set (to what to do instead): ask_user never pauses the run
+  provider: '', // 'anthropic' | 'openai' | 'local': how a screenshot is counted on the Context card
+  contextWindow: 0, // the model's context window in tokens, or a function returning it (0 = unknown)
   coordinateSpace: 'auto'
 }
 
@@ -526,6 +529,7 @@ function createAgent (opts) {
       const stepThinking = thinkingFor(obs, unchanged, lastActed, lastFailed)
       let raw
       let sent = null
+      let sentLayout = null
       safety.beforeModelCall()
       emit('model:start', { step: state.step })
       try {
@@ -533,6 +537,7 @@ function createAgent (opts) {
         // { stable, live }: the stable part opens the prompt (cached), the live part goes last
         const split = extra && typeof extra === 'object' ? extra : { stable: extra, live: '' }
         sent = history.messages(split.stable || undefined, split.live || undefined)
+        sentLayout = history.layout()
         raw = await modelNext(sent, state.step, obs, stepThinking)
       } catch (err) {
         if (stopRequested) return finish('stopped', stopRequested)
@@ -577,6 +582,8 @@ function createAgent (opts) {
       const reasoning = raw && typeof raw === 'object' ? raw.reasoning || '' : ''
       const usage = raw && typeof raw === 'object' ? raw.usage || null : null
       const modelMs = raw && typeof raw === 'object' ? raw.ms || null : null
+      const contextWindow = typeof cfg.contextWindow === 'function' ? cfg.contextWindow() : cfg.contextWindow
+      const context = usage && sentLayout ? contextMeter.estimate(sentLayout, usage, { provider: cfg.provider, window: contextWindow }) : null
 
       // ---- 5. parse ----------------------------------------------------------
       const parsed = parseAction(text, { imageWidth: obs.width, imageHeight: obs.height })
@@ -610,7 +617,11 @@ function createAgent (opts) {
       }
       if (parsed.learn) emit('learn', { step: state.step, tip: parsed.learn, url: obs.url })
       const batch = parsed.actions && parsed.actions.length ? parsed.actions : [parsed.action]
-      emit('thought', { step: state.step, thought: parsed.thought, action: parsed.action, actions: batch, reasoning, usage, modelMs })
+      emit('thought', { step: state.step, thought: parsed.thought, action: parsed.action, actions: batch, reasoning, usage, modelMs, context })
+      // nearly full: forget the oldest steps now (the task, plan and notes stay) instead of failing on the next request
+      if (context && context.window && context.used >= context.compactAt && history.compact()) {
+        emit('compact', { step: state.step, used: context.used, window: context.window })
+      }
 
       const mapping = createMapping({
         imageWidth: obs.width,
