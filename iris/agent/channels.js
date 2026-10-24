@@ -22,6 +22,18 @@ function normalizeNumber (text) {
   return digits.length >= 8 && digits.length <= 15 ? digits : ''
 }
 
+/**
+ * The user's number with its country code: a number typed without one ("832 263 4489") that is the end of the linked
+ * number ("18322634489") is that number (a real setup saved 10 digits and every message went to an address that does
+ * not exist). Otherwise as normalizeNumber.
+ */
+function completeNumber (typed, linked) {
+  const digits = normalizeNumber(typed) || String(typed || '').replace(/[^\d]/g, '')
+  const me = normalizeNumber(linked)
+  if (me && digits.length >= 7 && !/^\s*(\+|00)/.test(String(typed || '')) && me !== digits && me.endsWith(digits)) return me
+  return normalizeNumber(typed)
+}
+
 /** The chat address of a number. */
 function jidFor (number) {
   const n = normalizeNumber(number)
@@ -39,10 +51,23 @@ function phoneOf (jid) {
  * Whether a message came from the user's own number. WhatsApp may address the sender by a hidden id (…@lid) and give
  * the phone address only in remoteJidAlt / participantAlt; anything not provably from that number is ignored.
  */
-function isFromUser (key, userNumber) {
+function isFromUser (key, userNumber, self) {
   const want = normalizeNumber(userNumber)
-  if (!key || !want || key.fromMe) return false
-  return [key.remoteJid, key.remoteJidAlt, key.participant, key.participantAlt].some(function (j) { return phoneOf(j) === want })
+  if (!key || !want) return false
+  const addresses = [key.remoteJid, key.remoteJidAlt, key.participant, key.participantAlt]
+  if (!key.fromMe) return addresses.some(function (j) { return phoneOf(j) === want })
+  // Iris linked to the user's own number ("Message yourself"): the user's replies there are "from me" too; only the
+  // ones Iris did not send itself count, and only in that chat
+  const s = self || {}
+  if (!s.me || normalizeNumber(s.me) !== want || (s.sentIds && s.sentIds.has(key.id))) return false
+  const lid = String(s.meLid || '').replace(/:\d+@/, '@')
+  return [key.remoteJid, key.remoteJidAlt].some(function (j) { return phoneOf(j) === want || (lid && String(j || '').replace(/:\d+@/, '@') === lid) })
+}
+
+/** One of Iris's own messages (all start "[Iris]"): never read as a reply, or Iris would answer itself forever in
+    "Message yourself", where its messages and the user's are both "from me". */
+function isIrisMessage (text) {
+  return /^\s*\[Iris\]/.test(String(text || ''))
 }
 
 /** The text of a message, if it is plain text. */
@@ -171,9 +196,11 @@ module.exports = {
   WAIT_MS,
   PER_HOUR,
   normalizeNumber,
+  completeNumber,
   jidFor,
   phoneOf,
   isFromUser,
+  isIrisMessage,
   messageText,
   jobName,
   codeRequestText,

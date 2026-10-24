@@ -96,3 +96,34 @@ test('what the model is told names the code and the tab to go to', () => {
   assert.ok(/open https:\/\/lifeattiktok\.com\/resume\/1\/apply again/.test(ch.codeArrivedNote(r1, '482913', 0)), 'tab closed: the link instead')
   assert.ok(/log that job needs_you/.test(ch.codeExpiredNote(r1, 3)) && /Close tab 3/.test(ch.codeExpiredNote(r1, 3)))
 })
+
+test('a number saved without its country code is completed from the linked number', () => {
+  assert.strictEqual(ch.completeNumber('832 263 4489', '18322634489'), '18322634489')
+  assert.strictEqual(ch.completeNumber('(832) 263-4489', '18322634489'), '18322634489')
+  assert.strictEqual(ch.completeNumber('+1 832 263 4489', '18322634489'), '18322634489')
+  assert.strictEqual(ch.completeNumber('+44 7700 900123', '18322634489'), '447700900123', 'another number is left as typed')
+  assert.strictEqual(ch.completeNumber('832 263 4489', ''), '8322634489', 'nothing linked yet: as typed')
+  assert.strictEqual(ch.completeNumber('', '18322634489'), '')
+})
+
+test('linked to the user\'s own number: replies in "Message yourself" count, Iris\'s own messages do not', () => {
+  const self = { me: '18322634489', meLid: '205611111111111:7@lid', sentIds: new Set(['IRIS1']) }
+  // the user types a code in "Message yourself" on the phone
+  assert.ok(ch.isFromUser({ fromMe: true, id: 'PHONE1', remoteJid: '18322634489@s.whatsapp.net' }, '18322634489', self))
+  assert.ok(ch.isFromUser({ fromMe: true, id: 'PHONE2', remoteJid: '205611111111111@lid' }, '18322634489', self), 'self chat by hidden id')
+  // what Iris sent there itself
+  assert.ok(!ch.isFromUser({ fromMe: true, id: 'IRIS1', remoteJid: '18322634489@s.whatsapp.net' }, '18322634489', self))
+  // the user writing to someone else from the phone is not for Iris
+  assert.ok(!ch.isFromUser({ fromMe: true, id: 'PHONE3', remoteJid: '15550001111@s.whatsapp.net' }, '18322634489', self))
+  // a second number for Iris: the user's messages are never "from me"
+  assert.ok(!ch.isFromUser({ fromMe: true, id: 'X', remoteJid: '18322634489@s.whatsapp.net' }, '18322634489', { me: '15550002222', sentIds: new Set() }))
+  assert.ok(ch.isFromUser({ id: 'Y', remoteJid: '18322634489@s.whatsapp.net' }, '18322634489', { me: '15550002222', sentIds: new Set() }))
+})
+
+test('Iris never reads its own messages as replies', () => {
+  for (const t of [ch.codeRequestText({ company: 'TikTok', title: 'SWE', what: 'a 6-digit code' }), ch.helpText(), ch.noCodeText({ company: 'A' }), ch.ackText({ company: 'A' }, '482913'), ch.expiredText({ company: 'A' }), ch.lateText({ company: 'A' })]) {
+    assert.ok(ch.isIrisMessage(t), t)
+  }
+  assert.ok(!ch.isIrisMessage('482913'))
+  assert.ok(!ch.isIrisMessage('code is 482913'))
+})

@@ -14,6 +14,8 @@ var irisWhatsAppState = {
   status: 'off', // off | connecting | qr | linked | unlinked | error
   qr: '', // data: URL of the QR code to scan, while linking
   me: '', // the linked number
+  meLid: '', // its hidden-number address, for "Message yourself"
+  sentIds: new Set(), // messages Iris sent (its own messages in "Message yourself" are not replies)
   error: '',
   requests: [],
   retry: 0,
@@ -23,7 +25,7 @@ var irisWhatsAppState = {
 
 function irisWhatsAppSettings () {
   const s = settings.get('irisWhatsApp') || {}
-  return { enabled: s.enabled === true, userNumber: irisChannelsLib.normalizeNumber(s.userNumber) }
+  return { enabled: s.enabled === true, userNumber: irisChannelsLib.completeNumber(s.userNumber, irisWhatsAppState.me) }
 }
 
 function irisWhatsAppDir () {
@@ -97,6 +99,12 @@ async function irisWhatsAppAuthState (B) {
   }
 }
 
+function irisWhatsAppLogText (o, m) {
+  let extra = ''
+  try { extra = o && typeof o === 'object' ? JSON.stringify(o, function (k, v) { return k === 'stack' ? undefined : v }) : String(o || '') } catch (e) {}
+  return (String(m || '') + ' ' + extra).trim().slice(0, 300)
+}
+
 /* Baileys wants a pino logger: only its warnings and errors go to Iris's debug log */
 const irisWhatsAppLog = {
   level: 'warn',
@@ -104,8 +112,8 @@ const irisWhatsAppLog = {
   trace: function () {},
   debug: function () {},
   info: function () {},
-  warn: function (o, m) { DBUG('whatsapp warn: ' + (m || (o && o.msg) || '').toString().slice(0, 200)) },
-  error: function (o, m) { DBUG('whatsapp error: ' + (m || (o && (o.msg || (o.err && o.err.message))) || '').toString().slice(0, 200)) },
+  warn: function (o, m) { DBUG('whatsapp warn: ' + irisWhatsAppLogText(o, m)) },
+  error: function (o, m) { DBUG('whatsapp error: ' + irisWhatsAppLogText(o, m)) },
   fatal: function (o, m) { DBUG('whatsapp fatal: ' + (m || '').toString().slice(0, 200)) }
 }
 
@@ -159,6 +167,7 @@ async function irisWhatsAppConnect (link) {
       irisWhatsAppState.retry = 0
       irisWhatsAppState.linking = false
       irisWhatsAppState.me = irisChannelsLib.phoneOf(B.jidNormalizedUser((sock.user && sock.user.id) || '')) || ''
+      irisWhatsAppState.meLid = (sock.user && sock.user.lid) || ''
       DBUG('whatsapp linked as ' + irisWhatsAppState.me)
     }
     if (u.connection === 'close') {
@@ -184,14 +193,22 @@ async function irisWhatsAppConnect (link) {
       setTimeout(function () { if (!irisWhatsAppState.sock && irisWhatsAppSettings().enabled) irisWhatsAppConnect(false) }, 5000 * Math.pow(2, irisWhatsAppState.retry - 1))
     }
   })
-  sock.ev.on('messages.upsert', function (e) {
-    if (!e || e.type !== 'notify') return
-    const user = irisWhatsAppSettings().userNumber
-    ;(e.messages || []).forEach(function (m) {
-      if (!irisChannelsLib.isFromUser(m.key, user)) return
-      const text = irisChannelsLib.messageText(m.message)
-      if (text) irisWhatsAppIncoming(text).catch(function (err) { DBUG('whatsapp reply failed: ' + err.message) })
-    })
+  sock.ev.on('messages.upsert', irisWhatsAppOnMessages)
+}
+
+/* messages that arrived: the user's replies (to Iris's number, or in "Message yourself" when Iris is linked to the
+   user's own number) */
+function irisWhatsAppOnMessages (e) {
+  if (!e || (e.type !== 'notify' && e.type !== 'append')) return
+  const user = irisWhatsAppSettings().userNumber
+  const self = { me: irisWhatsAppState.me, meLid: irisWhatsAppState.meLid, sentIds: irisWhatsAppState.sentIds }
+  ;(e.messages || []).forEach(function (m) {
+    // a message typed on the phone in "Message yourself" may come as "append"; old ones (history) are not replies
+    const at = Number(m.messageTimestamp || 0) * 1000
+    if (at && Date.now() - at > 5 * 60 * 1000) return
+    if (!irisChannelsLib.isFromUser(m.key, user, self)) return
+    const text = irisChannelsLib.messageText(m.message)
+    if (text && !irisChannelsLib.isIrisMessage(text)) irisWhatsAppIncoming(text).catch(function (err) { DBUG('whatsapp reply failed: ' + err.message) })
   })
 }
 
@@ -212,7 +229,17 @@ async function irisWhatsAppSend (text) {
   const to = irisChannelsLib.jidFor(irisWhatsAppSettings().userNumber)
   if (!irisWhatsAppState.sock || irisWhatsAppState.status !== 'linked') throw new Error('WhatsApp is not linked')
   if (!to) throw new Error('no WhatsApp number for you in Settings → Connections')
-  await irisWhatsAppState.sock.sendMessage(to, { text: String(text).slice(0, 1000) })
+  try {
+    const sent = await irisWhatsAppState.sock.sendMessage(to, { text: String(text).slice(0, 1000) })
+    if (sent && sent.key && sent.key.id) {
+      irisWhatsAppState.sentIds.add(sent.key.id)
+      if (irisWhatsAppState.sentIds.size > 200) irisWhatsAppState.sentIds.delete(irisWhatsAppState.sentIds.values().next().value)
+    }
+    DBUG('whatsapp sent to …' + to.slice(-19, -15) + (to.startsWith(irisWhatsAppState.me + '@') ? ' (Message yourself)' : ''))
+  } catch (e) {
+    DBUG('whatsapp send to …' + to.slice(-19, -15) + ' failed: ' + e.message)
+    throw e
+  }
 }
 
 /* the waiting job's tab, by its number in the tab strip now (tabs move as others open and close); 0 when it is gone */
@@ -239,6 +266,8 @@ async function irisWhatsAppIncoming (text) {
   }
   if (m.request) return irisWhatsAppSend(irisChannelsLib.noCodeText(m.request))
   if (m.late) return irisWhatsAppSend(irisChannelsLib.lateText(m.late))
+  // in "Message yourself" the user also writes notes to themself: with nothing waiting, Iris stays quiet there
+  if (irisWhatsAppState.me && irisWhatsAppSettings().userNumber === irisWhatsAppState.me) return
   return irisWhatsAppSend(irisChannelsLib.helpText())
 }
 
@@ -302,7 +331,7 @@ function irisWhatsAppSettingsAction (action, args) {
       return Promise.resolve(status())
     case 'whatsappSave': {
       const before = irisWhatsAppSettings()
-      const next = { enabled: a.enabled === true, userNumber: irisChannelsLib.normalizeNumber(a.userNumber) }
+      const next = { enabled: a.enabled === true, userNumber: irisChannelsLib.completeNumber(a.userNumber, irisWhatsAppState.me) }
       settings.set('irisWhatsApp', next)
       if (next.enabled && !before.enabled) irisWhatsAppConnect(false)
       if (!next.enabled && before.enabled && !irisWhatsAppState.linking) { irisWhatsAppDisconnect(); irisWhatsAppState.status = 'off' }
