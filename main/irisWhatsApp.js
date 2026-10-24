@@ -8,6 +8,7 @@
  */
 
 const irisChannelsLib = require('./iris/agent/channels.js')
+const irisConciergeLib = require('./iris/agent/concierge.js')
 
 var irisWhatsAppState = {
   sock: null,
@@ -19,6 +20,9 @@ var irisWhatsAppState = {
   error: '',
   requests: [],
   ownRun: null, // a task the user started from WhatsApp: its result goes back there
+  userLinks: [], // jobs the user sent: their result always goes back, updates on or off
+  history: [], // the last messages of the chat, for the WhatsApp agent
+  talkingAt: 0, // when the user last talked to Iris, or Iris asked the user something (the conversation is open 20 min)
   updatesSent: [], // when updates were sent (a few an hour at most)
   retry: 0,
   linking: false,
@@ -233,7 +237,9 @@ async function irisWhatsAppSend (text) {
   if (!irisWhatsAppState.sock || irisWhatsAppState.status !== 'linked') throw new Error('WhatsApp is not linked')
   if (!to) throw new Error('no WhatsApp number for you in Settings → Connections')
   try {
-    const sent = await irisWhatsAppState.sock.sendMessage(to, { text: String(text).slice(0, 1000) })
+    const body = irisChannelsLib.isIrisMessage(text) ? String(text) : '[Iris] ' + String(text)
+    const sent = await irisWhatsAppState.sock.sendMessage(to, { text: body.slice(0, 1000) })
+    irisWhatsAppRemember('iris', body)
     if (sent && sent.key && sent.key.id) {
       irisWhatsAppState.sentIds.add(sent.key.id)
       if (irisWhatsAppState.sentIds.size > 200) irisWhatsAppState.sentIds.delete(irisWhatsAppState.sentIds.values().next().value)
@@ -254,6 +260,11 @@ function irisWhatsAppTabNumber (tabId) {
 function irisWhatsAppTell (note) {
   if (!irisComputer) return
   irisComputer.notes = (irisComputer.notes || []).concat(note)
+}
+
+function irisWhatsAppRemember (from, text) {
+  irisWhatsAppState.history.push({ from: from, text: String(text).slice(0, 400), at: Date.now() })
+  if (irisWhatsAppState.history.length > 20) irisWhatsAppState.history.shift()
 }
 
 /* "Message yourself": Iris is linked to the user's own number */
@@ -283,7 +294,7 @@ function irisWhatsAppStatusInfo () {
 }
 
 /* a message from the user: a task for the running agent (like a message in the panel) or a new run */
-function irisWhatsAppTask (cmd) {
+function irisWhatsAppTask (cmd, reply) {
   const busy = irisIsBusy()
   const job = cmd.kind === 'link'
   if (busy && irisAgentState.status === 'paused' && irisComputer && irisComputer.lastQuestion) {
@@ -292,35 +303,127 @@ function irisWhatsAppTask (cmd) {
     irisComputer.lastQuestion = null
     irisAgent.answer(cmd.text)
     if (irisSession) { irisSession.items.push({ kind: 'user', text: cmd.text, run: irisSession.run, answer: true, via: 'whatsapp' }); irisSessionSave(irisSession) }
-    return irisWhatsAppSend('[Iris] Thanks — going on with that.')
+    return irisWhatsAppSend(reply || '[Iris] Thanks — going on with that.')
   }
   if (busy) {
-    irisWhatsAppTell(job
-      ? 'WhatsApp: the user sent this job and wants it applied to next: ' + cmd.url + ' — finish the application you are on (if any), then open it and apply (with the same rules), log it, and go back to what you were doing.'
-      : 'WhatsApp: the user asks, in their own words: "' + cmd.text.slice(0, 600) + '". Do it once the step you are on is done, then go back to what you were doing (unless they said to stop that).')
+    if (job) irisWhatsAppState.userLinks.push({ url: cmd.url, at: Date.now() })
+    // "do this first": the job in progress waits in its tab (nothing is lost) while this is done
+    const first = cmd.when === 'now' ? 'NOW, before what you are doing: leave the application you are on as it is (keep its tab open), do this, then switch back to that tab and finish it. ' : ''
+    irisWhatsAppTell(first + (job
+      ? 'WhatsApp: the user found this job themselves and wants it applied to ' + (first ? 'now' : 'next') + ': ' + cmd.url + ' — ' + (first ? '' : 'finish the application you are on (if any), then ') + 'open it and apply even if its field is not computer science (it is the user\'s own pick); skip it only if the posting needs US citizenship, a security clearance or ITAR, or says it does not sponsor visas — then log it skipped with the reason. Log it, then go back to what you were doing.'
+      : 'WhatsApp: the user asks, in their own words: "' + cmd.text.slice(0, 600) + '". ' + (first ? 'Do it now' : 'Do it once the step you are on is done') + ', then go back to what you were doing (unless they said to stop that).'))
     if (irisSession) { irisSession.items.push({ kind: 'user', text: cmd.text, run: irisSession.run, via: 'whatsapp' }); irisSessionSave(irisSession) }
-    return irisWhatsAppSend(job ? '[Iris] Got the link — I will apply to it next.' : '[Iris] Got it — I will do that next.')
+    return irisWhatsAppSend(reply || (job ? '[Iris] Got the link — I will apply to it next.' : '[Iris] Got it — I will do that next.'))
   }
   // nothing running: a new run, started like a scheduled one (the browser opens a tab for it)
-  const task = job ? 'Apply to this job (the user sent it): ' + cmd.url : cmd.text
+  const task = job ? 'Apply to this job the user found themselves: ' + cmd.url + ' — apply even if its field is not computer science; skip it only if the posting needs US citizenship, a security clearance or ITAR, or says it does not sponsor visas.' : cmd.text
+  if (job) irisWhatsAppState.userLinks.push({ url: cmd.url, at: Date.now() })
   irisWhatsAppState.ownRun = { task: task, at: Date.now() }
   broadcast('iris-agent-scheduled-run', { task: task, mode: 'once' })
-  return irisWhatsAppSend('[Iris] Starting: ' + task.slice(0, 200) + '\nI will write back when it is done.')
+  return irisWhatsAppSend(reply || ('[Iris] Starting: ' + task.slice(0, 200) + '\nI will write back when it is done.'))
 }
 
-/** The user wrote to Iris (to its number, or "iris …" in Message yourself). */
+/* The WhatsApp agent's view of now (iris/agent/concierge.js) */
+function irisWhatsAppConciergeContext () {
+  const info = irisWhatsAppStatusInfo()
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  const all = irisApplicationsLoad()
+  const count = function (since) {
+    const xs = all.filter(function (a) { return (a.updated || a.at) >= since })
+    const n = function (st) { return xs.filter(function (a) { return a.status === st }).length }
+    return { applied: n('applied'), needsYou: n('needs_you'), skipped: n('skipped'), failed: n('failed') }
+  }
+  const label = { applied: 'Applied', needs_you: 'Needs you', skipped: 'Skipped', failed: 'Failed' }
+  const recent = all.filter(function (a) { return (a.updated || a.at) >= start.getTime() })
+    .sort(function (a, b) { return (b.updated || b.at) - (a.updated || a.at) }).slice(0, 8)
+    .map(function (a) { return (label[a.status] || a.status) + ': ' + irisChannelsLib.jobName(a) + (a.status !== 'applied' && a.note ? ' (' + String(a.note).split(' | ')[0].slice(0, 80) + ')' : '') })
+  const open = irisChannelsLib.openRequests(irisWhatsAppState.requests, Date.now())
+  return {
+    selfChat: irisWhatsAppSelfChat(),
+    run: { status: info.status, task: info.task, steps: info.steps, now: info.now, reason: info.reason, today: info.today, recent: recent },
+    stats: { today: count(start.getTime()), week: count(Date.now() - 7 * 24 * 3600 * 1000), all: count(0) },
+    question: irisAgentState.status === 'paused' && irisComputer && irisComputer.lastQuestion ? irisComputer.lastQuestion : '',
+    codeFor: open.length ? irisChannelsLib.jobName(open[open.length - 1]) : '',
+    // the conversation while it goes on: 20 quiet minutes and it is forgotten (the new message is passed on its own)
+    history: irisConciergeLib.liveHistory(irisWhatsAppState.history.slice(0, -1), Date.now())
+  }
+}
+
+async function irisWhatsAppAskConcierge (text, ctx) {
+  const cfg = irisSettings()
+  const model = irisLockedModel(irisModelClient.createModelClient({ provider: cfg.provider, baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0.2, thinking: 'off', timeoutMs: 45000 }), cfg.baseUrl)
+  const reply = await model.next({ messages: irisConciergeLib.conciergeMessages(ctx, text), thinking: 'off' })
+  if (reply && reply.usage) irisUsageRecord('request', Object.assign({ ms: reply.ms }, reply.usage))
+  return irisConciergeLib.parseDecision(typeof reply === 'string' ? reply : (reply && reply.content) || '', ctx, text)
+}
+
+/** The user wrote to Iris: the WhatsApp agent decides what they mean, Iris's code does it. */
 async function irisWhatsAppIncoming (text) {
+  irisWhatsAppRemember('user', text)
+  const now = Date.now()
+  const m = irisChannelsLib.matchReply(irisWhatsAppState.requests, text, now)
+  // a code for the job waiting on one: at once, no model call
+  if (m.request && m.code && irisChannelsLib.isJustCode(text)) return irisWhatsAppDeliverCode(m.request, m.code)
+  // "Message yourself" is also the user's notepad: a conversation with Iris starts when the user names Iris, or answers
+  // something Iris asked; then it stays open while it goes on (20 quiet minutes and it closes)
+  const talking = now - irisWhatsAppState.talkingAt < irisConciergeLib.MEMORY_MS
+  if (irisWhatsAppSelfChat() && !talking && !irisConciergeLib.addressesIris(text) && !m.request && !m.closed && !m.late) return
+  const ctx = irisWhatsAppConciergeContext()
+  let d = null
+  try { d = await irisWhatsAppAskConcierge(text, ctx) } catch (e) { DBUG('whatsapp agent failed: ' + e.message) }
+  if (!d) return irisWhatsAppIncomingRules(text)
+  DBUG('whatsapp agent: ' + d.action)
+  if (d.action !== 'none') irisWhatsAppState.talkingAt = Date.now()
+  const reply = d.reply ? '[Iris] ' + d.reply : ''
+  const busy = irisIsBusy() && irisAgent
+  switch (d.action) {
+    case 'none':
+      return
+    case 'chat':
+      return irisWhatsAppSend(reply || irisChannelsLib.statusText(irisWhatsAppStatusInfo()))
+    case 'pause':
+      if (!busy) return irisWhatsAppSend('[Iris] Nothing is running right now.')
+      irisAgent.pause('whatsapp')
+      return irisWhatsAppSend(reply || '[Iris] Paused.')
+    case 'resume':
+      if (!busy) return irisWhatsAppSend('[Iris] Nothing is running right now — send me a task or a job link to start.')
+      irisAgent.resume()
+      return irisWhatsAppSend(reply || '[Iris] Going on.')
+    case 'stop':
+      irisCancelRepeat()
+      if (!busy) return irisWhatsAppSend('[Iris] Nothing is running right now.')
+      irisAgent.stop('Stopped by you (WhatsApp)')
+      return irisWhatsAppSend(reply || '[Iris] Stopped.')
+    case 'code': {
+      const open = irisChannelsLib.openRequests(irisWhatsAppState.requests, now)
+      if (open.length) return irisWhatsAppDeliverCode(open[open.length - 1], d.code)
+      return irisWhatsAppSend(irisChannelsLib.noCodeWaitingText())
+    }
+    case 'answer':
+      return irisWhatsAppTask({ kind: 'task', text: d.answer }, reply)
+    case 'apply_link':
+      return irisWhatsAppTask({ kind: 'link', url: d.url, text: text, when: d.when }, reply)
+    default:
+      return irisWhatsAppTask({ kind: 'task', text: d.task || text, url: d.url, when: d.when }, reply)
+  }
+}
+
+function irisWhatsAppDeliverCode (request, code) {
+  request.state = 'answered'
+  request.answeredAt = Date.now()
+  irisWhatsAppTell(irisChannelsLib.codeArrivedNote(request, code, irisWhatsAppTabNumber(request.tabId)))
+  DBUG('whatsapp: code arrived for ' + irisChannelsLib.jobName(request))
+  return irisWhatsAppSend(irisChannelsLib.ackText(request, code))
+}
+
+/* the fixed rules ("iris status" …): used when the WhatsApp agent's model call fails */
+async function irisWhatsAppIncomingRules (text) {
   const now = Date.now()
   const selfChat = irisWhatsAppSelfChat()
   const m = irisChannelsLib.matchReply(irisWhatsAppState.requests, text, now)
   // a code for the job waiting on one comes first, with or without "iris"
-  if (m.request && m.code) {
-    m.request.state = 'answered'
-    m.request.answeredAt = now
-    irisWhatsAppTell(irisChannelsLib.codeArrivedNote(m.request, m.code, irisWhatsAppTabNumber(m.request.tabId)))
-    DBUG('whatsapp: code arrived for ' + irisChannelsLib.jobName(m.request))
-    return irisWhatsAppSend(irisChannelsLib.ackText(m.request, m.code))
-  }
+  if (m.request && m.code) return irisWhatsAppDeliverCode(m.request, m.code)
   const cmd = irisChannelsLib.parseCommand(text, { selfChat: selfChat })
   if (!cmd) {
     // not for Iris: in Message yourself a note to self, so quiet unless a code is waiting
@@ -372,11 +475,21 @@ function irisWhatsAppUpdate (text, always) {
 function irisWhatsAppOnApplication (rec) {
   // the job is handled: a code still asked for it is no longer needed
   irisChannelsLib.closeFor(irisWhatsAppState.requests, rec)
+  // a job the user sent on WhatsApp: its result goes back whatever the updates setting says
+  const now = Date.now()
+  irisWhatsAppState.userLinks = irisWhatsAppState.userLinks.filter(function (l) { return now - l.at < 24 * 3600 * 1000 })
+  const mine = irisWhatsAppState.userLinks.findIndex(function (l) { return irisSameJob({ url: l.url }, rec) })
+  if (mine !== -1) {
+    irisWhatsAppState.userLinks.splice(mine, 1)
+    const what = rec.status === 'applied' ? 'Applied' : rec.status === 'skipped' ? 'Skipped' : rec.status === 'needs_you' ? 'Needs you' : 'Could not apply'
+    return irisWhatsAppUpdate('[Iris] Your link — ' + what + ': ' + irisChannelsLib.jobName(rec) + (rec.status !== 'applied' && rec.note ? ' (' + String(rec.note).split(' | ')[0].slice(0, 200) + ')' : ''), true)
+  }
   irisWhatsAppUpdate(irisChannelsLib.applicationText(rec), false)
 }
 
 /** Iris paused with a question: the user can answer it from WhatsApp (sent whenever WhatsApp is on). */
 function irisWhatsAppOnAsk (question) {
+  irisWhatsAppState.talkingAt = Date.now()
   irisWhatsAppUpdate(irisChannelsLib.askText(question), true)
 }
 
@@ -428,6 +541,7 @@ async function irisWhatsAppRequestCode (req) {
     return { ok: false, error: 'the WhatsApp message could not be sent (' + e.message + '): log this job needs_you naming the code, and go on' }
   }
   irisWhatsAppState.requests.push(r)
+  irisWhatsAppState.talkingAt = Date.now()
   if (!irisWhatsAppState.ticker) irisWhatsAppState.ticker = setInterval(irisWhatsAppTick, 30000)
   return {
     ok: true,
