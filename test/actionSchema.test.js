@@ -173,6 +173,7 @@ test('validateAction covers every declared action type', () => {
     upload: { file: 'cv.pdf' },
     ask_user: { question: 'What is the code?' },
     save_account: { site: 'shop.test', username: 'me@x.test', password: '{{Password}}' },
+    request_code: { what: 'a 6-digit code sent to your phone', company: 'TikTok' },
     recall: { query: 'PhoneCLI' },
     judge: { item: 'Paper A', keep: true, why: 'fits' },
     update_plan: { plan: 'Goal: x' },
@@ -328,4 +329,16 @@ test('typing nothing at a spot clears the box; text under another name is still 
   const named = validateAction({ type: 'type', x: 100, y: 200, value: '05/2026' }, LIMITS)
   assert.strictEqual(named.ok, true)
   assert.strictEqual(named.action.text, '05/2026')
+})
+
+test('request_code keeps what the code is, under any of its names', () => {
+  const r = validateAction({ type: 'request_code', what: 'TikTok sent a 6-digit code to your phone', company: 'TikTok', title: 'Backend Engineer Graduate' }, LIMITS)
+  assert.strictEqual(r.ok, true, r.error)
+  assert.strictEqual(r.action.what, 'TikTok sent a 6-digit code to your phone')
+  assert.strictEqual(r.action.company, 'TikTok')
+  for (const name of ['request_otp', 'ask_code', 'ask_for_code', 'request_sms_code']) {
+    assert.strictEqual(validateAction({ type: name, what: 'code' }, LIMITS).action.type, 'request_code', name)
+  }
+  assert.strictEqual(validateAction({ type: 'request_code' }, LIMITS).ok, false, 'what is required')
+  assert.match(describeAction({ type: 'request_code', what: 'x', company: 'TikTok' }), /WhatsApp for the code for TikTok/)
 })

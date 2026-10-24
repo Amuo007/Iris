@@ -740,6 +740,14 @@ function irisJobsPrompt (task, mode) {
       ? 'LinkedIn: the weekly invitation limit was reached (last seen ' + when + '). Skip the LinkedIn part of every job — do not open LinkedIn — and log each application right away, saying "LinkedIn skipped: weekly limit".'
       : 'LinkedIn: the weekly invitation limit was reached ' + when + ', over a day ago. Try LinkedIn once on the next job; if the limit is still there, skip it for the other jobs.')
   }
+  // Settings → Connections → WhatsApp: a code sent to the user's phone is asked for there, without waiting (a real day
+  // ended 7 TikTok applications at "enter the code we texted you")
+  if (irisWhatsAppReady()) {
+    live.push('WhatsApp is on: a code the site sends to the user\'s phone (SMS, text, phone call, authenticator app), or to an inbox you cannot open, is no reason for needs_you. ' +
+      'From the page with the code box send {"type":"request_code","what":"what the site asks for, e.g. the 6-digit code TikTok texted to the phone","company":str,"title":str} once. ' +
+      'Do not wait for it: leave that tab open as it is, open the next job in a new tab and go on. Iris tells you the code and the tab the moment it comes (finish only the step you are on, switch to that tab, type the code, submit and log the job), ' +
+      'or after 15 minutes that none came (then Iris has logged that job needs_you). request_code is only for such codes — never for a CAPTCHA, a sign-in, a question or a password.')
+  }
   // only a job that was applied to is closed for good; one skipped or left for the user may be asked for again
   const done = irisApplicationsLoad().slice(-60)
   const name = function (a) { return (a.title || '?') + ' at ' + (a.company || '?') }

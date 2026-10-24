@@ -46,6 +46,7 @@ const SPEC = {
   upload: { required: ['file'], optional: [] },
   ask_user: { required: ['question'], optional: [] },
   save_account: { required: ['site', 'username'], optional: ['password', 'purpose'] },
+  request_code: { required: ['what'], optional: ['company', 'title'] },
   lookup: { required: ['query'], optional: ['kind'] },
   recall: { required: ['query'], optional: [] },
   judge: { required: ['item', 'keep'], optional: ['why'] },
@@ -121,6 +122,10 @@ const TYPE_ALIASES = {
   tailor_cv: 'tailor_resume',
   log_job: 'log_application',
   write_cover_letter: 'cover_letter',
+  request_otp: 'request_code',
+  ask_code: 'request_code',
+  ask_for_code: 'request_code',
+  request_sms_code: 'request_code',
   auto_fill: 'autofill',
   fill_form: 'autofill',
   autofill_form: 'autofill',
@@ -596,6 +601,7 @@ function validateAction (obj, limits) {
       case 'password':
       case 'file':
       case 'question':
+      case 'what':
       case 'field':
       case 'option': {
         const v = toStringValue(value)
@@ -774,6 +780,7 @@ function describeAction (action) {
     case 'upload': return `Upload ${action.file}`
     case 'ask_user': return `Ask you: ${action.question}`
     case 'save_account': return `Save the account for ${action.site}`
+    case 'request_code': return 'Ask the user on WhatsApp for the code' + (action.company ? ' for ' + action.company : '')
     case 'recall': return `Recall "${action.query}"`
     case 'judge': return (action.keep ? 'Keep' : 'Skip') + ` "${action.item}"` + (action.why ? ` — ${action.why}` : '')
     case 'update_plan': return 'Update the plan'

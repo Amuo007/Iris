@@ -1632,6 +1632,13 @@ IrisComputer.prototype.act = async function (action) {
         : 'No bookmarks match "' + (action.query || '') + '" (' + found.total + ' bookmarks in all).')
       return { ok: true }
     }
+    case 'request_code': {
+      // Settings → Connections → WhatsApp: ask the user for a code the site sent to their phone; never waits
+      const r = await irisWhatsAppRequestCode({ what: action.what, company: action.company || '', title: action.title || '', site: irisSiteOf(wc.getURL()) || '', url: wc.getURL(), tabId: irisTabs.selected, sessionId: irisSession && irisSession.id })
+      if (!r.ok) return { ok: false, error: r.error }
+      this.notes = (this.notes || []).concat(r.note)
+      return { ok: true }
+    }
     case 'save_account':
       try {
         const host = irisSiteOf(wc.getURL()) || ''
@@ -3001,8 +3008,10 @@ function irisSystemExtra (mode, task, projectId, sessionId) {
     const accounts = irisAccountsLoad()
     if (accounts.length) parts.push('Accounts Iris made for the user (log in with these): ' + accounts.slice(-40).map(function (a) { return a.site + ' — ' + a.username + ' / {{account:' + a.site + '}}' }).join('; ') + '.')
     parts.push(irisSettings().emailAccess
-      ? 'If a site emails a verification code or link: open a new tab, go to the user\'s email inbox (the "Email inbox URL" in their details, or their usual webmail), sign in with their saved details if needed, open the newest message from that site, read the code or click the link, then close that tab and switch back. Codes sent by text message or phone: use ask_user.'
-      : 'If a site sends a verification code or link (email or phone), use ask_user: the user will tell you the code or open the link.')
+      ? 'If a site emails a verification code or link: open a new tab, go to the user\'s email inbox (the "Email inbox URL" in their details, or their usual webmail), sign in with their saved details if needed, open the newest message from that site, read the code or click the link, then close that tab and switch back. Codes sent by text message or phone: ' +
+        (irisWhatsAppReady() ? 'request_code (Iris asks the user on WhatsApp; you go on without waiting).' : 'use ask_user.')
+      : 'If a site sends a verification code or link (email or phone), ' +
+        (irisWhatsAppReady() ? 'use request_code (Iris asks the user on WhatsApp; you go on without waiting).' : 'use ask_user: the user will tell you the code or open the link.'))
   }
   parts.push('Payments: Iris has no payment card. If the task needs a payment, go as far as the payment page, then stop and tell the user what is ready (or use ask_user). Never make up card details.')
   const skills = irisSkillsForTask(task)
@@ -3672,6 +3681,8 @@ ipc.on('iris-settings-action', async function (event, data) {
         return reply({ ok: true })
       }
       default: {
+        const whatsapp = irisWhatsAppSettingsAction(data.action, data.args)
+        if (whatsapp) return reply(await whatsapp)
         const jobs = irisJobsSettingsAction(data.action, data.args)
         if (jobs) return reply(await jobs)
         return reply({ error: 'unknown action' })

@@ -34,6 +34,7 @@
       <a href="#iris-schedule-container">Schedule</a>
       <a href="#iris-skills-container">Skills</a>
       <a href="#iris-bridge-container">Coding agents</a>
+      <a href="#iris-connections-container">Connections</a>
       <a href="#iris-usage-container">Usage</a>
       <div class="iris-settings-group">Jobs</div>
       <a href="#iris-career-container">Career profile</a>
@@ -281,6 +282,42 @@
         <pre class="iris-code" id="iris-bridge-config"></pre>
         <button class="iris-button" id="iris-bridge-copy" type="button">Copy</button>
         <span class="iris-inline-status" id="iris-bridge-status"></span>
+      </div>
+    </div>
+
+    <div class="settings-container" id="iris-connections-container">
+      <h3>Connections</h3>
+      <div class="setting-secondary-label">
+        WhatsApp, for emergencies only: when a site sends a code to your phone (TikTok's text message, for example), Iris
+        messages you and enters the code you reply with. It never waits for you: the job's tab stays open and Iris goes on
+        with the next job; no reply in 15 minutes and the job is left for you. Use a second WhatsApp number for Iris and
+        link it here like WhatsApp Web (it is not WhatsApp's official way, so keep your own number out of it).
+      </div>
+      <div class="setting-section">
+        <input type="checkbox" id="checkbox-iris-whatsapp" />
+        <label for="checkbox-iris-whatsapp">Let Iris message me on WhatsApp for codes</label>
+      </div>
+      <div class="iris-row-setting">
+        <div>
+          <div class="iris-row-title">My WhatsApp number</div>
+          <div class="iris-row-help">The number Iris writes to and the only one it takes replies from, with the country code (+1 …).</div>
+        </div>
+        <input type="tel" id="iris-whatsapp-number" placeholder="+1 555 123 4567" autocomplete="off" />
+      </div>
+      <div class="iris-row-setting">
+        <div>
+          <div class="iris-row-title">Iris's WhatsApp</div>
+          <div class="iris-row-help" id="iris-whatsapp-status">Not linked.</div>
+        </div>
+        <div class="iris-row-buttons">
+          <button class="iris-button" id="iris-whatsapp-link" type="button">Link…</button>
+          <button class="iris-button" id="iris-whatsapp-test" type="button" hidden>Send test message</button>
+          <button class="iris-button" id="iris-whatsapp-unlink" type="button" hidden>Unlink</button>
+        </div>
+      </div>
+      <div id="iris-whatsapp-qr-box" hidden>
+        <div class="iris-row-help">On the phone with Iris's number: WhatsApp → Settings → Linked devices → Link a device, then scan this.</div>
+        <img id="iris-whatsapp-qr" alt="QR code to link WhatsApp" width="240" height="240" />
       </div>
     </div>
 
@@ -996,5 +1033,6 @@
     <script src="../../dist/localization.build.js"></script>
     <script src="settings.js"></script>
     <script src="jobs.js"></script>
+    <script src="connections.js"></script>
   </body>
 </html>

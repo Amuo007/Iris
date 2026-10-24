@@ -34,6 +34,7 @@
   "dependencies": {
     "@browsermt/bergamot-translator": "^0.4.9",
     "@electron/fuses": "^1.7.0",
+    "baileys": "7.0.0-rc14",
     "chokidar": "^3.6.0",
     "dexie": "^3.0.3",
     "dragula": "github:minbrowser/dragula",
@@ -43,6 +44,7 @@
     "papaparse": "^5.5.1",
     "pdfjs-dist": "4.2.67",
     "punycode": "^2.3.1",
+    "qrcode": "1.5.4",
     "quick-score": "^0.2.0",
     "regedit": "^3.0.3",
     "sortablejs": "^1.15.1",
