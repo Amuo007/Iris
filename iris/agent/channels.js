@@ -188,8 +188,84 @@ function noCodeText (req) {
   return '[Iris] I need just the code for ' + jobName(req) + ' (letters and digits, nothing else).'
 }
 
-function helpText () {
-  return '[Iris] Nothing is waiting for a code right now. I only message you here when a site sends a code to your phone.'
+function noCodeWaitingText () {
+  return '[Iris] Nothing is waiting for a code right now.'
+}
+
+/** A message that is nothing but a code ("482913", "482 913"), not a task. */
+function isJustCode (text) {
+  const c = extractCode(text)
+  return !!c && String(text || '').trim().replace(/[\s-]/g, '').replace(/^code:?/i, '') === c
+}
+
+function helpText (selfChat) {
+  const p = selfChat ? 'iris ' : ''
+  return '[Iris] Write ' + (selfChat ? 'starting with "iris"' : 'to me here') + ':\n' +
+    '• ' + p + 'status — what I am doing\n' +
+    '• ' + p + 'pause / ' + p + 'continue / ' + p + 'stop\n' +
+    '• ' + p + '<a job link> — I apply to it next\n' +
+    '• ' + p + '<anything else> — a task for me, like typing it in my panel\n' +
+    'A code a site sent you: just the code' + (selfChat ? ', no "iris" needed.' : '.')
+}
+
+const URL_RE = /\bhttps?:\/\/[^\s<>"']+/i
+
+/** The first link in a message, without trailing punctuation. */
+function firstUrl (text) {
+  const m = URL_RE.exec(String(text || ''))
+  return m ? m[0].replace(/[).,;!?]+$/, '') : ''
+}
+
+/**
+ * What the user's message asks for: { kind: 'status'|'pause'|'resume'|'stop'|'help'|'link'|'task', text, url } or null
+ * when it is not for Iris. In "Message yourself" (selfChat) only messages that start with "iris" (or "/") are for Iris —
+ * the user writes notes to themself there too; to a second number every message is.
+ */
+function parseCommand (text, opts) {
+  const raw = String(text || '').trim()
+  if (!raw || isIrisMessage(raw)) return null
+  const prefix = /^(?:\/|iris\b[\s,:;.!-]*)/i
+  const self = !!(opts && opts.selfChat)
+  if (self && !prefix.test(raw)) return null
+  const body = raw.replace(prefix, '').trim()
+  if (!body) return { kind: 'help', text: '' }
+  const word = body.toLowerCase().replace(/[.!?]+$/, '').trim()
+  if (/^(status|progress|update|updates|what are you doing|what're you doing|how is it going|how's it going|where are you)$/.test(word)) return { kind: 'status', text: body }
+  if (/^(pause|wait|hold on|hold)$/.test(word)) return { kind: 'pause', text: body }
+  if (/^(continue|resume|go on|carry on|keep going)$/.test(word)) return { kind: 'resume', text: body }
+  if (/^(stop|stop it|stop the run|cancel)$/.test(word)) return { kind: 'stop', text: body }
+  if (/^(help|commands|\?)$/.test(word)) return { kind: 'help', text: body }
+  const url = firstUrl(body)
+  // a link alone, or with only "apply"/"apply to this": a job to apply to
+  if (url && /^(apply( to)?( this( job)?)?[\s:,-]*)?$/i.test(body.replace(url, '').trim())) return { kind: 'link', text: body, url: url }
+  return { kind: 'task', text: body, url: url }
+}
+
+/** The answer to "status": the run, the step it is on, today's applications. */
+function statusText (info) {
+  const i = info || {}
+  const head = i.status === 'running' ? 'Working' + (i.task ? ' on: ' + clean(i.task, 120) : '') + (i.steps ? ' (step ' + i.steps + ')' : '')
+    : i.status === 'paused' ? 'Paused' + (i.question ? ', waiting for you: ' + clean(i.question, 200) : '')
+      : 'Not running' + (i.reason ? ' (' + clean(i.reason, 120) + ')' : '')
+  const lines = ['[Iris] ' + head + '.']
+  if (i.now) lines.push('Now: ' + clean(i.now, 200))
+  if (i.today) lines.push('Today: ' + i.today.applied + ' applied, ' + i.today.needsYou + ' need you, ' + i.today.skipped + ' skipped.')
+  if (i.last) lines.push('Last: ' + clean(i.last, 160))
+  return lines.join('\n')
+}
+
+/** One application, for the updates (applied, needs you, failed — skips are not sent). */
+function applicationText (rec) {
+  const r = rec || {}
+  const job = jobName(r)
+  if (r.status === 'applied') return '[Iris] Applied: ' + job
+  if (r.status === 'needs_you') return '[Iris] Needs you: ' + job + (r.note ? ' — ' + clean(r.note, 200) : '')
+  if (r.status === 'failed') return '[Iris] Could not apply: ' + job + (r.note ? ' — ' + clean(r.note, 160) : '')
+  return ''
+}
+
+function askText (question) {
+  return '[Iris] I am waiting for your answer: ' + clean(question, 400) + '\nReply here (or in my panel).'
 }
 
 module.exports = {
@@ -217,5 +293,12 @@ module.exports = {
   expiredText,
   lateText,
   noCodeText,
-  helpText
+  helpText,
+  noCodeWaitingText,
+  isJustCode,
+  firstUrl,
+  parseCommand,
+  statusText,
+  applicationText,
+  askText
 }

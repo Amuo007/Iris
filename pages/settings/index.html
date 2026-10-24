@@ -288,10 +288,10 @@
     <div class="settings-container" id="iris-connections-container">
       <h3>Connections</h3>
       <div class="setting-secondary-label">
-        WhatsApp, for emergencies only: when a site sends a code to your phone (TikTok's text message, for example), Iris
-        messages you and enters the code you reply with. It never waits for you: the job's tab stays open and Iris goes on
-        with the next job; no reply in 15 minutes and the job is left for you. Use a second WhatsApp number for Iris and
-        link it here like WhatsApp Web (it is not WhatsApp's official way, so keep your own number out of it).
+        WhatsApp: when a site sends a code to your phone (TikTok's text message, for example), Iris messages you and
+        enters the code you reply with. It never waits for you: the job's tab stays open and Iris goes on with the next
+        job; no reply in 15 minutes and the job is left for you. Link a WhatsApp number here like WhatsApp Web (it is not
+        WhatsApp's official way: a second number for Iris is safest).
       </div>
       <div class="setting-section">
         <input type="checkbox" id="checkbox-iris-whatsapp" />
@@ -314,6 +314,17 @@
           <button class="iris-button" id="iris-whatsapp-test" type="button" hidden>Send test message</button>
           <button class="iris-button" id="iris-whatsapp-unlink" type="button" hidden>Unlink</button>
         </div>
+      </div>
+      <div class="setting-section">
+        <input type="checkbox" id="checkbox-iris-whatsapp-updates" />
+        <label for="checkbox-iris-whatsapp-updates">Also tell me each application (applied, needs you, could not apply)</label>
+      </div>
+      <div class="iris-row-help" id="iris-whatsapp-commands">
+        Iris always messages you when a site sends a code to your phone, when it stops to ask you something (your reply
+        answers it), and when a run fails. You can write to it: <b>status</b>, <b>pause</b>, <b>continue</b>, <b>stop</b>, a
+        <b>job link</b> (Iris applies to it next) or any <b>task</b> in your own words (it does it next, or starts a run).
+        <span id="iris-whatsapp-selfchat-help" hidden>Iris is linked to your own number, so in "Message yourself" start each
+        message with <b>iris</b> ("iris status"); a code needs no "iris".</span>
       </div>
       <div id="iris-whatsapp-qr-box" hidden>
         <div class="iris-row-help">On the phone with Iris's number: WhatsApp → Settings → Linked devices → Link a device, then scan this.</div>

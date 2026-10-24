@@ -18,6 +18,8 @@ var irisWhatsAppState = {
   sentIds: new Set(), // messages Iris sent (its own messages in "Message yourself" are not replies)
   error: '',
   requests: [],
+  ownRun: null, // a task the user started from WhatsApp: its result goes back there
+  updatesSent: [], // when updates were sent (a few an hour at most)
   retry: 0,
   linking: false,
   ticker: null
@@ -25,7 +27,7 @@ var irisWhatsAppState = {
 
 function irisWhatsAppSettings () {
   const s = settings.get('irisWhatsApp') || {}
-  return { enabled: s.enabled === true, userNumber: irisChannelsLib.completeNumber(s.userNumber, irisWhatsAppState.me) }
+  return { enabled: s.enabled === true, updates: s.updates === true, userNumber: irisChannelsLib.completeNumber(s.userNumber, irisWhatsAppState.me) }
 }
 
 function irisWhatsAppDir () {
@@ -148,8 +150,9 @@ async function irisWhatsAppConnect (link) {
     logger: irisWhatsAppLog,
     browser: B.Browsers.macOS('Iris'),
     markOnlineOnConnect: false,
+    // no full history, but the first sync stays on: Baileys needs it for the hidden-number (LID) mappings, or the session
+    // becomes unstable ("DISABLING ALL SYNC … LEADING TO INSTABILITY AND SESSION ERRORS"); old messages are not replies
     syncFullHistory: false,
-    shouldSyncHistoryMessage: function () { return false },
     generateHighQualityLinkPreview: false,
     getMessage: async function () { return undefined }
   }, version ? { version: version } : {}))
@@ -253,10 +256,64 @@ function irisWhatsAppTell (note) {
   irisComputer.notes = (irisComputer.notes || []).concat(note)
 }
 
-/** The user wrote to Iris's number. */
+/* "Message yourself": Iris is linked to the user's own number */
+function irisWhatsAppSelfChat () {
+  return !!irisWhatsAppState.me && irisWhatsAppSettings().userNumber === irisWhatsAppState.me
+}
+
+/** What "status" answers: the run, the step it is on, today's applications. */
+function irisWhatsAppStatusInfo () {
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  const today = irisApplicationsLoad().filter(function (a) { return (a.updated || a.at) >= start.getTime() })
+  const count = function (st) { return today.filter(function (a) { return a.status === st }).length }
+  const steps = irisSession ? irisSession.items.filter(function (i) { return i.kind === 'step' }) : []
+  const lastStep = steps[steps.length - 1] || {}
+  const last = today.slice().sort(function (a, b) { return (b.updated || b.at) - (a.updated || a.at) })[0]
+  return {
+    status: irisIsBusy() ? irisAgentState.status : (irisAgentState.status === 'paused' ? 'paused' : irisAgentState.status || 'idle'),
+    task: irisSession ? irisSession.title : irisAgentState.task,
+    steps: irisAgentState.steps,
+    reason: irisAgentState.reason,
+    question: irisComputer && irisComputer.lastQuestion,
+    now: irisIsBusy() ? String(lastStep.thought || '').replace(/^\((high|medium|low)\)\s*/, '').slice(0, 200) : '',
+    today: { applied: count('applied'), needsYou: count('needs_you'), skipped: count('skipped') },
+    last: last ? irisChannelsLib.applicationText(last).replace(/^\[Iris\] /, '') : ''
+  }
+}
+
+/* a message from the user: a task for the running agent (like a message in the panel) or a new run */
+function irisWhatsAppTask (cmd) {
+  const busy = irisIsBusy()
+  const job = cmd.kind === 'link'
+  if (busy && irisAgentState.status === 'paused' && irisComputer && irisComputer.lastQuestion) {
+    // Iris asked something and waits: the message is the answer, as if typed in the panel
+    if (irisComputer.jobsMode) { try { irisJobsLearnAnswer(irisComputer.lastQuestion, cmd.text) } catch (e) { DBUG('learn answer: ' + e.message) } }
+    irisComputer.lastQuestion = null
+    irisAgent.answer(cmd.text)
+    if (irisSession) { irisSession.items.push({ kind: 'user', text: cmd.text, run: irisSession.run, answer: true, via: 'whatsapp' }); irisSessionSave(irisSession) }
+    return irisWhatsAppSend('[Iris] Thanks — going on with that.')
+  }
+  if (busy) {
+    irisWhatsAppTell(job
+      ? 'WhatsApp: the user sent this job and wants it applied to next: ' + cmd.url + ' — finish the application you are on (if any), then open it and apply (with the same rules), log it, and go back to what you were doing.'
+      : 'WhatsApp: the user asks, in their own words: "' + cmd.text.slice(0, 600) + '". Do it once the step you are on is done, then go back to what you were doing (unless they said to stop that).')
+    if (irisSession) { irisSession.items.push({ kind: 'user', text: cmd.text, run: irisSession.run, via: 'whatsapp' }); irisSessionSave(irisSession) }
+    return irisWhatsAppSend(job ? '[Iris] Got the link — I will apply to it next.' : '[Iris] Got it — I will do that next.')
+  }
+  // nothing running: a new run, started like a scheduled one (the browser opens a tab for it)
+  const task = job ? 'Apply to this job (the user sent it): ' + cmd.url : cmd.text
+  irisWhatsAppState.ownRun = { task: task, at: Date.now() }
+  broadcast('iris-agent-scheduled-run', { task: task, mode: 'once' })
+  return irisWhatsAppSend('[Iris] Starting: ' + task.slice(0, 200) + '\nI will write back when it is done.')
+}
+
+/** The user wrote to Iris (to its number, or "iris …" in Message yourself). */
 async function irisWhatsAppIncoming (text) {
   const now = Date.now()
+  const selfChat = irisWhatsAppSelfChat()
   const m = irisChannelsLib.matchReply(irisWhatsAppState.requests, text, now)
+  // a code for the job waiting on one comes first, with or without "iris"
   if (m.request && m.code) {
     m.request.state = 'answered'
     m.request.answeredAt = now
@@ -264,11 +321,75 @@ async function irisWhatsAppIncoming (text) {
     DBUG('whatsapp: code arrived for ' + irisChannelsLib.jobName(m.request))
     return irisWhatsAppSend(irisChannelsLib.ackText(m.request, m.code))
   }
-  if (m.request) return irisWhatsAppSend(irisChannelsLib.noCodeText(m.request))
-  if (m.late) return irisWhatsAppSend(irisChannelsLib.lateText(m.late))
-  // in "Message yourself" the user also writes notes to themself: with nothing waiting, Iris stays quiet there
-  if (irisWhatsAppState.me && irisWhatsAppSettings().userNumber === irisWhatsAppState.me) return
-  return irisWhatsAppSend(irisChannelsLib.helpText())
+  const cmd = irisChannelsLib.parseCommand(text, { selfChat: selfChat })
+  if (!cmd) {
+    // not for Iris: in Message yourself a note to self, so quiet unless a code is waiting
+    if (m.request) return irisWhatsAppSend(irisChannelsLib.noCodeText(m.request))
+    if (m.late) return irisWhatsAppSend(irisChannelsLib.lateText(m.late))
+    return
+  }
+  // a lone code with nothing waiting for one (late, or sent twice) is not a task
+  if (!m.request && irisChannelsLib.isJustCode(text) && (cmd.kind === 'task' || cmd.kind === 'link')) return irisWhatsAppSend(m.late ? irisChannelsLib.lateText(m.late) : irisChannelsLib.noCodeWaitingText())
+  // a code is waiting: anything but a command is taken as a try at the code ("hi" must not start a run)
+  if (m.request && (cmd.kind === 'task' || cmd.kind === 'link')) return irisWhatsAppSend(irisChannelsLib.noCodeText(m.request))
+  DBUG('whatsapp command: ' + cmd.kind)
+  switch (cmd.kind) {
+    case 'status':
+      return irisWhatsAppSend(irisChannelsLib.statusText(irisWhatsAppStatusInfo()))
+    case 'help':
+      return irisWhatsAppSend(irisChannelsLib.helpText(selfChat))
+    case 'pause':
+      if (!irisIsBusy() || !irisAgent) return irisWhatsAppSend('[Iris] Nothing is running.')
+      irisAgent.pause('whatsapp')
+      return irisWhatsAppSend('[Iris] Paused. Write "' + (selfChat ? 'iris ' : '') + 'continue" to go on.')
+    case 'resume':
+      if (!irisIsBusy() || !irisAgent) return irisWhatsAppSend('[Iris] Nothing is running (send a task or a link to start).')
+      irisAgent.resume()
+      return irisWhatsAppSend('[Iris] Going on.')
+    case 'stop':
+      irisCancelRepeat()
+      if (!irisIsBusy() || !irisAgent) return irisWhatsAppSend('[Iris] Nothing is running.')
+      irisAgent.stop('Stopped by you (WhatsApp)')
+      return irisWhatsAppSend('[Iris] Stopped. Nothing restarts it until you send a task or start it in Iris.')
+    default:
+      return irisWhatsAppTask(cmd)
+  }
+}
+
+/* updates (Settings → Connections): at most 30 an hour, so a fast run does not flood the chat */
+function irisWhatsAppUpdate (text, always) {
+  const s = irisWhatsAppSettings()
+  if (!text || !irisWhatsAppReady() || (!always && !s.updates)) return
+  const now = Date.now()
+  irisWhatsAppState.updatesSent = irisWhatsAppState.updatesSent.filter(function (t) { return now - t < 3600 * 1000 })
+  if (irisWhatsAppState.updatesSent.length >= 30) return
+  irisWhatsAppState.updatesSent.push(now)
+  irisWhatsAppSend(text).catch(function () {})
+}
+
+/** An application was logged (applied / needs you / failed are sent when updates are on). */
+function irisWhatsAppOnApplication (rec) {
+  irisWhatsAppUpdate(irisChannelsLib.applicationText(rec), false)
+}
+
+/** Iris paused with a question: the user can answer it from WhatsApp (sent whenever WhatsApp is on). */
+function irisWhatsAppOnAsk (question) {
+  irisWhatsAppUpdate(irisChannelsLib.askText(question), true)
+}
+
+/** The model server stopped answering (or came back): sent whenever WhatsApp is on. */
+function irisWhatsAppOnServer (text) {
+  irisWhatsAppUpdate('[Iris] ' + text, true)
+}
+
+/** A run really ended (not a non-stop run picking itself up): its result, for a task started here or with updates on. */
+function irisWhatsAppOnRunEnd (status, text) {
+  const own = irisWhatsAppState.ownRun && Date.now() - irisWhatsAppState.ownRun.at < 12 * 3600 * 1000
+  if (own) irisWhatsAppState.ownRun = null
+  // a non-stop run's "done" is picked up again by Iris in 20 s: no message for that one
+  if (!own && status !== 'failed') return
+  const head = status === 'done' ? '[Iris] Done: ' : status === 'stopped' ? '[Iris] Stopped: ' : '[Iris] Could not finish: '
+  irisWhatsAppUpdate(head + String(text || '').slice(0, 900), true)
 }
 
 /* every 30 s while a request waits: a code that did not come in time is the user's to finish */
@@ -318,6 +439,8 @@ function irisWhatsAppSettingsAction (action, args) {
     const s = irisWhatsAppSettings()
     return {
       enabled: s.enabled,
+      updates: s.updates,
+      selfChat: irisWhatsAppSelfChat(),
       userNumber: s.userNumber,
       status: irisWhatsAppState.status,
       qr: irisWhatsAppState.qr,
@@ -331,7 +454,7 @@ function irisWhatsAppSettingsAction (action, args) {
       return Promise.resolve(status())
     case 'whatsappSave': {
       const before = irisWhatsAppSettings()
-      const next = { enabled: a.enabled === true, userNumber: irisChannelsLib.completeNumber(a.userNumber, irisWhatsAppState.me) }
+      const next = { enabled: a.enabled === true, updates: a.updates === true, userNumber: irisChannelsLib.completeNumber(a.userNumber, irisWhatsAppState.me) }
       settings.set('irisWhatsApp', next)
       if (next.enabled && !before.enabled) irisWhatsAppConnect(false)
       if (!next.enabled && before.enabled && !irisWhatsAppState.linking) { irisWhatsAppDisconnect(); irisWhatsAppState.status = 'off' }

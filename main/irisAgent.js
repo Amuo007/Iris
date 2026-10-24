@@ -1901,6 +1901,7 @@ IrisComputer.prototype.act = async function (action) {
           : ' Go on to the next job.'))
       if (rec.status === 'needs_you') irisNotify('A job application needs you', (rec.title || 'A job') + (rec.company ? ' at ' + rec.company : '') + (rec.note ? ': ' + rec.note : ''))
       broadcastEvent({ type: 'application', item: item, sessionId: this.sessionId })
+      irisWhatsAppOnApplication(rec)
       if (job) this.jobsTailored = tailored.filter(function (j) { return j !== job })
       // the job in progress keeps its resume when another job (one ruled out from the list) is logged
       if (job && (job === this.lastJob || irisSameJob(job, this.lastJob || {}))) {
@@ -3333,6 +3334,7 @@ function startAgent (task, options) {
       }
       if (type === 'learn') irisLearn(payload.url, payload.tip)
       if (type === 'ask') irisNotify('Iris needs you', payload.question)
+      if (type === 'ask') irisWhatsAppOnAsk(payload.question)
       if (type === 'ask') computer.lastQuestion = payload.question
       if (type === 'questions') irisNotify('Iris has a few questions', 'Answer them in the Iris panel so it can plan "' + session.title + '".')
       if (type === 'blocked' && payload.kind === 'confirmation') irisNotify('Iris is waiting for your OK', payload.reason)
@@ -3344,14 +3346,21 @@ function startAgent (task, options) {
           session.serverDownTold = true
           const mins = Math.max(1, Math.round((Date.now() - session.serverDownAt) / 60000))
           irisNotify('Iris is waiting for the model server', 'It has not answered for ' + mins + (mins === 1 ? ' minute' : ' minutes') + '. Iris keeps trying and carries on by itself when it is back.')
+          irisWhatsAppOnServer('The model server has not answered for ' + mins + (mins === 1 ? ' minute' : ' minutes') + '. I keep trying and carry on by myself when it is back.')
         }
       } else if (session.serverDownAt && (type === 'thought' || type === 'run:end')) {
-        if (session.serverDownTold && type === 'thought') irisNotify('The model server is back', 'Iris carried on with "' + session.title + '".')
+        if (session.serverDownTold && type === 'thought') {
+          irisNotify('The model server is back', 'Iris carried on with "' + session.title + '".')
+          irisWhatsAppOnServer('The model server is back; I carried on.')
+        }
         session.serverDownAt = 0
         session.serverDownTold = false
       }
       // a non-stop run picks itself up after a failure: only tell the user when it really ends
-      if (type === 'run:end' && payload.status !== 'stopped' && !(unlimited && payload.status === 'failed')) irisNotify(payload.status === 'done' ? 'Iris finished' : 'Iris could not finish', (payload.status === 'done' ? payload.answer : payload.reason) || session.title)
+      if (type === 'run:end' && payload.status !== 'stopped' && !(unlimited && payload.status === 'failed')) {
+        irisNotify(payload.status === 'done' ? 'Iris finished' : 'Iris could not finish', (payload.status === 'done' ? payload.answer : payload.reason) || session.title)
+        irisWhatsAppOnRunEnd(payload.status, (payload.status === 'done' ? payload.answer : payload.reason) || session.title)
+      }
       // the plan's own model call counts too
       if ((type === 'thought' || type === 'plan') && payload.usage) irisUsageRecord('request', Object.assign({ ms: payload.modelMs, session: session, context: payload.context || null }, payload.usage))
       // the Context card shows the last step's context again when this chat is reopened

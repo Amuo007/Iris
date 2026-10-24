@@ -6,6 +6,7 @@
 var irisWhatsAppSection = document.getElementById('iris-connections-container')
 var irisWhatsAppNumber = document.getElementById('iris-whatsapp-number')
 var irisWhatsAppToggle = document.getElementById('checkbox-iris-whatsapp')
+var irisWhatsAppUpdates = document.getElementById('checkbox-iris-whatsapp-updates')
 
 var IRIS_WHATSAPP_STATUS = {
   off: 'Not connected (switch it on above to connect).',
@@ -18,6 +19,8 @@ var IRIS_WHATSAPP_STATUS = {
 function irisRenderWhatsApp (r) {
   if (document.activeElement !== irisWhatsAppNumber) irisWhatsAppNumber.value = r.userNumber ? '+' + r.userNumber : ''
   irisWhatsAppToggle.checked = !!r.enabled
+  irisWhatsAppUpdates.checked = !!r.updates
+  document.getElementById('iris-whatsapp-selfchat-help').hidden = !r.selfChat
   var linked = r.status === 'linked'
   var text = linked ? 'Linked as +' + (r.me || '…') + (r.waiting && r.waiting.length ? ' · waiting for your code for ' + r.waiting.join(', ') : '') : (IRIS_WHATSAPP_STATUS[r.status] || r.status)
   if (r.error) text += ' ' + r.error
@@ -33,10 +36,11 @@ function irisRenderWhatsApp (r) {
 }
 
 function irisSaveWhatsApp () {
-  irisAction('whatsappSave', { enabled: irisWhatsAppToggle.checked, userNumber: irisWhatsAppNumber.value })
+  irisAction('whatsappSave', { enabled: irisWhatsAppToggle.checked, updates: irisWhatsAppUpdates.checked, userNumber: irisWhatsAppNumber.value })
 }
 
 irisWhatsAppToggle.addEventListener('change', irisSaveWhatsApp)
+irisWhatsAppUpdates.addEventListener('change', irisSaveWhatsApp)
 irisWhatsAppNumber.addEventListener('change', irisSaveWhatsApp)
 document.getElementById('iris-whatsapp-link').addEventListener('click', function () {
   document.getElementById('iris-whatsapp-status').textContent = 'Getting a QR code…'
