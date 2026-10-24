@@ -27,14 +27,20 @@ const irisPrompts = require('./iris/agent/prompts.js')
 const irisMemoryLib = require('./iris/agent/memory.js')
 const irisLookupLib = require('./iris/agent/lookup.js')
 const irisAccountsLib = require('./iris/agent/accounts.js')
+const irisUsageLib = require('./iris/agent/usage.js')
 
 const IRIS_SETTINGS_VERSION = 2
 
 const IRIS_DEFAULT_SETTINGS = {
   settingsVersion: IRIS_SETTINGS_VERSION,
-  baseUrl: 'http://192.168.1.252:13305/v1',
-  model: 'Qwen3.8-Flash-Next-GGUF-IQ4_NL',
+  // local: an OpenAI-style server you run (llama.cpp, LM Studio, Ollama, Lemonade, Halogen) ·
+  // openai: an OpenAI-style cloud API · anthropic: the Claude Messages API. baseUrl / model / apiKey
+  // are the chosen provider's; each provider keeps its own in `providers`, so switching loses nothing.
+  provider: 'local',
+  baseUrl: 'http://192.168.1.252:8731/v1',
+  model: 'halogen-qwen3.8-flash-next',
   apiKey: '',
+  providers: {},
   thinking: 'low', // off | low | medium | full
   accountMode: 'signup', // login: log in only · signup: log in, or create an account with My info
   emailAccess: false, // may Iris open the user's inbox to read sign-up codes and links?
@@ -71,7 +77,28 @@ function irisSettings () {
     stored = Object.assign({}, stored, { screenshotMaxDimension: 1024, screenshotSizeV2: true })
     try { settings.set('irisAI', stored) } catch (e) { /* settings may not be ready yet */ }
   }
-  return Object.assign({}, IRIS_DEFAULT_SETTINGS, stored)
+  return irisResolveProvider(Object.assign({}, IRIS_DEFAULT_SETTINGS, stored))
+}
+
+/* the chosen provider's own server, model and key (Settings keeps one set per provider) */
+const IRIS_PROVIDER_DEFAULTS = {
+  local: { baseUrl: IRIS_DEFAULT_SETTINGS.baseUrl, model: IRIS_DEFAULT_SETTINGS.model },
+  openai: { baseUrl: 'https://api.openai.com/v1', model: '' },
+  anthropic: { baseUrl: 'https://api.anthropic.com/v1', model: 'claude-opus-5-5' }
+}
+
+function irisResolveProvider (cfg) {
+  const provider = IRIS_PROVIDER_DEFAULTS[cfg.provider] ? cfg.provider : 'local'
+  const own = (cfg.providers && cfg.providers[provider]) || {}
+  const base = IRIS_PROVIDER_DEFAULTS[provider]
+  // settings from before providers existed: their top-level server is the local one
+  const top = provider === 'local' || !cfg.providers || !cfg.providers[provider] ? cfg : {}
+  return Object.assign(cfg, {
+    provider: provider,
+    baseUrl: own.baseUrl || top.baseUrl || base.baseUrl,
+    model: own.model || top.model || base.model,
+    apiKey: own.apiKey !== undefined ? own.apiKey : (top.apiKey || '')
+  })
 }
 
 const DEBUG_LOG = process.env.IRIS_AGENT_DEBUG || ''
@@ -725,20 +752,43 @@ function irisUsagePath () {
 
 var irisUsage = null
 var irisUsageTimer = null
+/* kind 'task' | 'lookup' | 'request'; a request's usage counts for the running session and its project */
 function irisUsageRecord (kind, data) {
   if (!irisUsage) {
-    try { irisUsage = JSON.parse(fs.readFileSync(irisUsagePath(), 'utf8')) } catch (e) { irisUsage = { days: {} } }
+    try { irisUsage = irisUsageLib.normalizeStore(JSON.parse(fs.readFileSync(irisUsagePath(), 'utf8'))) } catch (e) { irisUsage = irisUsageLib.emptyStore() }
   }
-  const d = new Date()
-  const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
-  const day = irisUsage.days[key] || (irisUsage.days[key] = { tasks: 0, requests: 0, input: 0, output: 0, ms: 0 })
-  if (kind === 'task') day.tasks++
-  if (kind === 'lookup') day.lookups = (day.lookups || 0) + 1
+  let ctx = null
   if (kind === 'request') {
-    day.requests++
-    day.input += (data && data.prompt_tokens) || 0
-    day.output += (data && data.completion_tokens) || 0
-    day.ms += (data && data.ms) || 0
+    const cfg = irisSettings()
+    const session = (data && data.session) || irisSession
+    const project = session && session.projectId ? irisProject(session.projectId) : null
+    const usage = Object.assign({}, data || {})
+    delete usage.ms
+    delete usage.session
+    ctx = {
+      usage: usage,
+      ms: (data && data.ms) || 0,
+      session: session ? { id: session.id, title: session.title } : null,
+      project: project ? { id: project.id, name: project.name } : null,
+      provider: cfg.provider,
+      model: cfg.model
+    }
+  }
+  irisUsage = irisUsageLib.record(irisUsage, kind, ctx)
+  if (ctx) {
+    // the panel's status line: this reply's speed and what the session and project used so far
+    const sum = irisUsageLib.summary(irisUsage, ctx.session && ctx.session.id, ctx.project && ctx.project.id)
+    broadcastEvent({
+      type: 'usage',
+      sessionId: ctx.session && ctx.session.id,
+      speed: irisModelClient.tokensPerSecond(ctx.usage, ctx.ms),
+      input: ctx.usage.prompt_tokens || 0,
+      output: ctx.usage.completion_tokens || 0,
+      session: sum.session,
+      project: sum.project,
+      provider: ctx.provider,
+      model: ctx.model
+    })
   }
   if (!irisUsageTimer) {
     irisUsageTimer = setTimeout(function () {
@@ -2875,6 +2925,7 @@ function startAgent (task, options) {
     // IRIS_FAKE_SCRIPT (tests only): a JSON file with the fake model's steps
     ? require('./iris/agent/fakeModel.js').createFakeModel(process.env.IRIS_FAKE_SCRIPT ? { script: JSON.parse(fs.readFileSync(process.env.IRIS_FAKE_SCRIPT, 'utf8')) } : {})
     : irisLockedModel(irisModelClient.createModelClient({
+      provider: cfg.provider,
       baseUrl: cfg.baseUrl,
       model: cfg.model,
       apiKey: cfg.apiKey,
@@ -3110,7 +3161,8 @@ function startAgent (task, options) {
       }
       // a non-stop run picks itself up after a failure: only tell the user when it really ends
       if (type === 'run:end' && payload.status !== 'stopped' && !(unlimited && payload.status === 'failed')) irisNotify(payload.status === 'done' ? 'Iris finished' : 'Iris could not finish', (payload.status === 'done' ? payload.answer : payload.reason) || session.title)
-      if (type === 'thought' && payload.usage) irisUsageRecord('request', Object.assign({ ms: payload.modelMs }, payload.usage))
+      // the plan's own model call counts too
+      if ((type === 'thought' || type === 'plan') && payload.usage) irisUsageRecord('request', Object.assign({ ms: payload.modelMs, session: session }, payload.usage))
       if (type === 'thought' && payload.usage) {
         // one line per model call: how long the prefill (screenshot + new text) and the answer took
         try {
@@ -3327,7 +3379,7 @@ ipc.on('iris-agent-session-delete', function (event, id) {
 
 ipc.on('iris-agent-probe', async function (event, data) {
   const cfg = irisSettings()
-  const result = await irisModelClient.probeServer({ baseUrl: (data && data.baseUrl) || cfg.baseUrl, apiKey: cfg.apiKey })
+  const result = await irisModelClient.probeServer({ provider: cfg.provider, baseUrl: (data && data.baseUrl) || cfg.baseUrl, apiKey: cfg.apiKey })
   event.reply('iris-agent-probe-reply', result)
 })
 
@@ -3389,6 +3441,14 @@ ipc.on('iris-settings-action', async function (event, data) {
         return reply({ sites: await irisCookieSites() })
       case 'bridgeInfo':
         return reply(irisBridgeInfo())
+      case 'modelProbe': {
+        // from here, not the settings page: a cloud API refuses a page's own request (CORS), and the key stays out of the page's network log
+        const a = data.args || {}
+        const cfg = irisSettings()
+        const provider = a.provider || cfg.provider
+        const result = await irisModelClient.probeServer({ provider: provider, baseUrl: a.baseUrl || cfg.baseUrl, apiKey: a.apiKey !== undefined ? a.apiKey : cfg.apiKey })
+        return reply(Object.assign({ provider: provider }, result))
+      }
       case 'downloadsList':
         return reply({ dir: irisDownloadDir(), files: irisRecentDownloads(40) })
       case 'downloadShow': {

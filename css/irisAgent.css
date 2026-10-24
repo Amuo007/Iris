@@ -145,6 +145,14 @@
   margin-right: 4px;
 }
 
+.iris-status-meter {
+  color: var(--iris-text-3);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px !important;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+
 .iris-ctl {
   border: 1px solid var(--iris-border);
   background: var(--iris-bg);

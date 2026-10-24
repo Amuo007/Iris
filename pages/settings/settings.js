@@ -681,9 +681,11 @@ function createBang (bang, snippet, redirect) {
 
 var IRIS_AI_DEFAULTS = {
   settingsVersion: 2,
-  baseUrl: 'http://192.168.1.252:13305/v1',
-  model: 'Qwen3.8-Flash-Next-GGUF-IQ4_NL',
+  provider: 'local',
+  baseUrl: 'http://192.168.1.252:8731/v1',
+  model: 'halogen-qwen3.8-flash-next',
   apiKey: '',
+  providers: {},
   thinking: 'low',
   accountMode: 'signup',
   emailAccess: false,
@@ -704,6 +706,72 @@ var IRIS_AI_DEFAULTS = {
 }
 
 var irisAI = Object.assign({}, IRIS_AI_DEFAULTS)
+
+/* Where Iris's model can live. Each provider keeps its own server, model and key (irisAI.providers),
+   so trying Claude and going back to the local model loses nothing. */
+var IRIS_PROVIDERS = {
+  local: {
+    hint: 'A model server you run: llama.cpp, LM Studio, Ollama, Lemonade or Halogen. It must speak the OpenAI chat format (/v1/chat/completions) and read images. Nothing leaves your network.',
+    keyLabel: 'API key (optional)',
+    presets: [
+      { name: 'Halogen (192.168.1.252)', url: 'http://192.168.1.252:8731/v1', model: 'halogen-qwen3.8-flash-next' },
+      { name: 'Lemonade (192.168.1.252)', url: 'http://192.168.1.252:13305/v1', model: 'Qwen3.8-Flash-Next-GGUF-IQ4_NL' },
+      { name: 'LM Studio on this Mac', url: 'http://localhost:1234/v1' },
+      { name: 'Ollama on this Mac', url: 'http://localhost:11434/v1' },
+      { name: 'llama.cpp server on this Mac', url: 'http://localhost:8080/v1' }
+    ]
+  },
+  openai: {
+    hint: 'Any cloud API that speaks the OpenAI chat format. Use a model that reads images (Iris works from screenshots). Requests and screenshots go to that provider and are billed to your key.',
+    keyLabel: 'API key',
+    presets: [
+      { name: 'OpenAI', url: 'https://api.openai.com/v1' },
+      { name: 'OpenRouter', url: 'https://openrouter.ai/api/v1' },
+      { name: 'Groq', url: 'https://api.groq.com/openai/v1' }
+    ]
+  },
+  anthropic: {
+    hint: 'Claude through the Anthropic Messages API (or a server that speaks it). Get a key at platform.claude.com. Requests and screenshots go to Anthropic and are billed to your key.',
+    keyLabel: 'Anthropic API key',
+    presets: [
+      { name: 'Anthropic', url: 'https://api.anthropic.com/v1', model: 'claude-opus-5-5' }
+    ]
+  }
+}
+
+function irisProviderOf (cfg) {
+  return IRIS_PROVIDERS[cfg.provider] ? cfg.provider : 'local'
+}
+
+/* the server, model and key fields belong to the chosen provider */
+function irisRememberProvider () {
+  var p = irisProviderOf(irisAI)
+  irisAI.providers = Object.assign({}, irisAI.providers || {})
+  irisAI.providers[p] = { baseUrl: irisAI.baseUrl, model: irisAI.model, apiKey: irisAI.apiKey }
+}
+
+function irisRenderProvider () {
+  var p = irisProviderOf(irisAI)
+  var info = IRIS_PROVIDERS[p]
+  document.getElementById('iris-provider').value = p
+  document.getElementById('iris-provider-hint').textContent = info.hint
+  document.getElementById('iris-api-key-label').textContent = info.keyLabel
+  var preset = document.getElementById('iris-preset')
+  preset.textContent = ''
+  var chosen = ''
+  info.presets.forEach(function (pr, i) {
+    var o = document.createElement('option')
+    o.value = String(i)
+    o.textContent = pr.name + ' — ' + pr.url
+    preset.appendChild(o)
+    if (String(irisAI.baseUrl).replace(/\/+$/, '') === pr.url) chosen = String(i)
+  })
+  var custom = document.createElement('option')
+  custom.value = 'custom'
+  custom.textContent = 'Custom (type the base URL below)'
+  preset.appendChild(custom)
+  preset.value = chosen || 'custom'
+}
 
 var irisFields = [
   { key: 'baseUrl', id: 'iris-base-url', type: 'string' },
@@ -734,6 +802,7 @@ function irisSave () {
 }
 
 function irisRenderAll () {
+  irisRenderProvider()
   irisFields.forEach(function (field) {
     var value = irisAI[field.key]
     if (field.scale && typeof value === 'number') value = Math.round(value / field.scale)
@@ -770,8 +839,40 @@ irisFields.forEach(function (field) {
       irisAI[field.key] = raw
     }
 
+    if (field.key === 'baseUrl' || field.key === 'model' || field.key === 'apiKey') {
+      irisRememberProvider()
+      if (field.key === 'baseUrl') irisRenderProvider()
+    }
     irisSave()
   })
+})
+
+document.getElementById('iris-provider').addEventListener('change', function () {
+  irisRememberProvider()
+  var next = IRIS_PROVIDERS[this.value] ? this.value : 'local'
+  var own = (irisAI.providers || {})[next] || {}
+  var first = IRIS_PROVIDERS[next].presets[0]
+  irisAI.provider = next
+  irisAI.baseUrl = own.baseUrl || first.url
+  irisAI.model = own.model || first.model || ''
+  irisAI.apiKey = own.apiKey || ''
+  irisRememberProvider()
+  document.getElementById('iris-model-list').textContent = ''
+  document.getElementById('iris-connection-status').textContent = next === 'local' || irisAI.apiKey ? '' : 'Add your API key, then Test connection.'
+  irisRenderAll()
+  irisSave()
+})
+
+document.getElementById('iris-preset').addEventListener('change', function () {
+  if (this.value === 'custom') return document.getElementById('iris-base-url').focus()
+  var pr = IRIS_PROVIDERS[irisProviderOf(irisAI)].presets[parseInt(this.value, 10)]
+  if (!pr) return
+  irisAI.baseUrl = pr.url
+  if (pr.model) irisAI.model = pr.model
+  irisRememberProvider()
+  document.getElementById('iris-model-list').textContent = ''
+  irisRenderAll()
+  irisSave()
 })
 
 irisMarkerCheckbox.addEventListener('change', function () {
@@ -805,18 +906,39 @@ document.getElementById('iris-reset-defaults').addEventListener('click', functio
   irisSave()
 })
 
+/* asked of the main process: a cloud API refuses a request from this page (CORS) */
 document.getElementById('iris-test-connection').addEventListener('click', function () {
-  var status = document.getElementById('iris-connection-status')
-  status.textContent = 'Checking…'
-  var headers = irisAI.apiKey ? { Authorization: 'Bearer ' + irisAI.apiKey } : {}
-  fetch(String(irisAI.baseUrl).replace(/\/+$/, '') + '/models', { headers: headers })
-    .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)) })
-    .then(function (json) {
-      var ids = (json.data || []).map(function (m) { return m.id })
-      status.textContent = ids.indexOf(irisAI.model) !== -1 ? 'Connected. The model is available.' : 'Connected, but "' + irisAI.model + '" is not in the list (' + ids.length + ' models).'
-    })
-    .catch(function (err) { status.textContent = 'Cannot reach the server: ' + err.message })
+  document.getElementById('iris-connection-status').textContent = 'Checking…'
+  irisAction('modelProbe', { provider: irisProviderOf(irisAI), baseUrl: irisAI.baseUrl, apiKey: irisAI.apiKey })
 })
+
+function irisShowProbe (r) {
+  var status = document.getElementById('iris-connection-status')
+  if (!r || !r.ok) {
+    var why = (r && r.error) || 'no answer'
+    status.textContent = /HTTP 401|HTTP 403/.test(why)
+      ? 'The server answered but refused the API key (' + why + ').'
+      : 'Cannot reach the server: ' + why
+    return
+  }
+  var ids = r.models || []
+  var list = document.getElementById('iris-model-list')
+  list.textContent = ''
+  ids.slice(0, 300).forEach(function (id) {
+    var o = document.createElement('option')
+    o.value = id
+    list.appendChild(o)
+  })
+  if (!irisAI.model && ids.length) {
+    irisAI.model = ids[0]
+    irisRememberProvider()
+    irisRenderAll()
+    irisSave()
+  }
+  status.textContent = ids.indexOf(irisAI.model) !== -1
+    ? 'Connected. "' + irisAI.model + '" is available.'
+    : 'Connected, but "' + irisAI.model + '" is not in its list of ' + ids.length + ' models: pick one from the Model field.'
+}
 
 settings.listen('irisAI', function (value) {
   var stored = value || {}
@@ -844,7 +966,9 @@ window.addEventListener('message', function (e) {
   if (e.data.message === 'irisSettingsActionResult') {
     var d = e.data.data || {}
     var r = d.result || {}
-    if (d.action === 'defaultStatus' || d.action === 'makeDefault') {
+    if (d.action === 'modelProbe') {
+      irisShowProbe(r)
+    } else if (d.action === 'defaultStatus' || d.action === 'makeDefault') {
       document.getElementById('iris-default-status').textContent = r.isDefault ? 'Iris is your default browser.' : 'Open links from other apps in Iris.'
       document.getElementById('iris-make-default').hidden = !!r.isDefault
     } else if (d.action === 'downloadDir' || d.action === 'chooseDownloadDir') {
@@ -1069,6 +1193,53 @@ function irisRenderUsage (usage) {
       '</td><td>' + irisFormatCount(t.output) + '</td><td>' + irisFormatCount(t.lookups) + '</td><td>' + (t.requests ? (t.ms / t.requests / 1000).toFixed(1) + ' s' : '–') + '</td></tr>'
   })
   document.getElementById('iris-usage-table').innerHTML = html
+  irisRenderUsageGroups(usage || {})
+}
+
+function irisEscape (text) {
+  return String(text == null ? '' : text).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] })
+}
+
+function irisSpeed (t) {
+  return t && t.genMs > 0 && t.genOut > 0 ? Math.round(t.genOut / (t.genMs / 1000)) + ' tok/s' : '–'
+}
+
+function irisWhen (ms) {
+  if (!ms) return '–'
+  var d = new Date(ms)
+  var today = new Date()
+  return d.toDateString() === today.toDateString()
+    ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+}
+
+var IRIS_PROVIDER_NAMES = { local: 'Local', openai: 'OpenAI-compatible', anthropic: 'Claude' }
+
+function irisRenderUsageGroups (usage) {
+  var projects = usage.projects || {}
+  var sessions = usage.sessions || {}
+  var newest = function (obj) { return Object.keys(obj).sort(function (a, b) { return (obj[b].last || 0) - (obj[a].last || 0) }) }
+  var head = '<tr><th></th><th>Requests</th><th>Input tokens</th><th>Output tokens</th><th>Speed</th><th>Last used</th></tr>'
+
+  var pIds = newest(projects)
+  var pHtml = head
+  pIds.forEach(function (id) {
+    var t = projects[id]
+    pHtml += '<tr><td class="iris-usage-name">' + irisEscape(t.name || 'Project') + '</td><td>' + irisFormatCount(t.requests || 0) + '</td><td>' + irisFormatCount(t.input || 0) +
+      '</td><td>' + irisFormatCount(t.output || 0) + '</td><td>' + irisSpeed(t) + '</td><td>' + irisWhen(t.last) + '</td></tr>'
+  })
+  document.getElementById('iris-usage-projects').innerHTML = pIds.length ? pHtml : '<tr><td class="iris-usage-empty">No project work counted yet.</td></tr>'
+
+  var sIds = newest(sessions).slice(0, 15)
+  var sHtml = '<tr><th></th><th>Model</th><th>Requests</th><th>Input tokens</th><th>Output tokens</th><th>Speed</th><th>Last used</th></tr>'
+  sIds.forEach(function (id) {
+    var t = sessions[id]
+    var model = (IRIS_PROVIDER_NAMES[t.provider] || '') + (t.model ? ' · ' + t.model : '')
+    sHtml += '<tr><td class="iris-usage-name" title="' + irisEscape(t.title || '') + '">' + irisEscape(t.title || id) + '</td><td class="iris-usage-name">' + irisEscape(model || '–') +
+      '</td><td>' + irisFormatCount(t.requests || 0) + '</td><td>' + irisFormatCount(t.input || 0) + '</td><td>' + irisFormatCount(t.output || 0) +
+      '</td><td>' + irisSpeed(t) + '</td><td>' + irisWhen(t.last) + '</td></tr>'
+  })
+  document.getElementById('iris-usage-sessions').innerHTML = sIds.length ? sHtml : '<tr><td class="iris-usage-empty">Sessions show here after their first model reply.</td></tr>'
 }
 
 settings.listen('irisUsage', irisRenderUsage)

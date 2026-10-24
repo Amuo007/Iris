@@ -111,6 +111,9 @@ let historyEl = null
 let statusBar = null
 let statusText = null
 let statusTime = null
+let statusMeter = null
+// tokens this run used (input + output), for the result card
+let runTokens = { input: 0, output: 0 }
 let pauseButton = null
 let stopButton = null
 let modelBadge = null
@@ -228,6 +231,9 @@ function buildPanel () {
   const dot = el('span', 'iris-status-dot')
   statusText = el('span', 'iris-status-text', '')
   statusTime = el('span', 'iris-status-time', '')
+  // the model's speed on its last reply and the tokens this session has used
+  statusMeter = el('span', 'iris-status-meter', '')
+  statusMeter.hidden = true
   pauseButton = iconButton('iris-ctl', ICONS.pause, 'Pause')
   pauseButton.addEventListener('click', function () {
     ipc.send(lastStatus === 'paused' ? 'iris-agent-resume' : 'iris-agent-pause')
@@ -237,6 +243,7 @@ function buildPanel () {
   statusBar.appendChild(dot)
   statusBar.appendChild(statusText)
   statusBar.appendChild(statusTime)
+  statusBar.appendChild(statusMeter)
   statusBar.appendChild(pauseButton)
   statusBar.appendChild(stopButton)
   panelEl.appendChild(statusBar)
@@ -767,6 +774,32 @@ function addThought (payload) {
   if (payload.modelMs) rec.row.title = 'Decided in ' + (payload.modelMs / 1000).toFixed(1) + ' s'
 }
 
+function formatTokens (n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + 'M'
+  if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'k'
+  return String(n || 0)
+}
+
+function showUsage (payload) {
+  runTokens.input += payload.input || 0
+  runTokens.output += payload.output || 0
+  if (!statusMeter) return
+  const sess = payload.session || {}
+  // context: what the model read for its last reply (prompt + history + screenshot); total: every reply of
+  // this session added up — each step sends the whole context again, so the total grows much faster
+  const parts = []
+  if (payload.speed) parts.push(Math.round(payload.speed) + ' tok/s')
+  if (payload.input) parts.push('ctx ' + formatTokens(payload.input))
+  if (sess.requests) parts.push(formatTokens((sess.input || 0) + (sess.output || 0)) + ' total')
+  statusMeter.textContent = parts.join(' · ')
+  statusMeter.hidden = !parts.length
+  const lines = ['Context of the last reply: ' + formatTokens(payload.input) + ' tokens read, ' + formatTokens(payload.output) + ' written' + (payload.speed ? ', ' + Math.round(payload.speed) + ' tok/s' : '')]
+  if (sess.requests) lines.push('This session: ' + sess.requests + ' replies, ' + formatTokens(sess.input) + ' read and ' + formatTokens(sess.output) + ' written in all (each reply reads its whole context again)' + (sess.speed ? ', ' + Math.round(sess.speed) + ' tok/s on average' : ''))
+  if (payload.project && payload.project.requests) lines.push('Project "' + payload.project.name + '": ' + formatTokens(payload.project.input + payload.project.output) + ' tokens')
+  if (payload.model) lines.push('Model: ' + payload.model)
+  statusMeter.title = lines.join('\n')
+}
+
 function actionDetail (action, description) {
   switch (action.type) {
     case 'type': return '“' + action.text + '”' + (action.enter ? ' ↵' : '')
@@ -988,7 +1021,10 @@ function addResultCard (payload, elapsedMs) {
   head.appendChild(icon)
   head.appendChild(el('span', 'iris-result-title', status === 'done' ? 'Done' : (status === 'stopped' ? 'Stopped' : 'Could not finish')))
   const ms = elapsedMs || (runStartedAt ? Date.now() - runStartedAt : 0)
-  head.appendChild(el('span', 'iris-result-meta', (payload.steps || 0) + ' steps' + (ms ? ' · ' + formatElapsed(ms) : '')))
+  const used = runTokens.input + runTokens.output
+  const meta = el('span', 'iris-result-meta', (payload.steps || 0) + ' steps' + (ms ? ' · ' + formatElapsed(ms) : '') + (used ? ' · ' + formatTokens(used) + ' tokens' : ''))
+  if (used) meta.title = formatTokens(runTokens.input) + ' tokens read, ' + formatTokens(runTokens.output) + ' written'
+  head.appendChild(meta)
   card.appendChild(head)
   const text = status === 'done' ? (payload.answer || 'Task complete.') : (payload.reason || payload.answer || '')
   if (text) card.appendChild(el('p', 'iris-result-text', text))
@@ -1030,6 +1066,7 @@ function handleEvent (payload) {
       break
     case 'run:start':
       if (!payload.followUp) tally = { kept: 0, files: 0 }
+      runTokens = { input: 0, output: 0 }
       setStatus('running', 'Starting…')
       break
     case 'observation':
@@ -1051,6 +1088,9 @@ function handleEvent (payload) {
       break
     case 'thought':
       addThought(payload)
+      break
+    case 'usage':
+      showUsage(payload)
       break
     case 'remember':
       if (!payload.automatic) addNote('Noted: ' + payload.note, 'memo')

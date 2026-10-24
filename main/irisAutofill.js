@@ -292,7 +292,7 @@ async function irisAfAnswerRest (computer, wc, fields, title) {
     { role: 'user', content: 'PROFILE:\n' + irisCareerLib.bankText(bank, 7000) + '\n\nSAVED ANSWERS:\n' + (bank.answers || []).map(function (a) { return a.label + ': ' + a.value }).join('\n') +
       '\n\nJOB PAGE: ' + String(title || '').slice(0, 160) + '\n\nFIELDS STILL EMPTY:\n' + JSON.stringify(list) }
   ]
-  const model = irisLockedModel(irisModelClient.createModelClient({ baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0.1, thinking: 'off', timeoutMs: cfg.modelTimeoutMs }), cfg.baseUrl)
+  const model = irisLockedModel(irisModelClient.createModelClient({ provider: cfg.provider, baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0.1, thinking: 'off', timeoutMs: cfg.modelTimeoutMs }), cfg.baseUrl)
   const reply = await model.next({ messages: messages, thinking: 'off' })
   if (reply && reply.usage) irisUsageRecord('request', Object.assign({ ms: reply.ms }, reply.usage))
   const text = typeof reply === 'string' ? reply : (reply && reply.content) || ''
@@ -319,7 +319,7 @@ async function irisVerifyAnswer (text) {
       { role: 'user', content: 'PROFILE:\n' + irisCareerLib.bankText(bank, 7000) + '\n\nSAVED ANSWERS:\n' + (bank.answers || []).map(function (a) { return a.label + ': ' + a.value }).join('\n') +
         '\n\nANSWER TO CHECK:\n' + String(text).slice(0, 3000) }
     ]
-    const model = irisLockedModel(irisModelClient.createModelClient({ baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0, thinking: 'off', timeoutMs: Math.min(cfg.modelTimeoutMs, 60000) }), cfg.baseUrl)
+    const model = irisLockedModel(irisModelClient.createModelClient({ provider: cfg.provider, baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0, thinking: 'off', timeoutMs: Math.min(cfg.modelTimeoutMs, 60000) }), cfg.baseUrl)
     const reply = await model.next({ messages: messages, thinking: 'off' })
     if (reply && reply.usage) irisUsageRecord('request', Object.assign({ ms: reply.ms }, reply.usage))
     const obj = irisLookupLib.firstJsonWith(typeof reply === 'string' ? reply : (reply && reply.content) || '', 'unsupported')

@@ -120,16 +120,32 @@
 
       <div class="iris-grid">
         <div class="iris-setting iris-wide">
-          <label for="iris-base-url">Model server (OpenAI-compatible base URL)</label>
+          <label for="iris-provider">Model provider</label>
+          <select id="iris-provider">
+            <option value="local">Local model (a server on this computer or your network)</option>
+            <option value="openai">OpenAI-compatible API (OpenAI, OpenRouter, Groq, …)</option>
+            <option value="anthropic">Claude (Anthropic API)</option>
+          </select>
+          <div class="iris-field-hint" id="iris-provider-hint"></div>
+        </div>
+        <div class="iris-setting iris-wide">
+          <label for="iris-preset">Server</label>
+          <select id="iris-preset"></select>
+        </div>
+        <div class="iris-setting iris-wide">
+          <label for="iris-base-url">Base URL</label>
           <input type="text" id="iris-base-url" spellcheck="false" />
         </div>
         <div class="iris-setting iris-wide">
-          <label for="iris-model">Model name</label>
-          <input type="text" id="iris-model" spellcheck="false" />
+          <label for="iris-model">Model</label>
+          <input type="text" id="iris-model" spellcheck="false" list="iris-model-list" />
+          <datalist id="iris-model-list"></datalist>
+          <div class="iris-field-hint">Test connection lists the models the server offers.</div>
         </div>
         <div class="iris-setting iris-wide">
-          <label for="iris-api-key">API key (optional)</label>
+          <label for="iris-api-key" id="iris-api-key-label">API key (optional)</label>
           <input type="password" id="iris-api-key" spellcheck="false" autocomplete="off" />
+          <div class="iris-field-hint">Kept only on this computer, one key per provider.</div>
         </div>
         <div class="iris-setting">
           <label for="iris-thinking">Thinking (each step)</label>
@@ -254,8 +270,12 @@
 
     <div class="settings-container" id="iris-usage-container">
       <h3>Usage</h3>
-      <div class="setting-secondary-label">What Iris has used on your model server.</div>
+      <div class="setting-secondary-label">What Iris has used, per day, per project and per session. Speed is output tokens per second while the model writes (reading the page is left out).</div>
       <table class="iris-usage" id="iris-usage-table"></table>
+      <h4 class="iris-usage-heading">By project</h4>
+      <table class="iris-usage" id="iris-usage-projects"></table>
+      <h4 class="iris-usage-heading">Recent sessions</h4>
+      <table class="iris-usage" id="iris-usage-sessions"></table>
 
     </div>
 

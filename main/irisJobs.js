@@ -206,7 +206,7 @@ async function irisTailorResume (job, hooks) {
   let modelError = null
   if (!text && !(hooks && hooks.noModel) && !(process.env.IRIS_FAKE_MODEL || cfg.useFakeModel)) {
     try {
-      const model = irisLockedModel(irisModelClient.createModelClient({ baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0.2, thinking: tailorThinking, timeoutMs: cfg.modelTimeoutMs }), cfg.baseUrl)
+      const model = irisLockedModel(irisModelClient.createModelClient({ provider: cfg.provider, baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0.2, thinking: tailorThinking, timeoutMs: cfg.modelTimeoutMs }), cfg.baseUrl)
       const reply = await model.next({ messages: irisCareerLib.tailorMessages(bank, job), thinking: tailorThinking, signal: hooks && hooks.signal })
       text = typeof reply === 'string' ? reply : (reply && reply.content) || ''
       if (reply && reply.usage) irisUsageRecord('request', Object.assign({ ms: reply.ms }, reply.usage))
@@ -302,7 +302,7 @@ async function irisWriteCoverLetter (job, text) {
   if (irisCareerLib.bankIsEmpty(bank)) return { ok: false, error: 'The career profile is empty.' }
   const cfg = irisSettings()
   if (!text) try {
-    const model = irisLockedModel(irisModelClient.createModelClient({ baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0.3, thinking: 'off', timeoutMs: cfg.modelTimeoutMs }), cfg.baseUrl)
+    const model = irisLockedModel(irisModelClient.createModelClient({ provider: cfg.provider, baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0.3, thinking: 'off', timeoutMs: cfg.modelTimeoutMs }), cfg.baseUrl)
     const reply = await model.next({ messages: irisCareerLib.coverLetterMessages(bank, job), thinking: 'off' })
     text = typeof reply === 'string' ? reply : (reply && reply.content) || ''
     if (reply && reply.usage) irisUsageRecord('request', Object.assign({ ms: reply.ms }, reply.usage))
@@ -803,7 +803,7 @@ function irisJobsSettingsAction (action, args) {
       const text = String((args && args.text) || '').trim()
       if (text.length < 20) return Promise.resolve(Object.assign(irisCareerForPage(), { sorted: { ok: false, error: 'Paste a bit more text first.' } }))
       const cfg = irisSettings()
-      const model = irisLockedModel(irisModelClient.createModelClient({ baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0.1, thinking: 'off', timeoutMs: Math.max(cfg.modelTimeoutMs, 240000) }), cfg.baseUrl)
+      const model = irisLockedModel(irisModelClient.createModelClient({ provider: cfg.provider, baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0.1, thinking: 'off', timeoutMs: Math.max(cfg.modelTimeoutMs, 240000) }), cfg.baseUrl)
       return model.next({ messages: irisCareerLib.profileFromTextMessages(text), thinking: 'off' }).then(function (reply) {
         const out = typeof reply === 'string' ? reply : (reply && reply.content) || ''
         return Object.assign(irisCareerForPage(), { sorted: irisCareerLib.parseProfileFromText(out, text, irisActionSchema.parseObjectLoose) })

@@ -174,13 +174,24 @@ typed by Iris), `iris_accounts` (`{{account:site.com}}`), `iris_save_account`, `
 
 - **General, Bookmarks, History, Cookies & site data, Appearance, Privacy, Search engine,
   Passwords, Browsing** — the usual browser settings
-- **Iris AI:** model server (any OpenAI-compatible `/v1` URL), model, API key, thinking level,
-  Smart default, steps and minutes per task, screenshot size, when a site needs an account
+- **Iris AI:** the model provider, then its server, model and API key, thinking level, Smart
+  default, steps and minutes per task, screenshot size, when a site needs an account. Providers:
+  - **Local model** — any OpenAI-compatible server you run (llama.cpp, LM Studio, Ollama, Lemonade);
+    nothing leaves your network
+  - **OpenAI-compatible API** — OpenAI, OpenRouter, Groq or any `/v1/chat/completions` endpoint, with your key
+  - **Claude** — the Anthropic Messages API (`/v1/messages`), with your key
+
+  Each provider keeps its own URL, model and key, so switching back and forth loses nothing. Test
+  connection asks the server for its models (from the app, so cloud APIs work too) and offers them
+  in the Model field. The model has to read images: Iris works from screenshots.
 - **Look-ups:** on/off, how many per task, sites never to contact
 - **My info:** your details for forms and logins. Secret fields are encrypted with the macOS
   keychain and never shown to the model: it types `{{Password}}` and Iris fills in the real value
 - **Accounts, Rules, Schedule, Skills, Coding agents, Usage** (tasks, requests, tokens, look-ups,
-  time per step — today, 7 and 30 days, all time)
+  time per step — today, 7 and 30 days, all time; then tokens and output speed per project and for
+  the last sessions). While a task runs, the panel's status line shows the model's speed
+  (`61 tok/s`), the context of its last reply (`ctx 7.5k`) and what the session has used so far;
+  the result card adds the run's tokens
 - **Jobs:** Career profile, Applying (roles, places, fit needed, submit on its own or ask first,
   per-day limit, answers for application forms), Resume template (built-in or your LaTeX, try it),
   Applications
@@ -210,7 +221,7 @@ real input events (`webContents.sendInputEvent`), not DOM calls.
 **See.** `webContents.capturePage()` of the tab (retried, blank pages detected), downscaled to the
 configured longest edge, JPEG. Only the newest screenshot stays in the conversation.
 
-**Think.** One streamed OpenAI-compatible `chat/completions` request per step: the screenshot, URL,
+**Think.** One streamed request per step (`chat/completions`, or `messages` for Claude): the screenshot, URL,
 title, tabs, the plan's goal, a digest of older steps, sites already tried, notes and decisions.
 Everything but the newest step stays byte-identical so the server's prompt cache keeps working;
 old steps are summarised in chunks.
@@ -253,7 +264,8 @@ Every technique, with before/after numbers: [docs/TECHNIQUES.md](docs/TECHNIQUES
 | `iris/agent/safety.js` | Stop conditions and the payment guard |
 | `iris/agent/inputPlan.js` | Actions → native mouse/keyboard event sequences |
 | `iris/agent/coordinateMapper.js` | Image px ⇄ view CSS px |
-| `iris/agent/modelClient.js` | Streaming OpenAI-compatible client, thinking levels, abort |
+| `iris/agent/modelClient.js` | Streaming model client: OpenAI-style and Claude Messages API, thinking levels, abort |
+| `iris/agent/usage.js` | Token use per day, session and project, and output speed |
 | `main/irisAgent.js` | The Electron side: the "computer", tabs, downloads, sessions, projects, accounts, skills |
 | `main/irisJobs.js` | Jobs on the Electron side: storage, LaTeX builds, tailoring, applications log |
 | `main/irisBridge.js`, `bin/iris-mcp.js` | Coding-agent bridge and its MCP server |
@@ -271,7 +283,7 @@ node --test test/*.test.js      # no Electron, no network, a few seconds
 ```
 
 Covered: the action grammar, coordinate mapping, every safety stop, input planning, the model
-client, memory and duplicate detection, look-up parsers, Chrome bookmark import, the MCP server,
+client (both wire formats, against a local mock server too), usage tracking, memory and duplicate detection, look-up parsers, Chrome bookmark import, the MCP server,
 the Jobs core (LaTeX import of a Jake-style resume, template rendering, tailoring checks, one-page
 fitting), the cross-window model lock, and
 the loop itself (Smart planning with look-ups, quizzes, judging, compaction, budgets, pause, stop,
