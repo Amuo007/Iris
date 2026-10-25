@@ -30,6 +30,8 @@ const irisAccountsLib = require('./iris/agent/accounts.js')
 const irisAccountsStore = require('./iris/agent/accountsStore.js')
 const irisUsageLib = require('./iris/agent/usage.js')
 const irisContextMeter = require('./iris/agent/contextMeter.js')
+const irisAppliedLib = require('./iris/agent/applied.js')
+const irisRunMemoryLib = require('./iris/agent/runMemory.js')
 
 const IRIS_SETTINGS_VERSION = 2
 
@@ -1121,20 +1123,36 @@ function irisSiteKey (u) {
 }
 
 IrisComputer.prototype.noteConfirmation = async function (wc, url) {
-  if (!this.jobsMode || !url || /linkedin\.com/i.test(url)) return
+  if (!this.jobsMode || !url) return
   try {
-    let hit = /\/(thanks|thank-you|confirmation|submitted|success)(\/|$|\?)|\/jobTasks\/completed\//i.test(url)
-    // a pop-up that says so counts like a heading (Workday: "Application Submitted" over the review page, its Submit still behind it)
-    // by its words only when no Submit button is left on the page ("once your application is submitted…" on a form is no confirmation)
-    // a heading that says so counts at once (Eightfold: "Thank you for your application, Amrinder!" above a profile-review
-    // step with its own buttons); the page's text only when no Submit is left on it
-    // the page title (SuccessFactors: "Career Opportunities: Successfully Applied to …"), read without a page script
-    if (!hit) hit = IRIS_CONFIRM_DIALOG.test(String(wc.getTitle() || ''))
-    if (!hit) hit = await withTimeout(wc.executeJavaScript(IRIS_CONFIRM_PEEK), 2500, 'confirm check').then(function (r) { return !!r && (IRIS_CONFIRM_TEXT.test(String(r.heads || '')) || IRIS_CONFIRM_DIALOG.test(String(r.dialog || '')) || (!r.submit && IRIS_CONFIRM_TEXT.test(String(r.text || ''))) ||
-      // Workday's Candidate Home right after Submit lists the application with today's date (American Family: no thank-you page)
-      (/\/userHome(\/|$|\?)/i.test(url) && /in process|submitted/i.test(String(r.text || '')) && irisTodayRe().test(String(r.text || '')))) })
+    let hit = false
+    let at = url
+    if (/(^|\.)linkedin\.com$/i.test(irisSiteOf(url) || '')) {
+      // LinkedIn, one look for two things: its weekly invitation limit when the page itself shows it (the only sighting
+      // that counts, see irisLinkedinLimitSighted), and Easy Apply's own confirmation, filed under the job's number (one
+      // LinkedIn address shows many jobs). LinkedIn was skipped here, so an Easy Apply that went through could never be
+      // logged as applied (Explore Logistics, 10-24)
+      const r = await withTimeout(wc.executeJavaScript(IRIS_CONFIRM_PEEK), 2500, 'confirm check')
+      if (irisCareerLib.linkedinLimitShown(r)) irisLinkedinLimitSighted('page')
+      const id = irisAppliedLib.linkedinJobId(url)
+      if (id && irisAppliedLib.linkedinConfirmed(r, url)) {
+        hit = true
+        at = 'https://www.linkedin.com/jobs/view/' + id + '/'
+      }
+    } else {
+      hit = /\/(thanks|thank-you|confirmation|submitted|success)(\/|$|\?)|\/jobTasks\/completed\//i.test(url)
+      // a pop-up that says so counts like a heading (Workday: "Application Submitted" over the review page, its Submit still behind it)
+      // by its words only when no Submit button is left on the page ("once your application is submitted…" on a form is no confirmation)
+      // a heading that says so counts at once (Eightfold: "Thank you for your application, Amrinder!" above a profile-review
+      // step with its own buttons); the page's text only when no Submit is left on it
+      // the page title (SuccessFactors: "Career Opportunities: Successfully Applied to …"), read without a page script
+      if (!hit) hit = IRIS_CONFIRM_DIALOG.test(String(wc.getTitle() || ''))
+      if (!hit) hit = await withTimeout(wc.executeJavaScript(IRIS_CONFIRM_PEEK), 2500, 'confirm check').then(function (r) { return !!r && (IRIS_CONFIRM_TEXT.test(String(r.heads || '')) || IRIS_CONFIRM_DIALOG.test(String(r.dialog || '')) || (!r.submit && IRIS_CONFIRM_TEXT.test(String(r.text || ''))) ||
+        // Workday's Candidate Home right after Submit lists the application with today's date (American Family: no thank-you page)
+        (/\/userHome(\/|$|\?)/i.test(url) && /in process|submitted/i.test(String(r.text || '')) && irisTodayRe().test(String(r.text || '')))) })
+    }
     if (this.unconfirmedLog && (!this.unconfirmedLog.co || String(url).toLowerCase().replace(/[^a-z0-9]/g, '').indexOf(this.unconfirmedLog.co) >= 0 || (this.unconfirmedLog.site && irisSiteKey(url) === this.unconfirmedLog.site))) this.unconfirmedLog.looks++
-    if (hit) this.confirmations = (this.confirmations || []).filter(function (c) { return Date.now() - c.at < 3600000 }).concat({ url: url, at: Date.now() })
+    if (hit) this.confirmations = (this.confirmations || []).filter(function (c) { return Date.now() - c.at < 3600000 }).concat({ url: at, at: Date.now() })
   } catch (e) { /* only a check */ }
 }
 
@@ -1812,41 +1830,51 @@ IrisComputer.prototype.act = async function (action) {
       // this job is done: a later job's needs_you is not about that sign-in, nor its reset
       this.lastSignIn = null
       this.resetFor = null
-      // "applied" only for an application whose confirmation page was seen (a real run: Skydio logged as submitted
-      // while its form still sat there unsent). Asked again for the same job, it is taken — noted as unconfirmed.
-      // (a job already logged "applied" — logged again to add its LinkedIn names — is no new claim: no check. A real run
-      // was told to go back and submit AgZen again after a restart had cleared the confirmations seen.)
+      // "applied" only for an application whose own confirmation page was seen (a real run: Skydio logged as submitted
+      // while its form still sat there unsent) — see iris/agent/applied.js. Asked again after a look, still with none, it
+      // is filed needs_you for the user to check, never "applied" (10-24: IV.AI passed as applied with no confirmation).
+      // (a job already logged "applied" — logged again to add its LinkedIn names — is no new claim: no check.)
       const loggedBefore = action.status === 'applied' && this.jobsMode ? irisApplicationFind({ url: action.url || '', company: action.company, title: action.title }) : null
       if (action.status === 'applied' && this.jobsMode && !(loggedBefore && loggedBefore.status === 'applied')) {
         const squash = function (v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '') }
-        const want = irisJobKey(action.url || '').replace(/\/(thanks|thank-you|confirmation|submitted|success)$/, '')
-        const co = squash(action.company).slice(0, 6)
-        // the company's own site counts too: Workday names it short ("bah", "amfam", "bbinsurance"), never "boozal…"
-        const site = action.url ? irisSiteKey(action.url) : ''
-        const ids = action.url ? irisJobIds(action.url) : []
+        const keyOf = function (u) { return irisJobKey(u).replace(/\/(thanks|thank-you|confirmation|submitted|success)$/, '') }
+        const idsOf = function (u) { return irisAppliedLib.postingIds(irisJobKey(u), irisJobIds(u)) }
         // the page in front of Iris right now, when Iris itself saw it as a confirmation (a real run: PACCAR's
         // SuccessFactors page "Successfully Applied to …" at an opaque URL with no company name or job number, while
-        // the log named jobs.paccar.com — refused three times, filed as "needs you")
+        // the log named jobs.paccar.com — refused three times, filed as "needs you"); also the job's address when the
+        // log names none
         const here = wc.getURL()
-        const seen = (this.confirmations || []).some(function (c) {
-          const k = irisJobKey(c.url).replace(/\/(thanks|thank-you|confirmation|submitted|success)$/, '')
-          return Date.now() - c.at < 45 * 60000 && ((here && c.url === here && Date.now() - c.at < 10 * 60000) ||
-            (want && (k === want || k.indexOf(want) === 0 || want.indexOf(k) === 0)) || (co && squash(c.url).indexOf(co) >= 0) || (site && irisSiteKey(c.url) === site) ||
-            // the same posting number: a company page's ?gh_jid=N confirmed on Greenhouse's embed ?token=N
-            (ids.length && irisJobIds(c.url).some(function (x) { return ids.indexOf(x) >= 0 })))
-        })
-        // asked again for the same job after a look at its page: taken
-        const again = this.unconfirmedLog && this.unconfirmedLog.key === (action.company + '|' + action.title) && this.unconfirmedLog.looks > 0
-        if (!seen && !again) {
-          if (!this.unconfirmedLog || this.unconfirmedLog.key !== (action.company + '|' + action.title)) this.unconfirmedLog = { key: action.company + '|' + action.title, co: co, site: site, looks: 0 }
-          // a way out: a real run took Lear's "Thank you for expressing your interest" greeting above its unfinished form
-          // for a confirmation and asked again and again
-          this.unconfirmedLog.refused = (this.unconfirmedLog.refused || 0) + 1
-          if (this.unconfirmedLog.refused >= 3) return { ok: false, error: 'not logged — "applied" refused ' + this.unconfirmedLog.refused + ' times: no confirmation page was ever seen for this job (a greeting such as "thank you for your interest" on the form itself is none). Do not log it "applied" again: log it needs_you, saying what the page shows, and go on to the next job.' }
-          return { ok: false, error: 'not logged — no confirmation was seen for this application (no "thank you / application submitted" page after Submit), so it may not have gone through. Go back to its page and look: submit it if the form is still there, and log "applied" when the confirmation shows. If its page does show it went through, log it again after that look.' }
+        const logUrl = action.url || here || ''
+        const log = {
+          key: keyOf(logUrl),
+          ids: idsOf(logUrl),
+          // the company's own site counts too: Workday names it short ("bah", "amfam", "bbinsurance"), never "boozal…"
+          site: irisSiteKey(logUrl),
+          co: squash(action.company).slice(0, 6),
+          here: here,
+          // a LinkedIn job is told apart by its number only: every LinkedIn job shares one site
+          strict: !!irisAppliedLib.linkedinJobId(logUrl)
         }
-        if (!seen && again) action = Object.assign({}, action, { note: ((action.note || '') + ' (no confirmation page recognised)').trim() })
-        this.unconfirmedLog = null
+        const now = Date.now()
+        const seen = (this.confirmations || []).some(function (c) {
+          return irisAppliedLib.confirmationMatches({ url: c.url, at: c.at, key: keyOf(c.url), ids: idsOf(c.url), site: irisSiteKey(c.url), squashed: squash(c.url) }, log, now)
+        })
+        if (!seen) {
+          const id = action.company + '|' + action.title
+          if (!this.unconfirmedLog || this.unconfirmedLog.key !== id) this.unconfirmedLog = { key: id, co: log.co, site: log.site, looks: 0, refused: 0 }
+          const u = this.unconfirmedLog
+          u.refused++
+          // looked again and still none (or a third try): left for the user, never called applied (a real run also took
+          // Lear's "Thank you for expressing your interest" greeting above its unfinished form for a confirmation)
+          if ((u.looks > 0 && u.refused >= 2) || u.refused >= 3) {
+            this.unconfirmedLog = null
+            action = Object.assign({}, action, { status: 'needs_you', note: ((action.note ? action.note + ' — ' : '') + 'Iris reported it as submitted, but no confirmation page was seen: check whether it went through.') })
+          } else {
+            return { ok: false, error: 'not logged — no confirmation was seen for this application (no "thank you / application submitted" page after Submit), so it may not have gone through. Go back to its page and look: submit it if the form is still there, and log it "applied" again once the confirmation shows. Logged again with no confirmation, it is filed needs_you for the user to check.' }
+          }
+        } else {
+          this.unconfirmedLog = null
+        }
       }
       // the job this log is about: one Iris made a resume for in this run (by its title), else the last one.
       // A job ruled out from the list has no resume: it must not take another job's link, fit or resume,
@@ -2733,6 +2761,27 @@ function irisLinkedinNotesOut () {
   return Date.now() - irisLinkedinNotesOutAt < 24 * 3600000
 }
 
+/* when LinkedIn itself last showed its weekly invitation limit (on a LinkedIn page; kept on disk like the notes above).
+   The applications' "LinkedIn skipped: weekly limit" notes are not sightings: counting them kept the limit in force
+   for ever (see linkedinLimitSeen in iris/agent/career.js) */
+let irisLinkedinLimitAt = 0
+let irisLinkedinLimitRead = false
+function irisLinkedinLimitPath () { return path.join(userDataPath, 'iris-linkedin-limit.json') }
+function irisLinkedinLimitSeenAt () {
+  if (!irisLinkedinLimitRead) {
+    irisLinkedinLimitRead = true
+    try { irisLinkedinLimitAt = Math.max(irisLinkedinLimitAt, JSON.parse(fs.readFileSync(irisLinkedinLimitPath(), 'utf8')).seenAt || 0) } catch (e) {}
+  }
+  return irisLinkedinLimitAt
+}
+function irisLinkedinLimitSighted (how) {
+  // the same pop-up on the next few looks is the same sighting
+  if (Date.now() - irisLinkedinLimitSeenAt() < 60000) return
+  irisLinkedinLimitAt = Date.now()
+  try { fs.writeFileSync(irisLinkedinLimitPath(), JSON.stringify({ seenAt: irisLinkedinLimitAt, how: how })) } catch (e) {}
+  DBUG('LinkedIn weekly limit seen (' + how + ')')
+}
+
 /* thoughts in a row that say a field "still has an error" (see irisRecord) */
 var irisStaleErrors = 0
 
@@ -3094,6 +3143,9 @@ function startAgent (task, options) {
   computer.projectMemory = irisProjectMemory(computer.projectId)
   computer.jobsMode = irisJobsActive(session.title + '\n' + task)
   computer.ghDirectTried = new Set()
+  // the next run of the same chat (a Non-stop restart, or your next message) keeps what the last one knew about the job
+  // in hand and its sign-ins (iris/agent/runMemory.js); a new chat starts empty
+  if (irisComputer && irisComputer !== computer && irisComputer.sessionId === session.id) irisRunMemoryLib.carryRunMemory(irisComputer, computer)
   irisComputer = computer
   irisBindInput(tabId, cfg)
 
@@ -3252,6 +3304,10 @@ function startAgent (task, options) {
         irisLinkedinNotesOutAt = Date.now()
         try { fs.writeFileSync(irisLinkedinNotesPath(), JSON.stringify({ outAt: irisLinkedinNotesOutAt })) } catch (e) {}
       }
+      // LinkedIn's weekly invitation limit as the model read it on a LinkedIn page (the page check in noteConfirmation
+      // may miss LinkedIn's wording): a sighting. Off LinkedIn the model only repeats the note, and that is none
+      if (type === 'thought' && computer.jobsMode && irisCareerLib.linkedinLimitThought(payload.thought) &&
+        /(^|\.)linkedin\.com$/i.test(irisSiteOf(computer.state().url) || '')) irisLinkedinLimitSighted('thought')
       if (type === 'action' && payload.action && computer.jobsMode && irisLinkedinNotesOut() &&
         (payload.action.type === 'navigate' || payload.action.type === 'new_tab') && /linkedin\.com/i.test(payload.action.url || '')) {
         computer.notes = (computer.notes || []).concat('LinkedIn\'s free notes are used up: after Connect, click "Send without a note" straight away (opening "Add a note" and closing it cancels the invitation).')

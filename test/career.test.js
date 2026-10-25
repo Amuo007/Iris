@@ -343,27 +343,39 @@ test('a job form without the word apply is still a job task', () => {
   assert.ok(!career.isJobTask('The application crashed when I opened the settings'))
 })
 
-test('LinkedIn weekly limit is read from the application notes', () => {
-  const { linkedinLimitSeen } = require('../iris/agent/career')
+test('LinkedIn weekly limit comes from a real sighting, not from the notes that repeat it', () => {
+  const { linkedinLimitSeen, linkedinLimitShown, linkedinLimitThought } = require('../iris/agent/career')
   const day = 24 * 3600 * 1000
   const now = Date.UTC(2026, 9, 24, 4)
   const at = (d) => now - d * day
-  // met yesterday, nothing sent since: in force
-  assert.strictEqual(linkedinLimitSeen([{ at: at(1), note: 'Submitted. LinkedIn skipped: weekly invitation limit reached.' }], now), at(1))
-  // a connection request went out after it: lifted
+  // seen on LinkedIn yesterday, nothing sent since: in force
+  assert.strictEqual(linkedinLimitSeen([{ at: at(1), note: 'Submitted. LinkedIn skipped: weekly invitation limit reached.' }], now, at(1)), at(1))
+  // the skip notes written while it is in force do not renew it (they kept it in force for ever)
   assert.strictEqual(linkedinLimitSeen([
-    { at: at(2), note: 'LinkedIn skipped — weekly invitation limit reached' },
-    { at: at(1), note: 'Applied. Sent connection requests to 2 engineers.' }
-  ], now), 0)
-  // "already sent earlier" is no new request: the limit stays
+    { at: at(3), note: 'LinkedIn skipped: weekly limit' },
+    { at: at(0.1), note: 'Applied. LinkedIn skipped: weekly limit' }
+  ], now, at(3)), at(3))
+  // notes alone, with no sighting: not in force (the next job tries LinkedIn once and sees for itself)
+  assert.strictEqual(linkedinLimitSeen([{ at: at(0.1), note: 'LinkedIn skipped: weekly limit' }], now, 0), 0)
+  // a connection request went out after the sighting: lifted
+  assert.strictEqual(linkedinLimitSeen([{ at: at(1), note: 'Applied. Sent connection requests to 2 engineers.' }], now, at(2)), 0)
+  // "already sent earlier" is no new request; a note that names the limit is none either: the limit stays
   assert.strictEqual(linkedinLimitSeen([
-    { at: at(1), note: 'weekly limit reached on LinkedIn' },
-    { at: at(0.5), note: 'Connections already sent earlier this run' }
-  ], now), at(1))
+    { at: at(0.5), note: 'Connections already sent earlier this run' },
+    { at: at(0.4), note: 'Invitation sent? No: weekly invitation limit reached' }
+  ], now, at(1)), at(1))
   // more than a week old: no longer in force
-  assert.strictEqual(linkedinLimitSeen([{ at: at(8), note: 'out of invitations on LinkedIn' }], now), 0)
-  assert.strictEqual(linkedinLimitSeen([{ at: at(1), note: 'Submitted via Greenhouse.' }], now), 0)
+  assert.strictEqual(linkedinLimitSeen([], now, at(8)), 0)
   assert.strictEqual(linkedinLimitSeen(null, now), 0)
+
+  // the page shows it: in a pop-up or a heading, not anywhere in a post
+  assert.ok(linkedinLimitShown({ dialog: 'You’ve reached the weekly invitation limit', heads: '', text: '' }))
+  assert.ok(!linkedinLimitShown({ dialog: '', heads: 'People you may know', text: 'How the weekly invitation limit works' }))
+  // the model read it on the page, not in a note
+  assert.ok(linkedinLimitThought('(high) LinkedIn shows "You\'ve reached the weekly invitation limit". Skip LinkedIn and go on.'))
+  assert.ok(!linkedinLimitThought('(high) LinkedIn skipped (weekly limit per system note). Open the next job.'))
+  assert.ok(!linkedinLimitThought('(medium) Weekly invitation limit was reached earlier; go on.'))
+  assert.ok(!linkedinLimitThought('(high) Connect clicked; invitation sent.'))
 })
 
 test('the model\'s words for the transcript name the saved transcript, and nothing else does', () => {

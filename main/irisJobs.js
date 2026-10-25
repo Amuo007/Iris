@@ -10,6 +10,7 @@
  */
 
 const irisCareerLib = require('./iris/agent/career.js')
+const irisListFileLib = require('./iris/agent/listFile.js')
 const irisChildProcess = require('child_process')
 
 /* ---------- the career profile ---------- */
@@ -327,12 +328,20 @@ function irisApplicationsPath () {
   return path.join(userDataPath, 'iris-applications.json')
 }
 
+/* written safely: a temporary file renamed over it, the old list kept as .bak, a broken file never read as empty
+   (see iris/agent/listFile.js) */
+var irisApplicationsFile = null
+function irisApplicationsStore () {
+  if (!irisApplicationsFile) irisApplicationsFile = irisListFileLib.createListFile({ fs: fs, file: irisApplicationsPath(), key: 'items', keep: 5000, log: DBUG })
+  return irisApplicationsFile
+}
+
 function irisApplicationsLoad () {
-  try { return JSON.parse(fs.readFileSync(irisApplicationsPath(), 'utf8')).items || [] } catch (e) { return [] }
+  return irisApplicationsStore().load()
 }
 
 function irisApplicationsSave (items) {
-  fs.writeFileSync(irisApplicationsPath(), JSON.stringify({ items: items.slice(-5000) }, null, 1), { mode: 0o600 })
+  irisApplicationsStore().save(items)
   broadcast('iris-applications-changed', { count: items.length })
 }
 
@@ -340,6 +349,10 @@ function irisApplicationsSave (items) {
 function irisJobKey (url) {
   try {
     const u = new URL(url)
+    // LinkedIn shows one job at many addresses (its own page, a search or a collection with ?currentJobId=N): the number
+    // names it (a search address used to be one "job" for every job it showed)
+    const li = irisAppliedLib.linkedinJobId(url)
+    if (li) return 'linkedin.com/jobs/view/' + li
     // Workday writes one posting many ways (with or without /en-US/, two career-site names, a "-1" ending, "%2C"):
     // the company's host and the posting number at the end ("…_REQ-058508-1", "…_JR363678") name it (a real run
     // re-opened Salesforce, Morningstar and Booz Allen as new after applying)
@@ -733,7 +746,7 @@ function irisJobsPrompt (task, mode) {
   if (years.length) lines.push('Years with each skill (from the dates of the jobs that mention it — use these for "how many years with X"): ' + years.map(function (y) { return y.skill + ' ' + y.years }).join(', ') + '.')
   // LinkedIn's weekly limit, from the notes: skip that step instead of opening LinkedIn to meet the limit again;
   // looked at again once a day, so a lifted limit is noticed
-  const limitAt = irisCareerLib.linkedinLimitSeen(irisApplicationsLoad(), Date.now())
+  const limitAt = irisCareerLib.linkedinLimitSeen(irisApplicationsLoad(), Date.now(), irisLinkedinLimitSeenAt())
   if (limitAt) {
     const when = new Date(limitAt).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
     live.push(Date.now() - limitAt < 24 * 3600 * 1000

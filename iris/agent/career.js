@@ -1762,24 +1762,37 @@ function readLatexLog (log) {
 }
 
 /*
- * LinkedIn's weekly invitation limit, read from the applications' own notes: when it was last met, unless a newer
- * note says a connection request went out. 0 when it is not in force (never met, a week old, or lifted since).
- * A real week (10-18 → 10-23): 297 jobs each spent steps opening LinkedIn just to meet the same limit again.
+ * LinkedIn's weekly invitation limit: when LinkedIn itself last showed it (seenAt: Iris saw it on a LinkedIn page),
+ * unless a newer application note says a connection request went out. 0 when it is not in force (never seen, a week
+ * old, or lifted since). A real week (10-18 → 10-23): 297 jobs each spent steps opening LinkedIn just to meet the
+ * same limit again.
+ * The notes themselves are no sighting: while the limit is in force Iris writes "LinkedIn skipped: weekly limit" on
+ * every job, and counting those kept the limit new for ever (10-24: still skipped hours after a request went through).
  */
 const LINKEDIN_LIMIT = /(weekly|invitation) (invitation |invite )?limit|out of (invitations|invites)|no (invitations|invites) left/i
 const LINKEDIN_SENT = /(connection|invite|invitation)s? (requests? )?(sent|went out)|sent (a |an |\d+ )?(connection|invitation|invite)|connected with/i
 
-function linkedinLimitSeen (applications, now) {
-  let limitAt = 0
+function linkedinLimitSeen (applications, now, seenAt) {
+  const limitAt = Number(seenAt) || 0
   let sentAt = 0
   ;(applications || []).forEach(function (a) {
     const at = (a && (a.updated || a.at)) || 0
     const note = String((a && a.note) || '')
-    if (LINKEDIN_LIMIT.test(note)) limitAt = Math.max(limitAt, at)
-    else if (LINKEDIN_SENT.test(note) && !/already|earlier|before/i.test(note)) sentAt = Math.max(sentAt, at)
+    if (!LINKEDIN_LIMIT.test(note) && LINKEDIN_SENT.test(note) && !/already|earlier|before/i.test(note)) sentAt = Math.max(sentAt, at)
   })
   const week = 7 * 24 * 3600 * 1000
   return limitAt && limitAt > sentAt && (now || Date.now()) - limitAt < week ? limitAt : 0
+}
+
+/** LinkedIn shows the limit on this page (the confirm peek): in a pop-up, an alert or a heading, not anywhere in its text. */
+function linkedinLimitShown (peek) {
+  return !!peek && LINKEDIN_LIMIT.test(String(peek.dialog || '') + '\n' + String(peek.heads || ''))
+}
+
+/** The model's thought, on a LinkedIn page, says LinkedIn shows the limit — not that a note or the task says so. */
+function linkedinLimitThought (thought) {
+  const t = String(thought || '')
+  return LINKEDIN_LIMIT.test(t) && !/\b(per|from|in|by) (the |a |my )?(system |iris |latest |earlier )?notes?\b|\bnoted\b|\btask says\b|\b(reached|seen|hit) (earlier|before)\b/i.test(t)
 }
 
 /*
@@ -1806,6 +1819,8 @@ function workdayPostingId (part) {
 
 module.exports = {
   linkedinLimitSeen,
+  linkedinLimitShown,
+  linkedinLimitThought,
   isTranscriptName,
   workdayPostingId,
   SECTION_KINDS,
