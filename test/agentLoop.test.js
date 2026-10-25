@@ -977,3 +977,28 @@ test('a note that came with a look at a still-loading page reaches the model on 
   assert.strictEqual(h.model.callCount, 2)
   assert.match(h.model.calls[1].lastUser, /connect on LinkedIn for AgZen first/)
 })
+
+test('a "done" the caller sends back keeps the run going, with the note for the model', async () => {
+  let asked = 0
+  const h = harness([
+    json('applied to ASM', { type: 'done', answer: 'Applied to ASM' }),
+    (ctx) => { h.msgs = JSON.stringify(ctx.messages); return json('log it', { type: 'click', x: 100, y: 100 }) },
+    json('now finished', { type: 'done', answer: 'all logged' })
+  ], null, { config: { settleDelayMs: 0, markerDwellMs: 0, beforeDone: () => (++asked === 1 ? 'Not finished — not logged yet: ASM.' : null) } })
+  const result = await h.agent.run('apply to jobs')
+  assert.strictEqual(result.status, 'done')
+  assert.strictEqual(result.answer, 'all logged')
+  assert.match(h.msgs, /Not finished — not logged yet: ASM\./)
+  assert.strictEqual(ev(h.events, 'finish:refused').length, 1)
+  assert.strictEqual(h.computer.actions.length, 1)
+})
+
+test('a run that keeps saying done ends after maxDoneRefusals', async () => {
+  const replies = []
+  for (let i = 0; i < 4; i++) replies.push(json('done ' + i, { type: 'done', answer: 'done ' + i }))
+  const h = harness(replies, null, { config: { settleDelayMs: 0, markerDwellMs: 0, maxDoneRefusals: 3, beforeDone: () => 'go on' } })
+  const result = await h.agent.run('apply to jobs')
+  assert.strictEqual(result.status, 'done')
+  assert.strictEqual(result.answer, 'done 3')
+  assert.strictEqual(ev(h.events, 'finish:refused').length, 3)
+})

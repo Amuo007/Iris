@@ -43,4 +43,6 @@ test('nothing to carry: the new computer is left as it is', () => {
   carryRunMemory({ notes: undefined, lastJob: null }, kept)
   assert.deepStrictEqual(kept, { notes: ['x'] })
   assert.ok(RUN_MEMORY.indexOf('confirmations') >= 0 && RUN_MEMORY.indexOf('newPasswords') >= 0)
+  // what the chat logged goes on: a later run of it holds back a second Submit of those jobs too
+  assert.ok(RUN_MEMORY.indexOf('loggedIds') >= 0)
 })

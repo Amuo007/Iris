@@ -1122,6 +1122,78 @@ function irisSiteKey (u) {
   } catch (e) { return '' }
 }
 
+/* What a job run's "done" is told instead of ending, or null when it may end: the job in hand first while it is not
+   logged (a real run ended "Applied to ASM …" without logging it, and the next run of the chat said "done" again at
+   once, three times), and a non-stop run has no end. A day's limit reached ends it. */
+function irisJobsDoneNote (computer, endless) {
+  const limit = irisCareerLoad().prefs.dailyLimit
+  if (limit > 0 && irisAppliedToday() >= limit) return null
+  const unlogged = function (j) { return !!j && Date.now() - (j.at || 0) < 3 * 3600 * 1000 && !irisApplicationFind(j) }
+  const open = (computer.jobsTailored || []).filter(unlogged)
+  if (unlogged(computer.lastJob) && !open.some(function (j) { return irisSameJob(j, computer.lastJob) })) open.push(computer.lastJob)
+  if (open.length) {
+    return 'Not finished — not logged yet: ' + open.map(function (j) { return (j.title || 'job') + (j.company ? ' at ' + j.company : '') }).join('; ') +
+      '. Log it now with log_application: "applied" only if you saw its own confirmation; otherwise "needs_you" saying what happened (for example "clicked Submit, no confirmation page seen"). Never submit it again. ' +
+      (endless ? 'Then go on to the next job — this task has no end.' : 'Then finish.')
+  }
+  if (!endless) return null
+  return 'Not finished — this task has no end, so never stop with a summary. If the job you just worked on is not in the Applications list yet, log_application for it now ("applied" only if you saw its confirmation, otherwise "needs_you" saying what happened). Then go on to the next job (find new ones when the list is done).'
+}
+
+/* The button under a click, by its words: from the page, or from the form's own frame when the page shows the form in
+   one (Fastly, Brex, Instacart: Greenhouse inside the company's page) */
+function irisButtonAtScript (x, y) {
+  return '(function (x, y) {' +
+    'var e = document.elementFromPoint(x, y); if (!e) return null;' +
+    'if (e.tagName === "IFRAME") { var r = e.getBoundingClientRect(); return { frame: String(e.src || ""), x: x - r.left, y: y - r.top } }' +
+    'var b = e.closest("button, a, input[type=submit], input[type=button], [role=button]") || e;' +
+    'return { text: String(b.innerText || b.value || b.getAttribute("aria-label") || "").replace(/\\s+/g, " ").trim().slice(0, 80) }' +
+    '})(' + Math.round(x) + ', ' + Math.round(y) + ')'
+}
+
+IrisComputer.prototype.buttonAt = async function (wc, x, y) {
+  const read = function (target, px, py) {
+    return withTimeout(target.executeJavaScript(irisButtonAtScript(px, py)), 1500, 'button check').catch(function () { return null })
+  }
+  const r = await read(wc, x, y)
+  if (!r) return ''
+  if (r.frame === undefined) return r.text || ''
+  const frames = wc.mainFrame && wc.mainFrame.framesInSubtree ? wc.mainFrame.framesInSubtree.filter(function (f) { return f && f !== wc.mainFrame }) : []
+  const want = String(r.frame).split('#')[0]
+  const origin = function (u) { try { return new URL(u).origin } catch (e) { return '' } }
+  const f = frames.find(function (fr) { return want && String(fr.url || '').split('#')[0] === want }) ||
+    frames.find(function (fr) { return want && origin(fr.url) === origin(want) }) || (frames.length === 1 ? frames[0] : null)
+  if (!f) return ''
+  const inner = await read(f, r.x, r.y)
+  return inner && inner.text ? inner.text : ''
+}
+
+/* A click that sends an application, or opens the form for one, for a job already in the Applications list — applied
+   at any time, or logged in this run whatever it was logged as — is held back: one job is never submitted twice (a
+   real run submitted Pinterest twice and was on its form a third time; another went back through IBM's Apply for a
+   job applied to the day before). A job left for the user after a Submit with no confirmation counts as sent. The job
+   is told by the page's address and by the last posting seen on that site, never by its title. */
+IrisComputer.prototype.submitGuard = async function (wc, action) {
+  const label = await this.buttonAt(wc, action.x, action.y)
+  if (!irisAppliedLib.isSubmitLabel(label)) return null
+  const here = wc.getURL()
+  const site = irisSiteKey(here)
+  const seen = this.postingBySite && site ? this.postingBySite[site] : ''
+  const logged = this.loggedIds || []
+  let rec = null
+  for (const u of [here, seen]) {
+    if (!u || IRIS_CONFIRM_PAGE.test(u)) continue
+    const r = irisApplicationAt(u)
+    if (r && (r.status === 'applied' || logged.indexOf(r.id) >= 0 || irisProbablySent(r))) { rec = r; break }
+  }
+  if (!rec) return null
+  const when = new Date(rec.updated || rec.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  DBUG('submit held back: "' + label + '" on ' + here + ' (' + rec.status + ': ' + rec.company + ' / ' + rec.title + ')')
+  return 'not clicked — "' + label + '" would send an application for a job that is already in the Applications list: ' +
+    (rec.status === 'applied' ? 'applied' : irisProbablySent(rec) ? 'most likely sent already (Submit was clicked, no confirmation seen)' : rec.status === 'needs_you' ? 'left for the user' : rec.status) + ' on ' + when + ' (' + (rec.title || 'job') + (rec.company ? ' at ' + rec.company : '') + '). ' +
+    'One job is never submitted twice. Go on to the next job.'
+}
+
 IrisComputer.prototype.noteConfirmation = async function (wc, url) {
   if (!this.jobsMode || !url) return
   try {
@@ -1926,6 +1998,8 @@ IrisComputer.prototype.act = async function (action) {
         rec.note = (rec.note ? rec.note + ' ' : '') + '(The tailored resume was not uploaded in this run — the site may have kept an older one.)'
       }
       const item = irisApplicationAdd(rec)
+      // logged in this run: its Submit is held back from now on, whatever it was logged as (see submitGuard)
+      this.loggedIds = (this.loggedIds || []).concat(item.id).slice(-300)
       const label = { applied: 'Applied', skipped: 'Skipped', needs_you: 'Waiting for the user', failed: 'Could not apply' }[rec.status]
       // the user asked for LinkedIn connections after each application: say so right here, where the model would
       // otherwise read "go on" (a real run skipped LinkedIn after every job on an old "search limit" note)
@@ -2037,6 +2111,11 @@ IrisComputer.prototype.act = async function (action) {
   if ((action.type === 'click' || action.type === 'double_click' || (action.type === 'type' && action.x !== undefined)) && this.config.snapClicks !== false) {
     const snapped = await this.snapToTarget(wc, action)
     if (snapped) action = Object.assign({}, action, { x: snapped.x, y: snapped.y })
+  }
+  // one job is never submitted twice (see submitGuard)
+  if (this.jobsMode && (action.type === 'click' || action.type === 'double_click') && action.x !== undefined) {
+    const held = await this.submitGuard(wc, action)
+    if (held) return { ok: false, error: held }
   }
 
   // a long written answer on an application is checked against the profile before it is typed (a real run: an "iOS
@@ -3196,6 +3275,8 @@ function startAgent (task, options) {
       maxServerWaitMs: unlimited ? 0 : 10 * 60 * 1000,
       askTimeoutMs: unlimited ? 10 * 60 * 1000 : 0, // an overnight run does not wait all night for an answer
       // job applications: the user wants them done without being asked (real run: a salary question waited 10 minutes)
+      // a job run never ends with the job in hand unlogged, and a non-stop one never ends with a summary
+      beforeDone: computer.jobsMode ? function () { return irisJobsDoneNote(computer, mode === 'continuous' && irisPrompts.isOpenEnded(task)) } : null,
       noAsk: computer.jobsMode ? 'Decide as the JOBS rules say for questions the profile does not cover, or log_application needs_you with the reason and go on to the next job.' : '',
       planThinking: cfg.thinking === 'full' ? 'full' : 'medium',
       thinking: cfg.thinking, // 'auto': the loop decides per step

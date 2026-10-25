@@ -72,3 +72,13 @@ test('LinkedIn jobs match by number only, and old confirmations expire', () => {
   const old = conf('https://jobs.lever.co/acme/2b774d29-4bb6-47f6-9c90-75f56bf66638/thanks', 'jobs.lever.co/acme/2b774d29-4bb6-47f6-9c90-75f56bf66638', [], 'jobs.lever.co/acme', 50 * MIN)
   assert.ok(!a.confirmationMatches(old, log('jobs.lever.co/acme/2b774d29-4bb6-47f6-9c90-75f56bf66638', [], 'jobs.lever.co/acme'), NOW))
 })
+
+test('the button that sends an application, by its whole label', () => {
+  for (const t of ['Submit', 'Submit application', 'Submit Application →', 'Submit your application', 'Send application', 'Apply', 'Apply now', 'Easy Apply', 'Apply for this job', "I'm interested"]) {
+    assert.ok(a.isSubmitLabel(t), t)
+  }
+  // a search box, a filter, the next step of a form, LinkedIn's Send: not one
+  for (const t of ['Submit search', 'Apply filters', 'Search', 'Next', 'Save and Continue', 'Send', 'Applied', '', 'Apply to 25 more jobs like this one today with one click']) {
+    assert.ok(!a.isSubmitLabel(t), t)
+  }
+})

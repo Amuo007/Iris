@@ -43,6 +43,8 @@ const DEFAULTS = {
   planLookupsDeep: 8,
   runLookups: 6, // look-ups during a run (the lookup action); 0 turns the action off
   answerCheck: true, // one quick call removes details from the final answer that Iris never saw
+  beforeDone: null, // beforeDone(answer) -> a note to send a "done" back with (the run goes on), or null to finish
+  maxDoneRefusals: 4, // a run that keeps saying done ends after this many sent back
   maxServerWaitMs: 10 * 60 * 1000, // 0 = wait for the model server forever (non-stop runs)
   askTimeoutMs: 0, // non-stop runs: if a question is not answered in time, carry on without it (0 = wait)
   noAsk: '', // set (to what to do instead): ask_user never pauses the run
@@ -103,6 +105,7 @@ function createAgent (opts) {
   let planActive = false
   let lastAnswer = ''
   let finishChecked = false
+  let doneRefusals = 0 // "done"s sent back by cfg.beforeDone in this run
   let runLookups = 0
   let lookupsAsked = new Set() // queries already looked up in this run: the same one again finds the same
   let carriedNote = '' // a note that came with a look the model never saw (the page was still loading)
@@ -291,6 +294,7 @@ function createAgent (opts) {
     let planned = false
     planActive = false
     finishChecked = false
+    doneRefusals = 0
     runLookups = 0
     lookupsAsked = new Set()
     logsDone = 0
@@ -723,6 +727,18 @@ function createAgent (opts) {
     if (action.type === 'log_application') logsDone++
     // ---- terminal states -----------------------------------------------------
     if (isTerminal(action)) {
+      // the caller may send a "done" back: a job run whose job in hand is not logged yet, or one with no end (a real
+      // run ended "Applied to ASM …" without logging it, and the next run of the chat said "done" again at once)
+      if (action.type === 'done' && typeof cfg.beforeDone === 'function' && doneRefusals < cfg.maxDoneRefusals) {
+        let note = null
+        try { note = cfg.beforeDone(action.answer || '') } catch (e) { log('beforeDone: ' + e.message) }
+        if (note) {
+          doneRefusals++
+          history.addSystemNote(note)
+          emit('finish:refused', { step: state.step, note: note })
+          return { stopBatch: true }
+        }
+      }
       // a planned run must have looked at what it reports: send it back once if it judged nothing
       const stepsLeft = safety.config.maxSteps > 0 ? safety.config.maxSteps - state.step : Infinity
       if (action.type === 'done' && planActive && !finishChecked && stepsLeft > 2 && history.decisions().kept.length === 0 && history.decisions().skipped === 0) {

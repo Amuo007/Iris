@@ -72,4 +72,18 @@ function confirmationMatches (c, log, now) {
   return !!((log.co && String(c.squashed || '').indexOf(log.co) >= 0) || (log.site && c.site === log.site))
 }
 
-module.exports = { linkedinJobId, postingIds, linkedinConfirmed, confirmationMatches, CONFIRM_MS, HERE_MS }
+/*
+ * The button that sends an application, or opens the form for one, by its own words: a click on it for a job that is
+ * already in the Applications list is held back (a real run submitted Pinterest twice and was on its form a third
+ * time; another went back through IBM's Apply for a job applied to the day before). Words only, the whole label:
+ * "Submit" on a search box or "Apply filters" is not one.
+ */
+const SUBMIT_LABEL = /^(submit|submit (my |your |the )?application|submit (and|&) (apply|finish|send)|send( my)? application|complete (my |your )?application|finish (and submit|application)|apply|apply now|apply (for|to) (this|the) (job|position|role)|easy apply|apply with (linkedin|indeed|resume)|i'?m interested)$/i
+
+/** Whether a button's label is one that sends an application or opens its form. */
+function isSubmitLabel (text) {
+  const t = String(text || '').replace(/\s+/g, ' ').replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, '').trim()
+  return t.length > 0 && t.length <= 40 && SUBMIT_LABEL.test(t)
+}
+
+module.exports = { linkedinJobId, postingIds, linkedinConfirmed, confirmationMatches, isSubmitLabel, CONFIRM_MS, HERE_MS }

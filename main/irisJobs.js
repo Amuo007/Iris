@@ -409,6 +409,31 @@ function irisApplicationFind (rec) {
   return irisApplicationsLoad().slice().reverse().find(function (a) { return irisSameJob(a, rec) }) || null
 }
 
+/* A job left for the user (or failed) after a Submit that showed no confirmation was most likely sent: its note says
+   so (a real run: Pinterest, "reported it as submitted, but no confirmation page was seen", was submitted again on a
+   later visit — three applications for one job). "Submit blocked by an SMS code" or "not submitted" is not. */
+function irisProbablySent (rec) {
+  if (!rec || rec.status === 'skipped' || rec.status === 'applied') return false
+  const note = String(rec.note || '').replace(/\b(not|never|n't|could not be|cannot be|can't be|unable to be) (yet |be )?submitted\b/gi, '')
+  return /reported it as submitted|clicked submit|\bsubmitted\b/i.test(note)
+}
+
+/* The record of this very posting, by its address only (the same key or posting number), never by its title: two
+   postings with one title are two jobs (IBM's 129784 and 133481, both "Entry Level Software Developer 2027") */
+function irisApplicationAt (url) {
+  if (!url || !/^https?:/.test(url)) return null
+  const key = irisJobKey(url)
+  const ids = irisJobIds(url)
+  if (!key) return null
+  return irisApplicationsLoad().slice().reverse().find(function (a) {
+    return [a.url].concat(a.urls || []).some(function (u) {
+      if (!u) return false
+      if (irisJobKey(u) === key) return true
+      return ids.length > 0 && irisJobIds(u).some(function (x) { return ids.indexOf(x) >= 0 })
+    })
+  }) || null
+}
+
 function irisApplicationAdd (rec) {
   const items = irisApplicationsLoad()
   const existing = items.findIndex(function (a) { return irisSameJob(a, rec) })
@@ -472,6 +497,7 @@ function irisApplicationNote (url, pageTitle) {
   const when = new Date(hit.updated || hit.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   const job = hit.title ? ' (' + hit.title + (hit.company ? ' at ' + hit.company : '') + ')' : ''
   if (hit.status === 'applied') return 'STOP — you already applied to this job on ' + when + job + '. Do not apply again; find another job.'
+  if (irisProbablySent(hit)) return 'STOP — this job was most likely already submitted on ' + when + job + ' (Submit was clicked, no confirmation was seen; it is left for the user to check). Do not apply again; find another job.'
   // skipped or unfinished before: worth knowing, but the user may have asked for it on purpose
   const what = { skipped: 'You skipped this job on ' + when + (hit.note ? ' (' + String(hit.note).slice(0, 100) + ')' : ''), needs_you: 'This job was left for the user on ' + when, failed: 'Applying here failed on ' + when }[hit.status] || 'You saw this job on ' + when
   return what + job + '. Unless the user asked for this job by name, move on to another.'
@@ -608,6 +634,9 @@ function irisJobsPrompt (task, mode) {
     '   write the option\'s own words in your thought (e.g. picked "Yes, I am authorized but will need sponsorship").',
     '   A question that says which statuses count (e.g. "require sponsorship? (F-1 CPT/OPT, J-1, H1-B …)") is answered by',
     '   its own words: a status it lists is a Yes, whatever the saved answer says in general.',
+    '   One question about "now OR in the future" (sponsorship, authorization) asks both: it is a Yes when either the',
+    '   answer for now or the answer for the future is Yes (a real run answered "will you now or in the future require',
+    '   sponsorship" No from the "now" half alone).',
     '   City / location boxes that suggest places: type only the city name (e.g. "Houston", no Enter), and in the list',
     '   that appears CLICK the suggestion with the right state and country (e.g. "Houston, Texas, United States") — the',
     '   first one is often another place (North Houston, Houston in Scotland). No list? Click the box and type it again.',

@@ -24,6 +24,8 @@ const RUN_MEMORY = [
   'jobsTailored', 'lastJob', 'lastResume', 'lastCover',
   // forms
   'autofillRuns', 'ghDirectTried', 'refusedNumber',
+  // what this chat logged: a second Submit of one of them is held back
+  'loggedIds',
   // told to the model but not yet shown to it
   'notes'
 ]
