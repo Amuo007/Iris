@@ -1020,9 +1020,9 @@ function imageSignature (image) {
  */
 /* A page that says an application went through ("Thank you for applying", "Application submitted", a /thanks page):
    remembered, so "applied" is logged only for an application whose confirmation was really seen. */
-const IRIS_CONFIRM_TEXT = /thank(s| you)[^.\n]{0,60}(appl|submitt)|application (has been |was |is )?(submitted|received|sent|complete)|we('ve| have) (received|got) your application|successfully (submitted|applied)|congratulations[^.\n]{0,40}(appl|submitt)|your application is on its way|you('ve| have) already applied|already applied (for|to) this/i
+const IRIS_CONFIRM_TEXT = /thank(s| you)[^.\n]{0,60}(appl|submitt)|application (has been |was |is )?(submitted|received|sent|complete)|we('ve| have) (received|got) your application|successfully (submitted|applied)|congratulations[^.\n]{0,40}(appl|submitt)|your application is on its way|your application is in\b|you('ve| have) already applied|already applied (for|to) this/i
 /* a pop-up's or the page title's words count only in a firm form ("Application Submitted", "Successfully Applied"), never "once your application is submitted…" */
-const IRIS_CONFIRM_DIALOG = /(?<!(once|after|when|until|before|if) your )application (has been |was )?(submitted|sent|received)|thank(s| you) for (your application|applying)|you('ve| have) already applied|successfully applied/i
+const IRIS_CONFIRM_DIALOG = /(?<!(once|after|when|until|before|if) your )application (has been |was )?(submitted|sent|received)|thank(s| you) for (your application|applying)|your application is in\b|you('ve| have) already applied|successfully applied/i
 const IRIS_CONFIRM_PEEK = `(function () {
   var submit = [].slice.call(document.querySelectorAll('button, input[type=submit], [role=button]')).some(function (b) {
     var r = b.getBoundingClientRect(); var s = String(b.innerText || b.value || b.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim()
@@ -1150,6 +1150,15 @@ IrisComputer.prototype.noteConfirmation = async function (wc, url) {
       if (!hit) hit = await withTimeout(wc.executeJavaScript(IRIS_CONFIRM_PEEK), 2500, 'confirm check').then(function (r) { return !!r && (IRIS_CONFIRM_TEXT.test(String(r.heads || '')) || IRIS_CONFIRM_DIALOG.test(String(r.dialog || '')) || (!r.submit && IRIS_CONFIRM_TEXT.test(String(r.text || ''))) ||
         // Workday's Candidate Home right after Submit lists the application with today's date (American Family: no thank-you page)
         (/\/userHome(\/|$|\?)/i.test(url) && /in process|submitted/i.test(String(r.text || '')) && irisTodayRe().test(String(r.text || '')))) })
+      // the form inside a frame (instacart.careers shows Greenhouse's): its thank-you is in that frame, not the page
+      // (a real run's Instacart said "Thanks for applying" there and was filed needs_you)
+      if (!hit && wc.mainFrame && wc.mainFrame.framesInSubtree) {
+        for (const f of wc.mainFrame.framesInSubtree) {
+          if (hit || f === wc.mainFrame) continue
+          const r = await withTimeout(f.executeJavaScript(IRIS_CONFIRM_PEEK), 1500, 'frame confirm check').catch(function () { return null })
+          hit = !!r && (IRIS_CONFIRM_TEXT.test(String(r.heads || '')) || IRIS_CONFIRM_DIALOG.test(String(r.dialog || '')) || (!r.submit && IRIS_CONFIRM_TEXT.test(String(r.text || ''))))
+        }
+      }
     }
     if (this.unconfirmedLog && (!this.unconfirmedLog.co || String(url).toLowerCase().replace(/[^a-z0-9]/g, '').indexOf(this.unconfirmedLog.co) >= 0 || (this.unconfirmedLog.site && irisSiteKey(url) === this.unconfirmedLog.site))) this.unconfirmedLog.looks++
     if (hit) this.confirmations = (this.confirmations || []).filter(function (c) { return Date.now() - c.at < 3600000 }).concat({ url: at, at: Date.now() })
@@ -1870,7 +1879,7 @@ IrisComputer.prototype.act = async function (action) {
             this.unconfirmedLog = null
             action = Object.assign({}, action, { status: 'needs_you', note: ((action.note ? action.note + ' — ' : '') + 'Iris reported it as submitted, but no confirmation page was seen: check whether it went through.') })
           } else {
-            return { ok: false, error: 'not logged — no confirmation was seen for this application (no "thank you / application submitted" page after Submit), so it may not have gone through. Go back to its page and look: submit it if the form is still there, and log it "applied" again once the confirmation shows. Logged again with no confirmation, it is filed needs_you for the user to check.' }
+            return { ok: false, error: 'not logged — no confirmation was seen for this application (no "thank you / application submitted" page after Submit), so it may not have gone through. Look at the page as it is now — do not reload it or open the job again, and never submit one job twice (a reloaded job page shows an empty form even after it went through). If the page says in any words that it went through, log it again now: it is filed needs_you for the user to check. Only if your filled form is still there unsent, click Submit, then log it again.' }
           }
         } else {
           this.unconfirmedLog = null
@@ -1926,7 +1935,7 @@ IrisComputer.prototype.act = async function (action) {
         (linkedinAsked
           ? ' Now, before the next job, do the LinkedIn part the user asked for: send a connection request to at least 1 person who works at ' + rec.company +
             '. If LinkedIn\'s own search is limited, search Google for site:linkedin.com/in ' + rec.company + ' software engineer, open a profile from the results and press Connect there. Then go on to the next job.'
-          : ' Go on to the next job.'))
+          : rec.status === 'needs_you' ? ' It is the user\'s now: do not open or submit this job again in this run. Go on to the next job.' : ' Go on to the next job.'))
       if (rec.status === 'needs_you') irisNotify('A job application needs you', (rec.title || 'A job') + (rec.company ? ' at ' + rec.company : '') + (rec.note ? ': ' + rec.note : ''))
       broadcastEvent({ type: 'application', item: item, sessionId: this.sessionId })
       irisWhatsAppOnApplication(rec)
