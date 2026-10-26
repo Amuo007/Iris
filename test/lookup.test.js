@@ -365,3 +365,32 @@ test('fresh lists: "(Master\'s)" titles are left out, "-rtx" matches the address
   assert.deepStrictEqual(parseFreshListings(rows, [], 0, ['rtx']).map(j => j.company), ['Acme'])
   assert.deepStrictEqual(parseFreshListings(rows, [], 0, []).map(j => j.company), ['Acme', 'Raytheon Technologies'])
 })
+
+test('fresh lists: "-applied-materials" and "-brain-co" leave those companies out, "-ea" only Electronic Arts\' own jobs', () => {
+  const { parseFreshListings } = require('../iris/agent/lookup.js')
+  const row = (co, o) => Object.assign({ active: true, is_visible: true, category: 'Software', title: 'Software Engineer I', company_name: co, locations: ['Austin, TX'], url: 'https://jobs.lever.co/' + co.replace(/\W/g, '').toLowerCase() + '/1', date_posted: 0 }, o || {})
+  const rows = [
+    row('Applied Materials'), row('Brain Co.'), row('D.R. Horton'), row('Johns Hopkins University Applied Physics Laboratory'),
+    row('Electronic Arts', { url: 'https://jobs.ea.com/en_US/careers/JobDetail/1' }),
+    row('Learning Co', { title: 'Machine Learning Engineer' }),
+    row('Sephora'), row('Citizens Bank')
+  ]
+  const left = (not) => parseFreshListings(rows, [], 0, not).map(j => j.company)
+  assert.deepStrictEqual(left(['applied-materials', 'brain-co', 'dr-horton', 'johns-hopkins', 'ea']), ['Learning Co', 'Sephora', 'Citizens Bank'])
+  // short words only as whole names or words: "-sep" is no Sephora, "-citi" no Citizens Bank
+  assert.deepStrictEqual(left(['sep', 'citi']).length, 8)
+  // and the start of a name only in whole words: "-intel" is no Intellias, "-amazon" is Amazon Web Services too
+  const more = [row('Intellias'), row('Intel'), row('Amazon Web Services')]
+  assert.deepStrictEqual(parseFreshListings(more, [], 0, ['intel', 'amazon']).map(j => j.company), ['Intellias'])
+})
+
+test('fresh look-up: a long "-company" list is read whole, and shown short', async () => {
+  const rows = []
+  for (let i = 0; i < 130; i++) rows.push({ active: true, is_visible: true, category: 'Software', title: 'Software Engineer', company_name: 'Company ' + i, locations: ['Austin, TX'], url: 'https://jobs.lever.co/c' + i + '/1', date_posted: 0 })
+  const lk = createLookup(Object.assign({ fetch: fakeFetch([['New-Grad-Positions', JSON.stringify(rows), 200, 'application/json']]) }, instant))
+  const not = []
+  for (let i = 0; i < 129; i++) not.push('-company-' + i)
+  const r = await lk.lookup({ kind: 'jobs', query: 'fresh new grad ' + not.join(' ') })
+  assert.deepStrictEqual(r.items.map(it => it.company), ['Company 129'])
+  assert.match(r.text, /without company-0 \/ company-1 \/ company-2 \/ company-3 \/ company-4 \/ company-5 and 123 more/)
+})

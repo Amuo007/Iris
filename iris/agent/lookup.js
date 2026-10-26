@@ -296,6 +296,24 @@ function freshTermOver (term, nowSec) {
   const endMonth = { spring: 4, summer: 7, fall: 11, winter: 1 }[m[1].toLowerCase()]
   return y < d.getFullYear() || (y === d.getFullYear() && d.getMonth() > endMonth)
 }
+/* "-word" in a fresh look-up: a company by the first words of its name, spaces and dots gone ("-applied-materials",
+   "-brain-co" for "Brain Co.", "-dr-horton" for "D.R. Horton", "-johns-hopkins" for "Johns Hopkins University Applied
+   Physics Laboratory", "-amazon" for "Amazon Web Services"), or a whole word of the title or the address ("-intern";
+   "-rtx" for Raytheon Technologies on …/rec_rtx). Whole words only: "-ea" must not leave out every title with
+   "learning" in it, nor "-intel" Intellias. */
+function freshLeftOut (w, x) {
+  const squash = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '') }
+  const k = squash(w)
+  if (!k) return false
+  let lead = ''
+  for (const part of String(x.company_name || '').split(/[\s,]+/)) {
+    lead += squash(part)
+    if (lead === k) return true
+    if (lead.length >= k.length) break
+  }
+  return (String(x.company_name || '') + ' ' + String(x.title || '') + ' ' + String(x.url || '')).toLowerCase().split(/[^a-z0-9]+/).indexOf(k) !== -1
+}
+
 function parseFreshListings (rows, words, nowSec, not) {
   const seen = new Set()
   const ago = function (s) { return 'posted ' + (s < 3600 ? Math.max(1, Math.round(s / 60)) + ' min' : s < 172800 ? Math.round(s / 3600) + ' h' : Math.round(s / 86400) + ' days') + ' ago' }
@@ -315,8 +333,7 @@ function parseFreshListings (rows, words, nowSec, not) {
     // the vanshb03 list has no degrees: its titles say it ("Software Engineer (Master's)")
     if (/\((master'?s|ms|m\.s\.|ph\.?d)\b/i.test(x.title || '')) return false
     const hay = (x.title + ' ' + x.company_name + ' ' + cat).toLowerCase()
-    // "-rtx" also by the address: the company is "Raytheon Technologies" on globalhr.wd5…/rec_rtx
-    if ((not || []).some(function (w) { return (hay + ' ' + String(x.url).toLowerCase()).indexOf(w) !== -1 })) return false
+    if ((not || []).some(function (w) { return freshLeftOut(w, x) })) return false
     return !words.length || words.some(function (w) { return hay.indexOf(w) !== -1 })
   }).sort(function (a, b) {
     // newest day first; within a day, boards that need no account (quickest to apply) first
@@ -532,7 +549,7 @@ function createLookup (opts) {
     const same = function (x) { return (String(x.company_name) + '|' + String(x.title)).toLowerCase().replace(/[^a-z0-9|]+/g, '') }
     const simplify = new Set(rows.filter(function (x) { return x.list === 'newgrad' }).map(same))
     rows = rows.filter(function (x) { return x.list !== 'newgrad2' || !simplify.has(same(x)) })
-    return { source: read.join(' + ') + ' lists, newest first' + (words.length ? ', matching ' + words.join(' / ') : '') + (not.length ? ', without ' + not.join(' / ') : ''), items: parseFreshListings(rows, words, now() / 1000, not), fresh: true }
+    return { source: read.join(' + ') + ' lists, newest first' + (words.length ? ', matching ' + words.join(' / ') : '') + (not.length ? ', without ' + not.slice(0, 6).join(' / ') + (not.length > 6 ? ' and ' + (not.length - 6) + ' more' : '') : ''), items: parseFreshListings(rows, words, now() / 1000, not), fresh: true }
   }
 
   async function jobs (query) {
@@ -617,7 +634,9 @@ function createLookup (opts) {
    */
   async function lookup (req, extra) {
     const kind = KINDS.includes(req && req.kind) ? req.kind : 'web'
-    const query = String((req && req.query) || '').trim().slice(0, 300)
+    // a fresh-list look-up may carry a long "-company" list (a real run's passed 1,000 characters by night's end)
+    const raw = String((req && req.query) || '').trim()
+    const query = raw.slice(0, kind === 'jobs' && /^(fresh|latest|newest)\b/i.test(raw) ? 4000 : 300)
     if (!query) return { ok: false, text: 'Lookup needs a query.', count: 0 }
     if (kind === 'page' && isNever(query, o.never)) {
       return { ok: false, text: 'Lookup skipped ' + hostOf(query) + ': that site bans accounts for automated reading. Open it in the browser if you need it.', count: 0 }
