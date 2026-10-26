@@ -1017,3 +1017,14 @@ test('a logged job resets the count of "done"s sent back', async () => {
   assert.strictEqual(ev(h.events, 'finish:refused').length, 4)
   assert.strictEqual(result.answer, 'e')
 })
+
+test('a "done" with more actions after it is no finish: the rest of the reply runs (10-26: "placeholder" done, then a look-up)', async () => {
+  const h = harness([
+    JSON.stringify({ thought: 'skip it, then look for more', actions: [{ type: 'done', answer: 'placeholder' }, { type: 'click', x: 100, y: 100 }] }),
+    json('now finished', { type: 'done', answer: 'all logged' })
+  ], null, { config: { settleDelayMs: 0, markerDwellMs: 0 } })
+  const result = await h.agent.run('apply to jobs')
+  assert.strictEqual(result.status, 'done')
+  assert.strictEqual(result.answer, 'all logged')
+  assert.strictEqual(h.computer.actions.length, 1)
+})

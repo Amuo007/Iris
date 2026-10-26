@@ -342,3 +342,13 @@ test('request_code keeps what the code is, under any of its names', () => {
   assert.strictEqual(validateAction({ type: 'request_code' }, LIMITS).ok, false, 'what is required')
   assert.match(describeAction({ type: 'request_code', what: 'x', company: 'TikTok' }), /WhatsApp for the code for TikTok/)
 })
+
+test('a "done" with more actions after it is dropped from the batch; a last "done" stays', () => {
+  const { parseAction } = require('../iris/agent/actionSchema')
+  const lim = { imageWidth: 1024, imageHeight: 716 }
+  const p = parseAction(JSON.stringify({ thought: 'skip it', actions: [{ type: 'done', answer: 'placeholder' }, { type: 'lookup', kind: 'jobs', query: 'fresh new grad' }] }), lim)
+  assert.ok(p.ok)
+  assert.deepStrictEqual(p.actions.map(a => a.type), ['lookup'])
+  const q = parseAction(JSON.stringify({ thought: 'all done', actions: [{ type: 'click', x: 10, y: 10 }, { type: 'done', answer: 'finished' }] }), lim)
+  assert.deepStrictEqual(q.actions.map(a => a.type), ['click', 'done'])
+})

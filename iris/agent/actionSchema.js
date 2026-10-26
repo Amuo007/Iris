@@ -719,7 +719,9 @@ function parseAction (rawText, limits) {
       let bad = null
       let noted = remember
       let learned = learn
-      for (let item of batch.slice(0, MAX_BATCH + 2)) {
+      const list = batch.slice(0, MAX_BATCH + 2)
+      for (let k = 0; k < list.length; k++) {
+        let item = list[k]
         // [{"action":{"type":"lookup",…}}, …]: each item wrapped one level too deep
         if (isPlainObject(item) && item.type === undefined && isPlainObject(item.action)) item = item.action
         // "remember"/"learn" written as if they were actions: keep the text, it is not an action
@@ -733,6 +735,9 @@ function parseAction (rawText, limits) {
         if (actions.length >= MAX_BATCH) break
         const res = validateAction(item, limits)
         if (!res.ok) { bad = res.error; break }
+        // a "done" with more actions after it is no finish: the model is still working (a real run sent
+        // {"type":"done","answer":"placeholder"} then a look-up, step after step, and each one ended the round)
+        if (res.action.type === 'done' && k < list.length - 1) continue
         actions.push(res.action)
         // nothing after a page change or a terminal action can be planned from this screenshot
         if (PAGE_CHANGING.has(res.action.type) || TERMINAL.has(res.action.type)) break
