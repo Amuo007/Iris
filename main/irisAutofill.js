@@ -141,6 +141,19 @@ async function irisAfChoose (computer, wc, field, plan, facts) {
     return { left: 'its options are more than yes/no (' + texts.slice(0, 3).join(' / ') + '…): read them and pick', seen: texts }
   }
   let i = plan.pick ? plan.pick(texts) : irisAutofillLib.pickOption(texts, patterns, plan.avoid)
+  // a long list that shows only its first options (SuccessFactors' College/University, 10-26: "Houston, U of" far below
+  // "AB Petroleum Tr Inst"; seven tries, then the job was left for the user): type the wanted name's main word so the
+  // list jumps or filters to it, then read it again
+  if (i < 0 && plan.typeAhead && !plan.search && texts.length >= 10) {
+    const word = String(plan.typeAhead).split(/[\s,]+/).filter(function (w) { return w.length > 3 && !/^(university|college|of|the)$/i.test(w) })[0] || String(plan.typeAhead)
+    await irisAfType(computer, wc, word)
+    await sleep(900)
+    const again = await irisAfEval(wc, irisAutofillLib.pageOptions(field.key))
+    if (again && again.length) {
+      texts = again.map(function (o) { return o.text })
+      i = irisAutofillLib.pickOption(texts, patterns, plan.avoid)
+    }
+  }
   if (i < 0 && plan.search && /\s/.test(plan.search)) {
     // a search that found nothing that fits: try its first word alone ("University of Houston" → "Houston" lists it too)
     wc.selectAll()
