@@ -302,3 +302,66 @@ test('fresh lists: 2 a company, "-company" leaves one out, handled jobs gone (10
   assert.strictEqual(r.items.length, 0)
   assert.match(r.text, /nothing found/)
 })
+
+test('fresh new grad: the second list joins in, without Simplify repeats or jobs that do not sponsor', async () => {
+  const row = (co, title, o) => Object.assign({ active: true, is_visible: true, category: 'Software', title: title, company_name: co, locations: ['Austin, TX'], url: 'https://jobs.lever.co/' + co.toLowerCase() + '/' + title.length, date_posted: -60, degrees: ["Bachelor's"] }, o || {})
+  const simplify = [row('Acme', 'Software Engineer I'), row('NoVisa', 'Software Engineer', { sponsorship: 'Does Not Offer Sponsorship' })]
+  // the vanshb03 list: no categories, short links
+  const vansh = [
+    { active: true, is_visible: true, company_name: 'Acme', title: 'Software Engineer I', locations: ['Austin, TX'], url: 'https://go.vansh.nyc/a1', date_posted: -30 },
+    { active: true, is_visible: true, company_name: 'Softheon', title: 'Software Engineer I - Membership', locations: ['Remote', 'US'], url: 'https://go.vansh.nyc/s9', date_posted: -30, sponsorship: 'Other' },
+    { active: true, is_visible: true, company_name: 'Shop', title: 'Store Associate', locations: ['Austin, TX'], url: 'https://go.vansh.nyc/x', date_posted: -30 }
+  ]
+  const routes = [['New-Grad-Positions', JSON.stringify(simplify), 200, 'application/json'], ['vanshb03/New-Grad-2027', JSON.stringify(vansh), 200, 'application/json']]
+  const lk = createLookup(Object.assign({ fetch: fakeFetch(routes) }, instant))
+  const r = await lk.lookup({ kind: 'jobs', query: 'fresh new grad' })
+  assert.deepStrictEqual(r.items.map(it => it.company + ' / ' + it.role + ' / ' + it.shortLink), ['Acme / Software Engineer I / false', 'Softheon / Software Engineer I - Membership / true'])
+  // the short link does not answer here (404): it stays a short link, told by company and title
+  assert.match(r.text, /SimplifyJobs new grad \+ vanshb03 new grad lists/)
+  assert.match(r.text, /Softheon — Software Engineer I - Membership \(Remote, new grad/)
+  // the second list down: Simplify's alone, no error
+  const lk2 = createLookup(Object.assign({ fetch: fakeFetch(routes.slice(0, 1)) }, instant))
+  const r2 = await lk2.lookup({ kind: 'jobs', query: 'fresh new grad' })
+  assert.ok(r2.ok)
+  assert.deepStrictEqual(r2.items.map(it => it.company), ['Acme'])
+})
+
+test('fresh new grad: a short link is read for the posting address, so a job handled there stays out', async () => {
+  const vansh = [
+    { active: true, is_visible: true, company_name: 'Palantir', title: 'New Grad 2027: Forward Deployed Software Engineer, Warp Speed', locations: ['New York, NY'], url: 'https://go.vansh.nyc/p1', date_posted: -10 },
+    { active: true, is_visible: true, company_name: 'Softheon', title: 'Software Engineer I', locations: ['Remote', 'US'], url: 'https://go.vansh.nyc/s9', date_posted: -20 }
+  ]
+  const where = { 'https://go.vansh.nyc/p1': 'https://jobs.lever.co/palantir/66b495eb-aaf9-4bf9-a759-41854534add7', 'https://go.vansh.nyc/s9': 'https://jobs.lever.co/softheon/1234' }
+  const heads = []
+  const fetch = async (url, opts) => {
+    if (/go\.vansh\.nyc/.test(url)) {
+      heads.push((opts || {}).method + ' ' + (opts || {}).redirect)
+      return { status: 302, url, headers: { get: (h) => h === 'location' ? where[url] : null }, text: async () => '' }
+    }
+    if (/vanshb03/.test(url)) return { status: 200, url, headers: { get: () => 'application/json' }, text: async () => JSON.stringify(vansh) }
+    return { status: 200, url, headers: { get: () => 'application/json' }, text: async () => '[]' }
+  }
+  const lk = createLookup(Object.assign({ fetch }, instant))
+  const handled = { annotate: (it) => /66b495eb/.test(it.url) ? 'you logged this job "applied" on Oct 22' : null }
+  const r = await lk.lookup({ kind: 'jobs', query: 'fresh new grad' }, handled)
+  assert.deepStrictEqual(r.items.map(it => it.url), ['https://jobs.lever.co/softheon/1234'])
+  assert.strictEqual(r.items[0].shortLink, false)
+  assert.match(r.text, /1 not handled yet/)
+  assert.deepStrictEqual(heads, ['HEAD manual', 'HEAD manual'])
+  // read once for the session
+  await lk.lookup({ kind: 'jobs', query: 'fresh new grad software' }, handled)
+  assert.strictEqual(heads.length, 2)
+})
+
+test('fresh lists: "(Master\'s)" titles are left out, "-rtx" matches the address too', () => {
+  const { parseFreshListings } = require('../iris/agent/lookup.js')
+  const row = (o) => Object.assign({ active: true, is_visible: true, category: 'Software', title: 'Software Engineer I', company_name: 'Acme', locations: ['Austin, TX'], url: 'https://jobs.lever.co/acme/' + Math.random(), date_posted: 0 }, o)
+  const rows = [
+    row({ company_name: 'Raytheon Technologies', url: 'https://globalhr.wd5.myworkdayjobs.com/en-US/rec_rtx/job/x_01' }),
+    row({ company_name: 'Intel', title: 'Software Engineer, CAD/EDA Tools (Master\'s)' }),
+    row({ company_name: 'Lab', title: 'Research Engineer (PhD)' }),
+    row({ company_name: 'Acme' })
+  ]
+  assert.deepStrictEqual(parseFreshListings(rows, [], 0, ['rtx']).map(j => j.company), ['Acme'])
+  assert.deepStrictEqual(parseFreshListings(rows, [], 0, []).map(j => j.company), ['Acme', 'Raytheon Technologies'])
+})

@@ -302,15 +302,21 @@ function parseFreshListings (rows, words, nowSec, not) {
   return (rows || []).filter(function (x) {
     if (!x || !x.active || x.is_visible === false || !x.url) return false
     const cat = String(x.category || '')
-    // the lists' categories are loose ("Operations Intern" under Software): the title must be computer work too
-    if (!(FRESH_CS_CATEGORY.test(cat) || /hardware|quant/i.test(cat)) || !FRESH_CS_TITLE.test(x.title || '')) return false
+    // the lists' categories are loose ("Operations Intern" under Software): the title must be computer work too (the
+    // vanshb03 list has no categories: the title alone)
+    if (!(x.category == null || FRESH_CS_CATEGORY.test(cat) || /hardware|quant/i.test(cat)) || !FRESH_CS_TITLE.test(x.title || '')) return false
     // an internship whose terms are all over (Summer 2026 in October 2026)
     if ((x.terms || []).length && x.terms.every(function (t) { return freshTermOver(t, nowSec) })) return false
     if (!(x.locations || []).some(isUSLocation)) return false
     if (/citizenship is required/i.test(x.sponsorship || '') || /clearance|ts\/sci|\bu\.?s\.? citizen/i.test(x.title || '')) return false
+    // the lists mark postings that say they do not sponsor visas: no use to someone who will need it
+    if (/does not offer sponsorship/i.test(x.sponsorship || '')) return false
     if (x.degrees && x.degrees.length && !x.degrees.some(function (d) { return /bachelor/i.test(d) })) return false
+    // the vanshb03 list has no degrees: its titles say it ("Software Engineer (Master's)")
+    if (/\((master'?s|ms|m\.s\.|ph\.?d)\b/i.test(x.title || '')) return false
     const hay = (x.title + ' ' + x.company_name + ' ' + cat).toLowerCase()
-    if ((not || []).some(function (w) { return hay.indexOf(w) !== -1 })) return false
+    // "-rtx" also by the address: the company is "Raytheon Technologies" on globalhr.wd5…/rec_rtx
+    if ((not || []).some(function (w) { return (hay + ' ' + String(x.url).toLowerCase()).indexOf(w) !== -1 })) return false
     return !words.length || words.some(function (w) { return hay.indexOf(w) !== -1 })
   }).sort(function (a, b) {
     // newest day first; within a day, boards that need no account (quickest to apply) first
@@ -326,8 +332,11 @@ function parseFreshListings (rows, words, nowSec, not) {
     return {
       title: clip(x.company_name + ' — ' + x.title, 140),
       company: x.company_name || '',
+      role: x.title || '',
+      // a short link (go.vansh.nyc/…) does not name the posting: main tells it handled by company and title
+      shortLink: x.list === 'newgrad2',
       location: clip((x.locations || []).filter(isUSLocation).slice(0, 2).join('; '), 80),
-      team: x.list === 'newgrad' ? 'new grad' : 'internship' + (x.terms && x.terms.length ? ' ' + x.terms.join('/') : ''),
+      team: /^newgrad/.test(x.list) ? 'new grad' : 'internship' + (x.terms && x.terms.length ? ' ' + x.terms.join('/') : ''),
       year: ago(nowSec - (x.date_posted || 0)),
       url: x.url
     }
@@ -468,10 +477,34 @@ function createLookup (opts) {
     return { source: 'Hacker News', items: parseHackerNews(JSON.parse(r.body), cfg.maxResults) }
   }
 
+  /* The posting's own address behind a short link (go.vansh.nyc answers 302 with it), kept for the session; the short
+     link itself when it does not answer. Straight to the network, not the one-at-a-time queue: one small request each. */
+  const longUrls = new Map()
+  async function longUrl (url) {
+    if (longUrls.has(url)) return longUrls.get(url)
+    let to = url
+    for (const redirect of ['manual', 'follow']) {
+      const ctrl = typeof AbortController === 'function' ? new AbortController() : null
+      const timer = setTimeout(function () { if (ctrl) ctrl.abort() }, 6000)
+      try {
+        const res = await o.fetch(url, { method: 'HEAD', redirect: redirect, headers: { 'User-Agent': cfg.userAgent }, signal: ctrl ? ctrl.signal : undefined })
+        const loc = res && res.headers && res.headers.get ? res.headers.get('location') : ''
+        if (loc && /^https?:\/\//i.test(loc)) to = loc
+        else if (res && res.url && res.url !== url && /^https?:\/\//i.test(res.url)) to = res.url
+        if (to !== url) break
+      } catch (e) { /* a fetch without "manual" (or that hides its Location): followed instead */ } finally { clearTimeout(timer) }
+    }
+    longUrls.set(url, to)
+    return to
+  }
+
   /* "fresh intern" / "fresh new grad" [words]: the public SimplifyJobs lists read as data — one look-up for the
      newest US openings with direct links, instead of searching (each list is kept 30 min) */
   const FRESH_LISTS = { intern: 'https://raw.githubusercontent.com/SimplifyJobs/Summer2027-Internships/dev/.github/scripts/listings.json',
-    newgrad: 'https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json' }
+    newgrad: 'https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json',
+    // a second new-grad list, about 280 jobs Simplify's does not have (10-26), behind short links
+    newgrad2: 'https://raw.githubusercontent.com/vanshb03/New-Grad-2027/dev/.github/scripts/listings.json' }
+  const FRESH_NAMES = { intern: 'SimplifyJobs intern', newgrad: 'SimplifyJobs new grad', newgrad2: 'vanshb03 new grad' }
   const freshCache = {}
   async function freshRows (which) {
     const c = freshCache[which]
@@ -486,12 +519,20 @@ function createLookup (opts) {
     // "-rtx": leave that company (or word) out ("-intern" too: it picks no list)
     const not = (String(query).toLowerCase().match(/(^|\s)-[^\s,]+/g) || []).map(function (w) { return w.trim().slice(1) }).filter(function (w) { return w.length > 1 })
     const q = String(query).toLowerCase().replace(/(^|\s)-[^\s,]+/g, ' ')
-    const which = /intern/.test(q) && !/new ?grad/.test(q) ? ['intern'] : /new ?grad|full[- ]time|entry/.test(q) && !/intern/.test(q) ? ['newgrad'] : ['intern', 'newgrad']
+    const which = /intern/.test(q) && !/new ?grad/.test(q) ? ['intern'] : /new ?grad|full[- ]time|entry/.test(q) && !/intern/.test(q) ? ['newgrad', 'newgrad2'] : ['intern', 'newgrad', 'newgrad2']
     const words = q.replace(/^\s*(fresh|latest|newest)\b/, ' ').replace(/\b(intern(ship)?s?|new ?grads?|full[- ]time|entry[- ]level|jobs?|openings?|roles?|positions?|lists?|simplify(jobs)?|us|usa|united|states|recent(ly)?|posted|today|and|or|the|for|in|of)\b/g, ' ')
       .split(/[\s,]+/).filter(function (w) { return w.length > 1 })
     let rows = []
-    for (const w of which) rows = rows.concat(await freshRows(w))
-    return { source: 'SimplifyJobs ' + which.join(' + ') + ' lists, newest first' + (words.length ? ', matching ' + words.join(' / ') : '') + (not.length ? ', without ' + not.join(' / ') : ''), items: parseFreshListings(rows, words, now() / 1000, not), fresh: true }
+    const read = []
+    for (const w of which) {
+      // the second list is extra: the look-up goes on without it
+      try { rows = rows.concat(await freshRows(w)); read.push(FRESH_NAMES[w]) } catch (e) { if (w !== 'newgrad2') throw e }
+    }
+    // the second list repeats some of Simplify's jobs under its own short links: Simplify's direct link is kept
+    const same = function (x) { return (String(x.company_name) + '|' + String(x.title)).toLowerCase().replace(/[^a-z0-9|]+/g, '') }
+    const simplify = new Set(rows.filter(function (x) { return x.list === 'newgrad' }).map(same))
+    rows = rows.filter(function (x) { return x.list !== 'newgrad2' || !simplify.has(same(x)) })
+    return { source: read.join(' + ') + ' lists, newest first' + (words.length ? ', matching ' + words.join(' / ') : '') + (not.length ? ', without ' + not.join(' / ') : ''), items: parseFreshListings(rows, words, now() / 1000, not), fresh: true }
   }
 
   async function jobs (query) {
@@ -601,15 +642,30 @@ function createLookup (opts) {
     // with hundreds of jobs left in it, and went browsing)
     if (result.fresh) {
       const handled = extra && typeof extra.annotate === 'function' ? extra.annotate : function () { return null }
-      const left = result.items.filter(function (it) { return !handled(it) })
       const per = {}
-      const shown = left.filter(function (it) {
-        const co = String(it.company || it.title).toLowerCase().replace(/[^a-z0-9]+/g, '')
-        per[co] = (per[co] || 0) + 1
-        return per[co] <= 2
-      }).slice(0, 15)
-      const more = left.length > shown.length ? ', the newest 15 shown (2 a company; add "-company" to leave one out)' : ''
-      result = { source: result.source + ' — ' + left.length + ' not handled yet' + more, items: shown }
+      const shown = []
+      let left = 0
+      for (let i = 0; i < result.items.length; i += 6) {
+        let batch = result.items.slice(i, i + 6)
+        // short links: the posting's own address first, so a job handled there is known — as far as the list is shown
+        if (shown.length < 15) {
+          batch = await Promise.all(batch.map(async function (it) {
+            if (!it.shortLink) return it
+            const u = await longUrl(it.url)
+            return u === it.url ? it : Object.assign({}, it, { url: u, shortLink: false })
+          }))
+        }
+        batch.forEach(function (it) {
+          if (handled(it)) return
+          left++
+          const co = String(it.company || it.title).toLowerCase().replace(/[^a-z0-9]+/g, '')
+          if (shown.length >= 15 || (per[co] || 0) >= 2) return
+          per[co] = (per[co] || 0) + 1
+          shown.push(it)
+        })
+      }
+      const more = left > shown.length ? ', the newest 15 shown (2 a company; add "-company" to leave one out)' : ''
+      result = { source: result.source + ' — ' + left + ' not handled yet' + more, items: shown }
     }
     return { ok: true, text: format(kind, query, result, extra), count: result.items.length, items: result.items }
   }
