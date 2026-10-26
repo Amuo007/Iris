@@ -1112,6 +1112,7 @@ function irisTodayRe () {
 
 /* One company's site: a Workday / iCIMS / Avature host is the company's own; elsewhere the host and its first path part
    (Greenhouse, Lever and Ashby keep the company there). A confirmation there belongs to that company's application. */
+const IRIS_MAIL_SITE = /(^|\.)(mail\.google\.com|outlook\.(live|office|office365)\.com|mail\.yahoo\.com|mail\.proton\.me|icloud\.com)$/i
 const IRIS_CONFIRM_PAGE = /\/(thanks|thank-you|confirmation|submitted|success)(\/|$|\?)|\/jobTasks\/completed\/|\/userHome(\/|$|\?)/i
 
 function irisSiteKey (u) {
@@ -1131,13 +1132,15 @@ function irisJobsDoneNote (computer, endless) {
   const unlogged = function (j) { return !!j && Date.now() - (j.at || 0) < 3 * 3600 * 1000 && !irisApplicationFind(j) }
   const open = (computer.jobsTailored || []).filter(unlogged)
   if (unlogged(computer.lastJob) && !open.some(function (j) { return irisSameJob(j, computer.lastJob) })) open.push(computer.lastJob)
+  // the model used "done" to mean "this job is finished" (a real run: four in 20 s for one skipped job)
+  const what = '"done" ends the whole task — it is not how one job is finished: a job is finished with log_application ("applied", "skipped" or "needs_you"), then you go on to the next job. '
   if (open.length) {
-    return 'Not finished — not logged yet: ' + open.map(function (j) { return (j.title || 'job') + (j.company ? ' at ' + j.company : '') }).join('; ') +
+    return what + 'Not finished — not logged yet: ' + open.map(function (j) { return (j.title || 'job') + (j.company ? ' at ' + j.company : '') }).join('; ') +
       '. Log it now with log_application: "applied" only if you saw its own confirmation; otherwise "needs_you" saying what happened (for example "clicked Submit, no confirmation page seen"). Never submit it again. ' +
       (endless ? 'Then go on to the next job — this task has no end.' : 'Then finish.')
   }
   if (!endless) return null
-  return 'Not finished — this task has no end, so never stop with a summary. If the job you just worked on is not in the Applications list yet, log_application for it now ("applied" only if you saw its confirmation, otherwise "needs_you" saying what happened). Then go on to the next job (find new ones when the list is done).'
+  return what + 'Not finished — this task has no end, so never stop with a summary. If the job you just worked on is not in the Applications list yet, log_application for it now ("applied" only if you saw its confirmation, otherwise "needs_you" saying what happened). Then go on to the next job (find new ones when the list is done).'
 }
 
 /* The button under a click, by its words: from the page, or from the form's own frame when the page shows the form in
@@ -1196,6 +1199,9 @@ IrisComputer.prototype.submitGuard = async function (wc, action) {
 
 IrisComputer.prototype.noteConfirmation = async function (wc, url) {
   if (!this.jobsMode || !url) return
+  // a mail inbox is no application page: its "Thank you for applying" emails are older applications (a real run's
+  // restart was told to log "the application at mail.google.com/…")
+  if (IRIS_MAIL_SITE.test(irisSiteOf(url) || '')) return
   try {
     let hit = false
     let at = url

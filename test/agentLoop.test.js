@@ -1002,3 +1002,18 @@ test('a run that keeps saying done ends after maxDoneRefusals', async () => {
   assert.strictEqual(result.answer, 'done 3')
   assert.strictEqual(ev(h.events, 'finish:refused').length, 3)
 })
+
+test('a logged job resets the count of "done"s sent back', async () => {
+  const h = harness([
+    json('done a', { type: 'done', answer: 'a' }),
+    json('done b', { type: 'done', answer: 'b' }),
+    json('log it', { type: 'log_application', status: 'skipped', company: 'Meow', title: 'SWE' }),
+    json('done c', { type: 'done', answer: 'c' }),
+    json('done d', { type: 'done', answer: 'd' }),
+    json('done e', { type: 'done', answer: 'e' })
+  ], null, { config: { settleDelayMs: 0, markerDwellMs: 0, maxDoneRefusals: 2, beforeDone: () => 'go on' } })
+  const result = await h.agent.run('apply to jobs')
+  // two sent back, a job logged, two more sent back, then the cap
+  assert.strictEqual(ev(h.events, 'finish:refused').length, 4)
+  assert.strictEqual(result.answer, 'e')
+})

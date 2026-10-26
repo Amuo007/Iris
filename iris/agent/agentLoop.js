@@ -44,7 +44,7 @@ const DEFAULTS = {
   runLookups: 6, // look-ups during a run (the lookup action); 0 turns the action off
   answerCheck: true, // one quick call removes details from the final answer that Iris never saw
   beforeDone: null, // beforeDone(answer) -> a note to send a "done" back with (the run goes on), or null to finish
-  maxDoneRefusals: 4, // a run that keeps saying done ends after this many sent back
+  maxDoneRefusals: 4, // a run that keeps saying done ends after this many sent back in a row (a logged job resets it)
   maxServerWaitMs: 10 * 60 * 1000, // 0 = wait for the model server forever (non-stop runs)
   askTimeoutMs: 0, // non-stop runs: if a question is not answered in time, carry on without it (0 = wait)
   noAsk: '', // set (to what to do instead): ask_user never pauses the run
@@ -105,7 +105,7 @@ function createAgent (opts) {
   let planActive = false
   let lastAnswer = ''
   let finishChecked = false
-  let doneRefusals = 0 // "done"s sent back by cfg.beforeDone in this run
+  let doneRefusals = 0 // "done"s sent back by cfg.beforeDone since the last logged job
   let runLookups = 0
   let lookupsAsked = new Set() // queries already looked up in this run: the same one again finds the same
   let carriedNote = '' // a note that came with a look the model never saw (the page was still loading)
@@ -895,6 +895,9 @@ function createAgent (opts) {
       return { stopBatch: true, failed: true }
     }
     emit('action:result', { step: state.step, index, ok: true })
+    // a job logged: the "done"s sent back count again from zero (a real run sent back four "done"s that meant "this job is
+    // finished" in its first hour, and its next "done" ended the run)
+    if (action.type === 'log_application') doneRefusals = 0
 
     // ---- 10. settle -------------------------------------------------------------
     const settled = await settleAfter(mapped)
