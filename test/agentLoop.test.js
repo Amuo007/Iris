@@ -1028,3 +1028,24 @@ test('a "done" with more actions after it is no finish: the rest of the reply ru
   assert.strictEqual(result.answer, 'all logged')
   assert.strictEqual(h.computer.actions.length, 1)
 })
+
+test('the done hook gets the thought and the page; a job it logged resets the count of dones sent back', async () => {
+  const seen = []
+  const replies = []
+  for (let i = 0; i < 6; i++) replies.push(json('ineligible, logging skipped ' + i, { type: 'done', answer: 'placeholder' }))
+  replies.push(json('finished', { type: 'done', answer: 'end' }))
+  const h = harness(replies, null, {
+    config: {
+      settleDelayMs: 0,
+      markerDwellMs: 0,
+      maxDoneRefusals: 2,
+      beforeDone: (answer, ctx) => { seen.push(ctx); return seen.length <= 5 ? { note: 'logged for you', logged: true } : null }
+    }
+  })
+  const result = await h.agent.run('apply to jobs')
+  // five logged by the hook (each one resets the count, so maxDoneRefusals 2 never ends it), then a real finish
+  assert.strictEqual(ev(h.events, 'finish:refused').length, 5)
+  assert.strictEqual(result.answer, 'placeholder')
+  assert.match(seen[0].thought, /ineligible, logging skipped 0/)
+  assert.ok('url' in seen[0] && 'title' in seen[0])
+})

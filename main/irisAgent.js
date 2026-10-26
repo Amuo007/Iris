@@ -1147,6 +1147,59 @@ function irisJobsDoneNote (computer, endless) {
   return what + 'Not finished — this task has no end, so never stop with a summary. If the job you just worked on is not in the Applications list yet, log_application for it now ("applied" only if you saw its confirmation, otherwise "needs_you" saying what happened). Then go on to the next job (find new ones when the list is done).'
 }
 
+/* The company a job page belongs to, by its address (Workday's host, the board's first path part on Greenhouse,
+   Lever, Ashby, SmartRecruiters, Workable, else the site's name), written as the thought writes it when it names it
+   ("blueorigin" → "Blue Origin"). */
+function irisCompanyGuess (url, thought) {
+  let label = ''
+  try {
+    const u = new URL(url)
+    const h = u.hostname.toLowerCase()
+    const first = u.pathname.split('/').filter(Boolean)[0] || ''
+    if (/myworkday(jobs|site)\.com$/.test(h)) label = h.split('.')[0]
+    else if (/(greenhouse\.io|lever\.co|ashbyhq\.com|smartrecruiters\.com|workable\.com)$/.test(h)) label = first
+    else label = h.replace(/^(www|jobs|careers|career|apply)\./, '').split('.')[0]
+  } catch (e) { return '' }
+  const squash = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9]/g, '') }
+  const want = squash(decodeURIComponent(label))
+  if (!want) return ''
+  const words = String(thought || '').replace(/^\(\w+\)\s*/, '').split(/\s+/)
+  for (let i = 0; i < words.length; i++) {
+    let acc = ''
+    for (let j = i; j < Math.min(words.length, i + 4); j++) {
+      acc += squash(words[j])
+      if (acc === want) return words.slice(i, j + 1).join(' ').replace(/[^A-Za-z0-9&.]+$/, '').replace(/^[^A-Za-z0-9]+/, '')
+      if (acc.length >= want.length) break
+    }
+  }
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
+/* A reply whose thought skips the job on the screen ("…ineligible. Logging skipped and moving on") but whose action is
+   "done" ("placeholder"): the skip is logged for it. A real run (10-26: Caterpillar, Blue Origin) sent six such replies
+   in nine, the notes saying "log_application, never done" changed nothing, and each "done" ended the round. Only on a
+   single job's page, only for a job not in the Applications list yet. Returns { note, logged } or null. */
+function irisAutoSkip (computer, answer, ctx) {
+  const thought = String((ctx && ctx.thought) || '').replace(/^\(\w+\)\s*/, '')
+  const url = String((ctx && ctx.url) || '')
+  if (!computer.jobsMode || !/^\s*(placeholder)?\s*$/i.test(String(answer || ''))) return null
+  if (!/\bskip(ped|ping)?\b/i.test(thought) || /\b(not|never|don'?t|do not) skip/i.test(thought)) return null
+  if (!/^https?:/.test(url) || IRIS_CONFIRM_PAGE.test(url) || /\/search|\/jobs\/role\/|[?&](q|keywords?)=/i.test(url)) return null
+  if (!(irisJobIds(url).length || /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/i.test(url) || /\/jobs?\/[^/?#]+/i.test(url))) return null
+  if (irisApplicationAt(url)) return null
+  const title = String((ctx && ctx.title) || '').replace(/\s*[|–-]\s*(careers?|jobs?).*$/i, '').trim().slice(0, 160) || 'job'
+  const company = irisCompanyGuess(url, thought)
+  const reason = thought.split(/\.\s+(?=log|skip|moving|move|go|pulling|find|next)/i)[0].slice(0, 300)
+  const item = irisApplicationAdd({ status: 'skipped', company: company, title: title, url: url, note: reason + ' (logged by Iris: the reply said "done")' })
+  computer.loggedIds = (computer.loggedIds || []).concat(item.id).slice(-300)
+  DBUG('auto-skip logged: ' + company + ' / ' + title + ' (' + url + ')')
+  return {
+    logged: true,
+    note: 'Logged for you as skipped: ' + title + (company ? ' at ' + company : '') + ' — your reply said "done" while its thought skipped the job. ' +
+      'A job is finished with {"type":"log_application","status":"skipped",…}, never with "done". Go on to the next job.'
+  }
+}
+
 /* The button under a click, by its words: from the page, or from the form's own frame when the page shows the form in
    one (Fastly, Brex, Instacart: Greenhouse inside the company's page) */
 function irisButtonAtScript (x, y) {
@@ -3301,7 +3354,7 @@ function startAgent (task, options) {
       askTimeoutMs: unlimited ? 10 * 60 * 1000 : 0, // an overnight run does not wait all night for an answer
       // job applications: the user wants them done without being asked (real run: a salary question waited 10 minutes)
       // a job run never ends with the job in hand unlogged, and a non-stop one never ends with a summary
-      beforeDone: computer.jobsMode ? function () { return irisJobsDoneNote(computer, mode === 'continuous' && irisPrompts.isOpenEnded(task)) } : null,
+      beforeDone: computer.jobsMode ? function (answer, ctx) { return irisAutoSkip(computer, answer, ctx) || irisJobsDoneNote(computer, mode === 'continuous' && irisPrompts.isOpenEnded(task)) } : null,
       noAsk: computer.jobsMode ? 'Decide as the JOBS rules say for questions the profile does not cover, or log_application needs_you with the reason and go on to the next job.' : '',
       planThinking: cfg.thinking === 'full' ? 'full' : 'medium',
       thinking: cfg.thinking, // 'auto': the loop decides per step

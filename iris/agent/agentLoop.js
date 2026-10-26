@@ -731,7 +731,13 @@ function createAgent (opts) {
       // run ended "Applied to ASM …" without logging it, and the next run of the chat said "done" again at once)
       if (action.type === 'done' && typeof cfg.beforeDone === 'function' && doneRefusals < cfg.maxDoneRefusals) {
         let note = null
-        try { note = cfg.beforeDone(action.answer || '') } catch (e) { log('beforeDone: ' + e.message) }
+        // what the reply says it does, and the page it was on: the caller may log the job the thought names
+        try { note = cfg.beforeDone(action.answer || '', { thought: pageState.thought || '', url: (obs && obs.url) || '', title: (obs && obs.title) || '' }) } catch (e) { log('beforeDone: ' + e.message) }
+        // { note, logged: true }: the caller logged a job for it, which counts like a log_application
+        if (note && typeof note === 'object') {
+          if (note.logged) doneRefusals = -1
+          note = note.note
+        }
         if (note) {
           doneRefusals++
           history.addSystemNote(note)
