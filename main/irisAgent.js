@@ -1192,7 +1192,11 @@ IrisComputer.prototype.submitGuard = async function (wc, action) {
     const r = irisApplicationAt(u)
     if (r && (r.status === 'applied' || logged.indexOf(r.id) >= 0 || irisProbablySent(r))) { rec = r; break }
   }
-  if (!rec) return null
+  if (!rec) {
+    // the Submit that goes out: Workday's Candidate Home right after it is its confirmation (see noteConfirmation)
+    if (/submit/i.test(label)) this.lastSubmit = { url: here, at: Date.now() }
+    return null
+  }
   const when = new Date(rec.updated || rec.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   DBUG('submit held back: "' + label + '" on ' + here + ' (' + rec.status + ': ' + rec.company + ' / ' + rec.title + ')')
   return 'not clicked — "' + label + '" would send an application for a job that is already in the Applications list: ' +
@@ -1233,6 +1237,13 @@ IrisComputer.prototype.noteConfirmation = async function (wc, url) {
         irisAppliedLib.appliedButtonShown(r, url) ||
         // Workday's Candidate Home right after Submit lists the application with today's date (American Family: no thank-you page)
         (/\/userHome(\/|$|\?)/i.test(url) && /in process|submitted/i.test(String(r.text || '')) && irisTodayRe().test(String(r.text || '')))) })
+      // Workday sends a Submit that went through to the Candidate Home, whatever its list shows (Visa, 10-26: only "Thank
+      // you for your interest in joining our team!", no date, filed needs_you): there within 90 s of a Submit on that
+      // same site, filed under the form's address, which names the job
+      if (!hit && /\/userHome(\/|$|\?)/i.test(url) && this.lastSubmit && Date.now() - this.lastSubmit.at < 90000 && irisSiteKey(this.lastSubmit.url) === irisSiteKey(url)) {
+        hit = true
+        at = this.lastSubmit.url
+      }
       // the form inside a frame (instacart.careers shows Greenhouse's): its thank-you is in that frame, not the page
       // (a real run's Instacart said "Thanks for applying" there and was filed needs_you)
       if (!hit && wc.mainFrame && wc.mainFrame.framesInSubtree) {
