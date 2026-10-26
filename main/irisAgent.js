@@ -1239,9 +1239,11 @@ IrisComputer.prototype.noteConfirmation = async function (wc, url) {
         // Workday's Candidate Home right after Submit lists the application with today's date (American Family: no thank-you page)
         (/\/userHome(\/|$|\?)/i.test(url) && /in process|submitted/i.test(String(r.text || '')) && irisTodayRe().test(String(r.text || '')))) })
       // Workday sends a Submit that went through to the Candidate Home, whatever its list shows (Visa, 10-26: only "Thank
-      // you for your interest in joining our team!", no date, filed needs_you): there within 90 s of a Submit on that
-      // same site, filed under the form's address, which names the job
-      if (!hit && /\/userHome(\/|$|\?)/i.test(url) && this.lastSubmit && Date.now() - this.lastSubmit.at < 90000 && irisSiteKey(this.lastSubmit.url) === irisSiteKey(url)) {
+      // you for your interest in joining our team!", no date, filed needs_you), or back to its job list with the new
+      // application's id in the address (Flex 10-24, Perseus 10-26: "?Job_Application_ID=…"): there within 90 s of a
+      // Submit on that same site, filed under the form's address, which names the job
+      const wdSent = /\/userHome(\/|$|\?)/i.test(url) || (/myworkday(jobs|site)\.com\//i.test(url) && /[?&]Job_Application_ID=/i.test(url))
+      if (!hit && wdSent && this.lastSubmit && Date.now() - this.lastSubmit.at < 90000 && irisSiteKey(this.lastSubmit.url) === irisSiteKey(url)) {
         hit = true
         at = this.lastSubmit.url
       }
