@@ -52,6 +52,16 @@ function linkedinConfirmed (peek, url) {
   return /\/jobs\/view\//i.test(String(url || '')) && /\bapplication submitted\b/i.test(String(peek.text || ''))
 }
 
+/* Job pages whose Apply button turns to "Applied" once the application is sent, with no thank-you page after it: Work
+ * at a Startup (10-25: AviaryAI and Infer went through and were filed needs_you), and YC's own job pages. Only a
+ * single job's page: a list page can show other jobs' "Applied". */
+const APPLIED_BUTTON_PAGE = /^https:\/\/(www\.)?(workatastartup\.com\/jobs\/\d+|ycombinator\.com\/companies\/[^/]+\/jobs\/[^/?#]+)/i
+
+/** The job's own page shows its button as "Applied" (peek.applied: a visible button whose whole label is "Applied"). */
+function appliedButtonShown (peek, url) {
+  return !!(peek && peek.applied) && APPLIED_BUTTON_PAGE.test(String(url || ''))
+}
+
 /**
  * Whether confirmation c belongs to the job being logged.
  *   c:   { url, at, key, ids, site, squashed }        (ids: postingIds; squashed: the address, letters and digits only)
@@ -86,4 +96,4 @@ function isSubmitLabel (text) {
   return t.length > 0 && t.length <= 40 && SUBMIT_LABEL.test(t)
 }
 
-module.exports = { linkedinJobId, postingIds, linkedinConfirmed, confirmationMatches, isSubmitLabel, CONFIRM_MS, HERE_MS }
+module.exports = { linkedinJobId, postingIds, linkedinConfirmed, appliedButtonShown, confirmationMatches, isSubmitLabel, CONFIRM_MS, HERE_MS }

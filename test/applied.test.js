@@ -82,3 +82,17 @@ test('the button that sends an application, by its whole label', () => {
     assert.ok(!a.isSubmitLabel(t), t)
   }
 })
+
+test('Work at a Startup: the job page with its button turned to "Applied" is the confirmation', () => {
+  const { appliedButtonShown } = require('../iris/agent/applied')
+  assert.ok(appliedButtonShown({ applied: true }, 'https://www.workatastartup.com/jobs/94474'))
+  assert.ok(appliedButtonShown({ applied: true }, 'https://www.ycombinator.com/companies/infer/jobs/zrZchOv-forward-deployed-engineer'))
+  // the button still says Apply
+  assert.ok(!appliedButtonShown({ applied: false }, 'https://www.workatastartup.com/jobs/94474'))
+  // list pages show other jobs' "Applied"; other sites have "Applied" filters and tabs
+  assert.ok(!appliedButtonShown({ applied: true }, 'https://www.workatastartup.com/companies?jobType=fulltime'))
+  assert.ok(!appliedButtonShown({ applied: true }, 'https://www.ycombinator.com/jobs/role/ai-ml?experience=entry-level'))
+  assert.ok(!appliedButtonShown({ applied: true }, 'https://www.linkedin.com/my-items/saved-jobs/?cardType=APPLIED'))
+  assert.ok(!appliedButtonShown({ applied: true }, 'https://jobs.lever.co/acme/0f4d0c1e-1111-2222-3333-444455556666'))
+  assert.ok(!appliedButtonShown(null, 'https://www.workatastartup.com/jobs/94474'))
+})

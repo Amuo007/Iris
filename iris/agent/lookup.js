@@ -284,7 +284,8 @@ function isUSLocation (loc) {
 
 /* Rows of the public SimplifyJobs lists (their listings.json): open, in the US, computer-science work (software,
    AI/ML/data; hardware or quant only when the title is software-side), a bachelor's level, no citizenship or
-   clearance demand — newest first, one row per link. {words}: any of them in the title, company or category. */
+   clearance demand — newest first, one row per link. {words}: any of them in the title, company or category;
+   {not}: none of them there (the model leaves out companies it skips: "fresh new grad -rtx -dell"). */
 const FRESH_CS_CATEGORY = /^(software|ai\/ml\/data|data science)/i
 const FRESH_CS_TITLE = /software|firmware|embedded|fpga|developer|programmer|computer|asic|verification|robot|autonom|machine learning|\bml\b|\bai\b|data|cloud|security|infrastructure|backend|front[- ]?end|full[- ]?stack|mobile|\bios\b|android|devops|\bsre\b|platform/i
 function freshTermOver (term, nowSec) {
@@ -295,7 +296,7 @@ function freshTermOver (term, nowSec) {
   const endMonth = { spring: 4, summer: 7, fall: 11, winter: 1 }[m[1].toLowerCase()]
   return y < d.getFullYear() || (y === d.getFullYear() && d.getMonth() > endMonth)
 }
-function parseFreshListings (rows, words, nowSec) {
+function parseFreshListings (rows, words, nowSec, not) {
   const seen = new Set()
   const ago = function (s) { return 'posted ' + (s < 3600 ? Math.max(1, Math.round(s / 60)) + ' min' : s < 172800 ? Math.round(s / 3600) + ' h' : Math.round(s / 86400) + ' days') + ' ago' }
   return (rows || []).filter(function (x) {
@@ -309,6 +310,7 @@ function parseFreshListings (rows, words, nowSec) {
     if (/citizenship is required/i.test(x.sponsorship || '') || /clearance|ts\/sci|\bu\.?s\.? citizen/i.test(x.title || '')) return false
     if (x.degrees && x.degrees.length && !x.degrees.some(function (d) { return /bachelor/i.test(d) })) return false
     const hay = (x.title + ' ' + x.company_name + ' ' + cat).toLowerCase()
+    if ((not || []).some(function (w) { return hay.indexOf(w) !== -1 })) return false
     return !words.length || words.some(function (w) { return hay.indexOf(w) !== -1 })
   }).sort(function (a, b) {
     // newest day first; within a day, boards that need no account (quickest to apply) first
@@ -321,8 +323,14 @@ function parseFreshListings (rows, words, nowSec) {
     seen.add(k)
     return true
   }).map(function (x) {
-    return { title: clip(x.company_name + ' — ' + x.title, 140), location: clip((x.locations || []).filter(isUSLocation).slice(0, 2).join('; '), 80),
-      team: x.list === 'newgrad' ? 'new grad' : 'internship' + (x.terms && x.terms.length ? ' ' + x.terms.join('/') : ''), year: ago(nowSec - (x.date_posted || 0)), url: x.url }
+    return {
+      title: clip(x.company_name + ' — ' + x.title, 140),
+      company: x.company_name || '',
+      location: clip((x.locations || []).filter(isUSLocation).slice(0, 2).join('; '), 80),
+      team: x.list === 'newgrad' ? 'new grad' : 'internship' + (x.terms && x.terms.length ? ' ' + x.terms.join('/') : ''),
+      year: ago(nowSec - (x.date_posted || 0)),
+      url: x.url
+    }
   })
 }
 
@@ -475,13 +483,15 @@ function createLookup (opts) {
     return rows
   }
   async function fresh (query) {
-    const q = String(query).toLowerCase()
+    // "-rtx": leave that company (or word) out ("-intern" too: it picks no list)
+    const not = (String(query).toLowerCase().match(/(^|\s)-[^\s,]+/g) || []).map(function (w) { return w.trim().slice(1) }).filter(function (w) { return w.length > 1 })
+    const q = String(query).toLowerCase().replace(/(^|\s)-[^\s,]+/g, ' ')
     const which = /intern/.test(q) && !/new ?grad/.test(q) ? ['intern'] : /new ?grad|full[- ]time|entry/.test(q) && !/intern/.test(q) ? ['newgrad'] : ['intern', 'newgrad']
     const words = q.replace(/^\s*(fresh|latest|newest)\b/, ' ').replace(/\b(intern(ship)?s?|new ?grads?|full[- ]time|entry[- ]level|jobs?|openings?|roles?|positions?|lists?|simplify(jobs)?|us|usa|united|states|recent(ly)?|posted|today|and|or|the|for|in|of)\b/g, ' ')
       .split(/[\s,]+/).filter(function (w) { return w.length > 1 })
     let rows = []
     for (const w of which) rows = rows.concat(await freshRows(w))
-    return { source: 'SimplifyJobs ' + which.join(' + ') + ' lists, newest first' + (words.length ? ', matching ' + words.join(' / ') : ''), items: parseFreshListings(rows, words, now() / 1000), fresh: true }
+    return { source: 'SimplifyJobs ' + which.join(' + ') + ' lists, newest first' + (words.length ? ', matching ' + words.join(' / ') : '') + (not.length ? ', without ' + not.join(' / ') : ''), items: parseFreshListings(rows, words, now() / 1000, not), fresh: true }
   }
 
   async function jobs (query) {
@@ -586,11 +596,20 @@ function createLookup (opts) {
       }
       cache.set(key, { at: now(), result })
     }
-    // the fresh lists: jobs already handled left out, then the newest 15
+    // the fresh lists: jobs already handled left out, then the newest 15, at most 2 a company: one company's many
+    // postings hid every other company (10-25: all 15 shown were RTX and Dell, so the run took the list for used up
+    // with hundreds of jobs left in it, and went browsing)
     if (result.fresh) {
       const handled = extra && typeof extra.annotate === 'function' ? extra.annotate : function () { return null }
       const left = result.items.filter(function (it) { return !handled(it) })
-      result = { source: result.source + ' — ' + left.length + ' not handled yet' + (left.length > 15 ? ', the newest 15 shown' : ''), items: left.slice(0, 15) }
+      const per = {}
+      const shown = left.filter(function (it) {
+        const co = String(it.company || it.title).toLowerCase().replace(/[^a-z0-9]+/g, '')
+        per[co] = (per[co] || 0) + 1
+        return per[co] <= 2
+      }).slice(0, 15)
+      const more = left.length > shown.length ? ', the newest 15 shown (2 a company; add "-company" to leave one out)' : ''
+      result = { source: result.source + ' — ' + left.length + ' not handled yet' + more, items: shown }
     }
     return { ok: true, text: format(kind, query, result, extra), count: result.items.length, items: result.items }
   }

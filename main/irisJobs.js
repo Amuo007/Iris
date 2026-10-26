@@ -602,7 +602,9 @@ function irisJobsPrompt (task, mode) {
     '   (add a word to narrow it: "fresh intern firmware", "fresh new grad ai") — the public SimplifyJobs lists read as',
     '   data: open, in the US, computer work, newest first, direct apply links, jobs you already handled left out. Start',
     '   there and work down the list (no-account boards — greenhouse, lever, ashby — are quickest); look it up again for',
-    '   more. Do not repeat the same search: if it shows only jobs you handled, change source.',
+    '   more: it holds hundreds of jobs, 2 a company at a time. A company you pass over whole (citizenship, clearance,',
+    '   already applied there): add "-company" ("fresh new grad -rtx -dell") so the next companies show; a job you',
+    '   pass over: log it skipped. Change source only when the list says 0 not handled yet.',
     '   When the user names boards or job links, work only on those: once every opening there is handled, finish',
     '   with done — do not go looking on other boards or sites you know.',
   ].concat(tailoring ? [

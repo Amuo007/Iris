@@ -1030,7 +1030,10 @@ const IRIS_CONFIRM_PEEK = `(function () {
   })
   var heads = [].slice.call(document.querySelectorAll('h1, h2, h3, [role=heading], [role=alert], [role=status]')).map(function (h) { return h.innerText || '' }).join('\\n').slice(0, 3000)
   var dialog = [].slice.call(document.querySelectorAll('[role=dialog], [role=alertdialog], [aria-modal=true], dialog[open]')).filter(function (d) { var r = d.getBoundingClientRect(); return r.width > 0 && r.height > 0 }).map(function (d) { return d.innerText || '' }).join('\\n').slice(0, 3000)
-  return { text: String(document.body && document.body.innerText || '').slice(0, 20000), heads: heads, dialog: dialog, submit: submit }
+  var applied = [].slice.call(document.querySelectorAll('button, a, [role=button]')).some(function (b) {
+    var r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0 && /^applied$/i.test(String(b.innerText || '').replace(/\\s+/g, ' ').trim())
+  })
+  return { text: String(document.body && document.body.innerText || '').slice(0, 20000), heads: heads, dialog: dialog, submit: submit, applied: applied }
 })()`
 /* The boxes of a form, by id or name: a new step of a multi-step form at the same address shows a new set */
 const IRIS_FORM_IDS = `(function () {
@@ -1225,7 +1228,9 @@ IrisComputer.prototype.noteConfirmation = async function (wc, url) {
       // step with its own buttons); the page's text only when no Submit is left on it
       // the page title (SuccessFactors: "Career Opportunities: Successfully Applied to …"), read without a page script
       if (!hit) hit = IRIS_CONFIRM_DIALOG.test(String(wc.getTitle() || ''))
+      // Work at a Startup has no thank-you page: the job's Apply button turns to "Applied" (AviaryAI and Infer, 10-25)
       if (!hit) hit = await withTimeout(wc.executeJavaScript(IRIS_CONFIRM_PEEK), 2500, 'confirm check').then(function (r) { return !!r && (IRIS_CONFIRM_TEXT.test(String(r.heads || '')) || IRIS_CONFIRM_DIALOG.test(String(r.dialog || '')) || (!r.submit && IRIS_CONFIRM_TEXT.test(String(r.text || ''))) ||
+        irisAppliedLib.appliedButtonShown(r, url) ||
         // Workday's Candidate Home right after Submit lists the application with today's date (American Family: no thank-you page)
         (/\/userHome(\/|$|\?)/i.test(url) && /in process|submitted/i.test(String(r.text || '')) && irisTodayRe().test(String(r.text || '')))) })
       // the form inside a frame (instacart.careers shows Greenhouse's): its thank-you is in that frame, not the page
@@ -3571,11 +3576,10 @@ function startAgent (task, options) {
     const jobsLimitReached = computer.jobsMode && irisCareerLoad().prefs.dailyLimit > 0 && irisAppliedToday() >= irisCareerLoad().prefs.dailyLimit
     if (mode === 'continuous' && result.status === 'done' && irisPrompts.isOpenEnded(original.text) && !jobsLimitReached && (session.autoResumes || 0) < 200) {
       session.autoResumes = (session.autoResumes || 0) + 1
-      // a job run that says "done" right after an application is not out of jobs (real night: 2 stops, each one a
-      // finished-sounding reply after a submit): go on in 20 s; only 3 "done"s within 30 minutes mean nothing is left,
-      // and then it looks again in 30 minutes, as new postings appear slowly
-      session.doneTimes = (session.doneTimes || []).filter(function (t) { return Date.now() - t < 30 * 60000 }).concat(Date.now())
-      const waitMs = computer.jobsMode && session.doneTimes.length >= 3 ? 30 * 60000 : 20000
+      // a job run that says "done" right after a job is not out of jobs (real nights: a finished-sounding reply after
+      // each submit or skip): go on in 20 s; only 3 rounds that logged nothing within 30 minutes mean nothing is
+      // left, and then it looks again in 30 minutes, as new postings appear slowly
+      const waitMs = irisRunMemoryLib.nextRoundWait(session, (computer.loggedIds || []).slice(-1)[0], computer.jobsMode)
       // an application whose thank-you page was seen but that never got logged (the "done" came instead of the log)
       const unlogged = computer.jobsMode ? (computer.confirmations || []).filter(function (c) {
         return Date.now() - c.at < 20 * 60000 && !/linkedin\.com/i.test(c.url) && !irisApplicationFind({ url: c.url })

@@ -278,3 +278,27 @@ test('fresh lists (SimplifyJobs rows): US computer work, open, not over, newest 
   assert.deepStrictEqual(parseFreshListings(rows, ['firmware'], now).map(j => j.title.split(' — ')[0]), ['Chips'])
   assert.match(parseFreshListings(rows, [], now)[0].year, /posted 2 h ago/)
 })
+
+test('fresh lists: 2 a company, "-company" leaves one out, handled jobs gone (10-25: RTX and Dell filled all 15)', async () => {
+  const row = (co, i, o) => Object.assign({ active: true, is_visible: true, category: 'Software', title: 'Software Engineer I', company_name: co, locations: ['Austin, TX'], url: 'https://jobs.lever.co/' + co.toLowerCase() + '/' + i, date_posted: -i * 60, degrees: ["Bachelor's"] }, o || {})
+  const rows = []
+  for (let i = 0; i < 12; i++) rows.push(row('RTX', i))
+  for (let i = 12; i < 20; i++) rows.push(row('Dell', i))
+  for (let i = 20; i < 23; i++) rows.push(row('Acme', i))
+  rows.push(row('Beta', 23), row('Beta', 24))
+  const lk = createLookup(Object.assign({ fetch: fakeFetch([['New-Grad-Positions', JSON.stringify(rows), 200, 'application/json'], ['Internships', '[]', 200, 'application/json']]) }, instant))
+  const handled = { annotate: (it) => it.url.endsWith('/beta/23') ? 'you logged this job "applied" on Oct 24' : null }
+  const companies = (r) => r.items.map(it => it.company)
+  let r = await lk.lookup({ kind: 'jobs', query: 'fresh new grad software engineer' }, handled)
+  assert.deepStrictEqual(companies(r), ['RTX', 'RTX', 'Dell', 'Dell', 'Acme', 'Acme', 'Beta'])
+  assert.match(r.text, /24 not handled yet, the newest 15 shown \(2 a company; add "-company" to leave one out\)/)
+  r = await lk.lookup({ kind: 'jobs', query: 'fresh new grad software -rtx -dell' }, handled)
+  assert.deepStrictEqual(companies(r), ['Acme', 'Acme', 'Beta'])
+  assert.match(r.text, /without rtx \/ dell/)
+  // "-intern" is a word left out, not a pick of the internship list
+  r = await lk.lookup({ kind: 'jobs', query: 'fresh new grad -intern' }, handled)
+  assert.strictEqual(r.items.length, 7)
+  r = await lk.lookup({ kind: 'jobs', query: 'fresh new grad -acme -rtx -dell -beta' }, handled)
+  assert.strictEqual(r.items.length, 0)
+  assert.match(r.text, /nothing found/)
+})

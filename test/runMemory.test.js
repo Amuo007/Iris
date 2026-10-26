@@ -46,3 +46,31 @@ test('nothing to carry: the new computer is left as it is', () => {
   // what the chat logged goes on: a later run of it holds back a second Submit of those jobs too
   assert.ok(RUN_MEMORY.indexOf('loggedIds') >= 0)
 })
+
+const { nextRoundWait } = require('../iris/agent/runMemory')
+
+test('a non-stop job run waits 30 minutes only after 3 rounds in 30 minutes that logged nothing', () => {
+  const s = {}
+  const min = 60000
+  // a skip, then a done, three times over (the real night of 10-25): every round logged a job, so it goes on in 20 s
+  assert.strictEqual(nextRoundWait(s, 'job-1', true, 0), 20000)
+  assert.strictEqual(nextRoundWait(s, 'job-2', true, 5 * min), 20000)
+  assert.strictEqual(nextRoundWait(s, 'job-3', true, 10 * min), 20000)
+  assert.deepStrictEqual(s.doneTimes, [])
+  // rounds that logged nothing new: the third one in 30 minutes means the postings ran out
+  assert.strictEqual(nextRoundWait(s, 'job-3', true, 11 * min), 20000)
+  assert.strictEqual(nextRoundWait(s, 'job-3', true, 12 * min), 20000)
+  assert.strictEqual(nextRoundWait(s, 'job-3', true, 13 * min), 30 * min)
+  // a logged job clears the count again
+  assert.strictEqual(nextRoundWait(s, 'job-4', true, 50 * min), 20000)
+  assert.deepStrictEqual(s.doneTimes, [])
+  // empty rounds more than 30 minutes apart never add up to 3
+  const t = {}
+  assert.strictEqual(nextRoundWait(t, '', true, 0), 20000)
+  assert.strictEqual(nextRoundWait(t, '', true, 20 * min), 20000)
+  assert.strictEqual(nextRoundWait(t, '', true, 40 * min), 20000)
+  assert.strictEqual(nextRoundWait(t, '', true, 45 * min), 30 * min)
+  // a run that is not a job run always goes on in 20 s
+  const u = {}
+  for (let i = 0; i < 4; i++) assert.strictEqual(nextRoundWait(u, '', false, i * min), 20000)
+})

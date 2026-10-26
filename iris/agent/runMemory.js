@@ -39,4 +39,18 @@ function carryRunMemory (from, to) {
   return to
 }
 
-module.exports = { RUN_MEMORY, carryRunMemory }
+/** How long a non-stop run waits after a "done" before its next round. A round that logged a job did not run out of
+ * jobs: it clears the count (real night 10-25: three skips, each followed by a "done", made it wait 30 minutes). Only
+ * 3 rounds that logged nothing within 30 minutes mean the postings ran out, and a job run then looks again in 30
+ * minutes; otherwise it goes on in 20 s. `session` keeps doneTimes and loggedAtDone; `lastLogged` is the id of the
+ * chat's last logged job ('' when none). */
+function nextRoundWait (session, lastLogged, jobsMode, now) {
+  if (now === undefined) now = Date.now()
+  lastLogged = lastLogged || ''
+  const logged = lastLogged !== (session.loggedAtDone || '')
+  session.loggedAtDone = lastLogged
+  session.doneTimes = logged ? [] : (session.doneTimes || []).filter(function (t) { return now - t < 30 * 60000 }).concat(now)
+  return jobsMode && session.doneTimes.length >= 3 ? 30 * 60000 : 20000
+}
+
+module.exports = { RUN_MEMORY, carryRunMemory, nextRoundWait }
