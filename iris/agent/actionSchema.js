@@ -835,6 +835,7 @@ const ACTION_SPEC_TEXT = [
   '               field\'s label as shown and the option\'s text — Iris finds and picks it itself and reads it back',
   '               (if the option is not there it lists the real ones). Prefer this to clicking small options.',
   '  fill         {"field":str,"text":str}     put text in a form box by its label (a date box, a stubborn box)',
+  '               a date or month box: fill it ("December 2026"), never step it with the arrow keys',
   '  key          {"key":"enter|tab|escape|backspace|delete|up|down|left|right|pagedown|pageup|home|end|a..z","modifiers":["command"|"shift"]?}',
   '               (command+a/c/v/x/z work: select all, copy, paste, cut, undo)',
   '  scroll       {"direction":"down|up","amount":int?,"x":int?,"y":int?}   (amount = wheel notches, default 5)',

@@ -244,6 +244,9 @@ async function irisFillField (computer, wc, label, text) {
 
 /* Puts {text} in a known text box (page setter, else real keys) and reads it back: { set, shown } or { shown }. */
 async function irisAfFillOne (computer, wc, field, text) {
+  // a native date or month box takes only its own form ("2026-12"): "12/2026" left it empty
+  const want = irisAutofillLib.boxValue(field.inputType, text)
+  if (want !== String(text).trim()) text = want
   await irisAfEval(wc, irisAutofillLib.pageSetText(field.key, text))
   await sleep(80)
   let shown = await irisAfEval(wc, irisAutofillLib.pageValue(field.key))

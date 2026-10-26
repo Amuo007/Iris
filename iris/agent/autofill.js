@@ -393,6 +393,8 @@ function planField (field, facts, mode) {
       else if (/d{1,2}\W*m{1,2}\W*y{2,4}/i.test(ph)) value = dt.d + '/' + dt.m + '/' + dt.y
       else if (/y{4}\W*m{1,2}\W*d{1,2}/i.test(ph)) value = dt.y + '-' + dt.m + '-' + dt.d
     } else if (field.inputType === 'date') return { do: 'leave', why: 'a date box: the agent fills it' }
+    // a native month box ("Graduation Month and Year") takes "2026-12" only
+    if (field.inputType === 'month') value = boxValue('month', rule.date ? rule.date.m + '/' + rule.date.y : value)
     // a number box takes a plain number (a year, GPA, ZIP)
     if (field.inputType === 'number' && !/^\d+(\.\d+)?$/.test(String(value))) return { do: 'leave', why: 'a number box: the agent fills it' }
     return { do: 'text', value: value }
@@ -647,6 +649,24 @@ function pageMarkBox (key) {
   })()`
 }
 
+/* A value the way a native date or month box takes it: "2026-12" for <input type=month>, "2026-12-21" for type=date.
+   People and models write "12/2026", "December 2026", "Dec 21, 2026" — a month box given those stays empty, and a
+   real run then spent 20 minutes on the arrow keys (Two Sigma, 10-26: Down lowers the month, it pressed Down to raise
+   it). Anything else, or a value it cannot read, as it is. */
+const BOX_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+function boxValue (inputType, text) {
+  const t = String(text == null ? '' : text).trim()
+  if (inputType !== 'month' && inputType !== 'date') return t
+  let y, m, d, x
+  if ((x = /^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?$/.exec(t))) { y = x[1]; m = x[2]; d = x[3] } else if ((x = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(t))) { m = x[1]; d = x[2]; y = x[3] } else if ((x = /^(\d{1,2})[/.-](\d{4})$/.exec(t))) { m = x[1]; y = x[2] } else if ((x = /^([a-z]{3,9})\.?\s+(?:(\d{1,2}),?\s+)?(\d{4})$/i.exec(t)) && BOX_MONTHS.indexOf(x[1].slice(0, 3).toLowerCase()) >= 0) {
+    m = BOX_MONTHS.indexOf(x[1].slice(0, 3).toLowerCase()) + 1; d = x[2]; y = x[3]
+  } else return t
+  if (!(+m >= 1 && +m <= 12)) return t
+  const two = function (n) { return String(n).padStart(2, '0') }
+  if (inputType === 'month') return y + '-' + two(m)
+  return d ? y + '-' + two(m) + '-' + two(d) : t
+}
+
 /* Puts {value} into text box {key} the way React notices (its own value setter, then input/change/blur). */
 function pageSetText (key, value) {
   return `(() => {
@@ -714,6 +734,7 @@ module.exports = {
   pageOptionRect,
   pageValue,
   pageSetText,
+  boxValue,
   pageSetSelect,
   pageHasText,
   pageMarkBox,
