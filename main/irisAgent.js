@@ -2044,6 +2044,11 @@ IrisComputer.prototype.act = async function (action) {
           return irisAppliedLib.confirmationMatches({ url: c.url, at: c.at, key: keyOf(c.url), ids: idsOf(c.url), site: irisSiteKey(c.url), squashed: squash(c.url) }, log, now)
         })
         if (!seen) {
+          // what the page shows now, for the next fix (10-27: LiveFlow's Ashby "Success" banner was no confirmation)
+          try {
+            const pk = await withTimeout(wc.executeJavaScript(IRIS_CONFIRM_PEEK), 2500, 'confirm check')
+            DBUG('applied refused on ' + here.slice(0, 140) + ' | heads: ' + String((pk && pk.heads) || '').slice(0, 300).replace(/\s+/g, ' ') + ' | dialog: ' + String((pk && pk.dialog) || '').slice(0, 300).replace(/\s+/g, ' ') + ' | submit left: ' + !!(pk && pk.submit) + ' | text: ' + String((pk && pk.text) || '').slice(0, 600).replace(/\s+/g, ' '))
+          } catch (e) { /* only a note */ }
           const id = action.company + '|' + action.title
           if (!this.unconfirmedLog || this.unconfirmedLog.key !== id) this.unconfirmedLog = { key: id, co: log.co, site: log.site, looks: 0, refused: 0 }
           const u = this.unconfirmedLog
