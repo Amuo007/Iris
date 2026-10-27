@@ -360,6 +360,12 @@ function inPlaces (loc, places) {
   return places.some(function (st) { return new RegExp(',\\s*' + st.code + '\\b', 'i').test(l) || new RegExp('\\b' + st.name + '\\b', 'i').test(l) })
 }
 
+/* Employers whose jobs need a US person (ITAR, export control) or a clearance nearly always: the fresh lists leave them
+   out unless the look-up names them. A real night (10-26) spent its steps skipping SpaceX, Anduril, L3Harris, Amentum,
+   Relativity, General Matter and LLNL one by one. Boeing, AeroVironment and Microsoft hire F-1 graduates for some jobs:
+   not here. */
+const FRESH_US_PERSON_ONLY = /^(spacex|space exploration technologies|blue origin|relativity space|anduril|saronic|shield ai|true anomaly|sierra space|northrop grumman|lockheed martin|general dynamics|l3harris|rtx|raytheon|bae systems|leidos|saic|science applications international|caci|mantech|peraton|booz allen|amentum|noblis|huntington ingalls|general atomics|lawrence livermore|sandia national|los alamos|johns hopkins (university )?applied physics|jhu apl|general matter)\b/i
+
 function parseFreshListings (rows, words, nowSec, not, places) {
   const seen = new Set()
   const ago = function (s) { return 'posted ' + (s < 3600 ? Math.max(1, Math.round(s / 60)) + ' min' : s < 172800 ? Math.round(s / 3600) + ' h' : Math.round(s / 86400) + ' days') + ' ago' }
@@ -377,6 +383,10 @@ function parseFreshListings (rows, words, nowSec, not, places) {
     if (/citizenship is required/i.test(x.sponsorship || '') || /clearance|ts\/sci|\bu\.?s\.? citizen/i.test(x.title || '')) return false
     // the lists mark postings that say they do not sponsor visas: no use to someone who will need it
     if (/does not offer sponsorship/i.test(x.sponsorship || '')) return false
+    // a clearance in the title ("… - SECRET", "Cleared", "Poly")
+    if (/\b(cleared|secret|polygraph|poly|q clearance|clearance)\b/i.test(x.title || '')) return false
+    // US-person-only employers, unless the look-up asks for one by name
+    if (FRESH_US_PERSON_ONLY.test(String(x.company_name || '').trim()) && !(words || []).some(function (w) { return w.length > 3 && String(x.company_name).toLowerCase().indexOf(w) === 0 })) return false
     if (x.degrees && x.degrees.length && !x.degrees.some(function (d) { return /bachelor/i.test(d) })) return false
     // the vanshb03 list has no degrees: its titles say it ("Software Engineer (Master's)")
     if (/\((master'?s|ms|m\.s\.|ph\.?d)\b/i.test(x.title || '')) return false

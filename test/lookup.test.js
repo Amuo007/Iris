@@ -282,7 +282,7 @@ test('fresh lists (SimplifyJobs rows): US computer work, open, not over, newest 
 test('fresh lists: 2 a company, "-company" leaves one out, handled jobs gone (10-25: RTX and Dell filled all 15)', async () => {
   const row = (co, i, o) => Object.assign({ active: true, is_visible: true, category: 'Software', title: 'Software Engineer I', company_name: co, locations: ['Austin, TX'], url: 'https://jobs.lever.co/' + co.toLowerCase() + '/' + i, date_posted: -i * 60, degrees: ["Bachelor's"] }, o || {})
   const rows = []
-  for (let i = 0; i < 12; i++) rows.push(row('RTX', i))
+  for (let i = 0; i < 12; i++) rows.push(row('Rotex', i))
   for (let i = 12; i < 20; i++) rows.push(row('Dell', i))
   for (let i = 20; i < 23; i++) rows.push(row('Acme', i))
   rows.push(row('Beta', 23), row('Beta', 24))
@@ -290,15 +290,15 @@ test('fresh lists: 2 a company, "-company" leaves one out, handled jobs gone (10
   const handled = { annotate: (it) => it.url.endsWith('/beta/23') ? 'you logged this job "applied" on Oct 24' : null }
   const companies = (r) => r.items.map(it => it.company)
   let r = await lk.lookup({ kind: 'jobs', query: 'fresh new grad software engineer' }, handled)
-  assert.deepStrictEqual(companies(r), ['RTX', 'RTX', 'Dell', 'Dell', 'Acme', 'Acme', 'Beta'])
+  assert.deepStrictEqual(companies(r), ['Rotex', 'Rotex', 'Dell', 'Dell', 'Acme', 'Acme', 'Beta'])
   assert.match(r.text, /24 not handled yet, the newest 15 shown \(2 a company; add "-company" to leave one out\)/)
-  r = await lk.lookup({ kind: 'jobs', query: 'fresh new grad software -rtx -dell' }, handled)
+  r = await lk.lookup({ kind: 'jobs', query: 'fresh new grad software -rotex -dell' }, handled)
   assert.deepStrictEqual(companies(r), ['Acme', 'Acme', 'Beta'])
-  assert.match(r.text, /without rtx \/ dell/)
+  assert.match(r.text, /without rotex \/ dell/)
   // "-intern" is a word left out, not a pick of the internship list
   r = await lk.lookup({ kind: 'jobs', query: 'fresh new grad -intern' }, handled)
   assert.strictEqual(r.items.length, 7)
-  r = await lk.lookup({ kind: 'jobs', query: 'fresh new grad -acme -rtx -dell -beta' }, handled)
+  r = await lk.lookup({ kind: 'jobs', query: 'fresh new grad -acme -rotex -dell -beta' }, handled)
   assert.strictEqual(r.items.length, 0)
   assert.match(r.text, /nothing found/)
 })
@@ -357,13 +357,13 @@ test('fresh lists: "(Master\'s)" titles are left out, "-rtx" matches the address
   const { parseFreshListings } = require('../iris/agent/lookup.js')
   const row = (o) => Object.assign({ active: true, is_visible: true, category: 'Software', title: 'Software Engineer I', company_name: 'Acme', locations: ['Austin, TX'], url: 'https://jobs.lever.co/acme/' + Math.random(), date_posted: 0 }, o)
   const rows = [
-    row({ company_name: 'Raytheon Technologies', url: 'https://globalhr.wd5.myworkdayjobs.com/en-US/rec_rtx/job/x_01' }),
+    row({ company_name: 'Collins Aerospace', url: 'https://globalhr.wd5.myworkdayjobs.com/en-US/rec_rtx/job/x_01' }),
     row({ company_name: 'Intel', title: 'Software Engineer, CAD/EDA Tools (Master\'s)' }),
     row({ company_name: 'Lab', title: 'Research Engineer (PhD)' }),
     row({ company_name: 'Acme' })
   ]
   assert.deepStrictEqual(parseFreshListings(rows, [], 0, ['rtx']).map(j => j.company), ['Acme'])
-  assert.deepStrictEqual(parseFreshListings(rows, [], 0, []).map(j => j.company), ['Acme', 'Raytheon Technologies'])
+  assert.deepStrictEqual(parseFreshListings(rows, [], 0, []).map(j => j.company), ['Acme', 'Collins Aerospace'])
 })
 
 test('fresh lists: "-applied-materials" and "-brain-co" leave those companies out, "-ea" only Electronic Arts\' own jobs', () => {
@@ -378,7 +378,7 @@ test('fresh lists: "-applied-materials" and "-brain-co" leave those companies ou
   const left = (not) => parseFreshListings(rows, [], 0, not).map(j => j.company)
   assert.deepStrictEqual(left(['applied-materials', 'brain-co', 'dr-horton', 'johns-hopkins', 'ea']), ['Learning Co', 'Sephora', 'Citizens Bank'])
   // short words only as whole names or words: "-sep" is no Sephora, "-citi" no Citizens Bank
-  assert.deepStrictEqual(left(['sep', 'citi']).length, 8)
+  assert.deepStrictEqual(left(['sep', 'citi']).length, 7)
   // and the start of a name only in whole words: "-intel" is no Intellias, "-amazon" is Amazon Web Services too
   const more = [row('Intellias'), row('Intel'), row('Amazon Web Services')]
   assert.deepStrictEqual(parseFreshListings(more, [], 0, ['intel', 'amazon']).map(j => j.company), ['Intellias'])
@@ -417,4 +417,13 @@ test('a posting\'s eligibility lines: sponsorship, citizenship, clearance — no
     'We participate in E-Verify.\nBenefits: 401k.'
   assert.deepStrictEqual(eligibilityLines(text), ['We do not offer any type of employment-based immigration sponsorship for this program.', 'Must be a U.S. citizen with an active Secret clearance.'])
   assert.deepStrictEqual(eligibilityLines('Build services in Go. Great team.'), [])
+})
+
+test('fresh lists leave out US-person-only employers and titles with a clearance, unless the look-up names the company', () => {
+  const { parseFreshListings } = require('../iris/agent/lookup.js')
+  const row = (co, o) => Object.assign({ active: true, is_visible: true, category: 'Software', title: 'Software Engineer I', company_name: co, locations: ['Austin, TX'], url: 'https://jobs.lever.co/' + co.replace(/\W/g, '').toLowerCase() + '/1', date_posted: 0 }, o || {})
+  const rows = [row('SpaceX'), row('Anduril Industries'), row('Lawrence Livermore National Laboratory'), row('Amentum', { title: 'Entry Level Software Engineer - SECRET' }),
+    row('Microsoft', { title: 'Software Engineer - CTJ - Poly (New Grad)' }), row('Microsoft'), row('Boeing'), row('Acme')]
+  assert.deepStrictEqual(parseFreshListings(rows, [], 0, []).map(j => j.company).sort(), ['Acme', 'Boeing', 'Microsoft'])
+  assert.deepStrictEqual(parseFreshListings(rows, ['spacex'], 0, []).map(j => j.company), ['SpaceX'])
 })
