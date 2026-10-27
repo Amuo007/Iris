@@ -154,6 +154,23 @@ async function irisAfChoose (computer, wc, field, plan, facts) {
       i = irisAutofillLib.pickOption(texts, patterns, plan.avoid)
     }
   }
+  // a list that loads more as it is scrolled (SAP SuccessFactors' Employer Country, 10-27: "Aaland Islands … Australia"
+  // and nothing more, typing did not filter it): bring its last option into view, read it again, until the wanted one
+  // shows or the list stops changing
+  if (i < 0 && texts.length >= 10) {
+    let last = texts.join('|')
+    for (let round = 0; round < 30 && i < 0; round++) {
+      await irisAfEval(wc, irisAutofillLib.pageOptionRect(field.key, texts.length - 1))
+      await sleep(300)
+      const more = await irisAfEval(wc, irisAutofillLib.pageOptions(field.key))
+      if (!more || !more.length) break
+      const now = more.map(function (o) { return o.text })
+      if (now.join('|') === last) break
+      last = now.join('|')
+      texts = now
+      i = irisAutofillLib.pickOption(texts, patterns, plan.avoid)
+    }
+  }
   if (i < 0 && plan.search && /\s/.test(plan.search)) {
     // a search that found nothing that fits: try its first word alone ("University of Houston" → "Houston" lists it too)
     wc.selectAll()
