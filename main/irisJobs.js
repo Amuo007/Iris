@@ -393,7 +393,10 @@ function irisJobKey (url) {
    careers.duolingo.com/jobs/… and at Greenhouse's embed ?token=…: a real run applied to it twice) */
 function irisJobIds (url) {
   const key = irisJobKey(url)
-  const ids = key.match(/\d{8,}/g) || [] // its path and job-naming parameters only, never a tracking id
+  // its path and job-naming parameters only, never a tracking id; and never the digits inside a UUID (SmartRecruiters'
+  // …/publication/cc5c9e54-…-e222015570a7/success read as job "222015570", so SOCOTEC's thank-you page was refused as
+  // another job's, 10-27)
+  const ids = key.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ' ').match(/\d{8,}/g) || []
   // a Greenhouse job number names the posting at any length: AQR's careers.aqr.com/jobs?gh_jid=8284812 is its embed
   // form's ?token=8284812 (a real run's confirmation there was refused as another job's)
   const gh = /[?&](?:gh_jid|token)=(\d{5,})(?:&|$)/.exec(key)
