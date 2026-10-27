@@ -235,6 +235,9 @@ async function irisChooseField (computer, wc, label, option) {
   if (result.error) return { ok: false, error: result.error }
   if (result.set !== undefined) return { ok: true, note: 'Chose "' + result.set + '" in "' + field.label + '" (read back from the page).' }
   const seen = result.seen && result.seen.length ? ' Its options: ' + result.seen.slice(0, 15).join(' / ') + '.' : ''
+  // what the field is made of, for the next fix (a real night's SAP SuccessFactors lists took no pick, 10-27)
+  const html = await irisAfEval(wc, irisAutofillLib.pageFieldHtml(field.key))
+  DBUG('choose failed on ' + wc.getURL().slice(0, 120) + ' — "' + field.label + '" (' + field.kind + '): ' + (result.left || '') + ' | ' + JSON.stringify(html || null).slice(0, 4000))
   return { ok: false, error: 'could not choose "' + option + '" in "' + field.label + '": ' + (result.left || 'it did not take') + '.' + seen }
 }
 

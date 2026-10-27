@@ -684,6 +684,22 @@ function pageSetText (key, value) {
   })()`
 }
 
+/* For the debug log when a pick fails: the field's own HTML, the list it opens (aria-controls/aria-owns, else the
+   visible listboxes on the page) and the first options, cut short. A real night's SAP SuccessFactors lists took no
+   pick at all, and nothing showed why (10-27). */
+function pageFieldHtml (key) {
+  return `(() => {
+    ${AF_DEEP}
+    const host = __one('[data-iris-af="${key}"]'); if (!host) return null;
+    const cut = (s, n) => String(s || '').replace(/\\s+/g, ' ').slice(0, n);
+    const ids = [host.getAttribute('aria-controls'), host.getAttribute('aria-owns')].concat([...host.querySelectorAll('[aria-controls], [aria-owns]')].map(e => e.getAttribute('aria-controls') || e.getAttribute('aria-owns'))).filter(Boolean);
+    const lists = ids.map(id => document.getElementById(id)).filter(Boolean);
+    const shown = [...document.querySelectorAll('[role=listbox], select, ul[class*="list" i]')].filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+    return { tag: host.tagName, html: cut(host.outerHTML, 1500), parent: cut(host.parentElement && host.parentElement.outerHTML, 600),
+      lists: lists.map(l => cut(l.outerHTML, 700)), shown: shown.slice(0, 3).map(l => cut(l.outerHTML, 500)) };
+  })()`
+}
+
 /* Picks option {text} of native select {key}. */
 function pageSetSelect (key, text) {
   return `(() => {
@@ -736,6 +752,7 @@ module.exports = {
   pageSetText,
   boxValue,
   pageSetSelect,
+  pageFieldHtml,
   pageHasText,
   pageMarkBox,
   PAGE_SCROLL_TOP,
