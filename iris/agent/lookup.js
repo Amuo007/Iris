@@ -314,7 +314,29 @@ function freshLeftOut (w, x) {
   return (String(x.company_name || '') + ' ' + String(x.title || '') + ' ' + String(x.url || '')).toLowerCase().split(/[^a-z0-9]+/).indexOf(k) !== -1
 }
 
-function parseFreshListings (rows, words, nowSec, not) {
+/* US states by code and name: "texas" in a fresh look-up keeps the jobs in Texas ("Austin, TX") */
+const STATE_NAMES = ('al alabama|ak alaska|az arizona|ar arkansas|ca california|co colorado|ct connecticut|de delaware|fl florida|' +
+  'ga georgia|hi hawaii|id idaho|il illinois|in indiana|ia iowa|ks kansas|ky kentucky|la louisiana|me maine|md maryland|' +
+  'ma massachusetts|mi michigan|mn minnesota|ms mississippi|mo missouri|mt montana|ne nebraska|nv nevada|nh new hampshire|' +
+  'nj new jersey|nm new mexico|ny new york|nc north carolina|nd north dakota|oh ohio|ok oklahoma|or oregon|pa pennsylvania|' +
+  'ri rhode island|sc south carolina|sd south dakota|tn tennessee|tx texas|ut utah|vt vermont|va virginia|wa washington|' +
+  'wv west virginia|wi wisconsin|wy wyoming|dc district of columbia').split('|').map(function (p) { return { code: p.slice(0, 2), name: p.slice(3) } })
+/* The states a query names, longest names first ("west virginia" before "virginia"), and the query without them. */
+function freshPlaces (q) {
+  const places = []
+  let rest = String(q || '')
+  STATE_NAMES.slice().sort(function (a, b) { return b.name.length - a.name.length }).forEach(function (st) {
+    const re = new RegExp('(^|[^a-z])' + st.name + '(?![a-z])', 'g')
+    if (re.test(rest)) { places.push(st); rest = rest.replace(re, '$1 ') }
+  })
+  return { places: places, rest: rest }
+}
+function inPlaces (loc, places) {
+  const l = String(loc || '')
+  return places.some(function (st) { return new RegExp(',\\s*' + st.code + '\\b', 'i').test(l) || new RegExp('\\b' + st.name + '\\b', 'i').test(l) })
+}
+
+function parseFreshListings (rows, words, nowSec, not, places) {
   const seen = new Set()
   const ago = function (s) { return 'posted ' + (s < 3600 ? Math.max(1, Math.round(s / 60)) + ' min' : s < 172800 ? Math.round(s / 3600) + ' h' : Math.round(s / 86400) + ' days') + ' ago' }
   return (rows || []).filter(function (x) {
@@ -326,6 +348,8 @@ function parseFreshListings (rows, words, nowSec, not) {
     // an internship whose terms are all over (Summer 2026 in October 2026)
     if ((x.terms || []).length && x.terms.every(function (t) { return freshTermOver(t, nowSec) })) return false
     if (!(x.locations || []).some(isUSLocation)) return false
+    // a state named in the look-up ("texas"): one of the job's places is in it
+    if ((places || []).length && !(x.locations || []).some(function (l) { return inPlaces(l, places) })) return false
     if (/citizenship is required/i.test(x.sponsorship || '') || /clearance|ts\/sci|\bu\.?s\.? citizen/i.test(x.title || '')) return false
     // the lists mark postings that say they do not sponsor visas: no use to someone who will need it
     if (/does not offer sponsorship/i.test(x.sponsorship || '')) return false
@@ -535,7 +559,10 @@ function createLookup (opts) {
   async function fresh (query) {
     // "-rtx": leave that company (or word) out ("-intern" too: it picks no list)
     const not = (String(query).toLowerCase().match(/(^|\s)-[^\s,]+/g) || []).map(function (w) { return w.trim().slice(1) }).filter(function (w) { return w.length > 1 })
-    const q = String(query).toLowerCase().replace(/(^|\s)-[^\s,]+/g, ' ')
+    // a state's name keeps the jobs there ("fresh new grad software texas"); it is no title word
+    const where = freshPlaces(String(query).toLowerCase().replace(/(^|\s)-[^\s,]+/g, ' '))
+    const places = where.places
+    const q = where.rest
     const which = /intern/.test(q) && !/new ?grad/.test(q) ? ['intern'] : /new ?grad|full[- ]time|entry/.test(q) && !/intern/.test(q) ? ['newgrad', 'newgrad2'] : ['intern', 'newgrad', 'newgrad2']
     const words = q.replace(/^\s*(fresh|latest|newest)\b/, ' ').replace(/\b(intern(ship)?s?|new ?grads?|full[- ]time|entry[- ]level|jobs?|openings?|roles?|positions?|lists?|simplify(jobs)?|us|usa|united|states|recent(ly)?|posted|today|and|or|the|for|in|of)\b/g, ' ')
       .split(/[\s,]+/).filter(function (w) { return w.length > 1 })
@@ -549,7 +576,7 @@ function createLookup (opts) {
     const same = function (x) { return (String(x.company_name) + '|' + String(x.title)).toLowerCase().replace(/[^a-z0-9|]+/g, '') }
     const simplify = new Set(rows.filter(function (x) { return x.list === 'newgrad' }).map(same))
     rows = rows.filter(function (x) { return x.list !== 'newgrad2' || !simplify.has(same(x)) })
-    return { source: read.join(' + ') + ' lists, newest first' + (words.length ? ', matching ' + words.join(' / ') : '') + (not.length ? ', without ' + not.slice(0, 6).join(' / ') + (not.length > 6 ? ' and ' + (not.length - 6) + ' more' : '') : ''), items: parseFreshListings(rows, words, now() / 1000, not), fresh: true }
+    return { source: read.join(' + ') + ' lists, newest first' + (words.length ? ', matching ' + words.join(' / ') : '') + (places.length ? ', in ' + places.map(function (p) { return p.name }).join(' / ') : '') + (not.length ? ', without ' + not.slice(0, 6).join(' / ') + (not.length > 6 ? ' and ' + (not.length - 6) + ' more' : '') : ''), items: parseFreshListings(rows, words, now() / 1000, not, places), fresh: true }
   }
 
   async function jobs (query) {

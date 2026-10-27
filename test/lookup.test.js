@@ -394,3 +394,18 @@ test('fresh look-up: a long "-company" list is read whole, and shown short', asy
   assert.deepStrictEqual(r.items.map(it => it.company), ['Company 129'])
   assert.match(r.text, /without company-0 \/ company-1 \/ company-2 \/ company-3 \/ company-4 \/ company-5 and 123 more/)
 })
+
+test('fresh look-up: a state\'s name keeps the jobs there ("fresh new grad software texas")', async () => {
+  const row = (co, locs) => ({ active: true, is_visible: true, category: 'Software', title: 'Software Engineer I', company_name: co, locations: locs, url: 'https://jobs.lever.co/' + co.toLowerCase() + '/1', date_posted: 0 })
+  const rows = [row('Austin Co', ['Austin, TX']), row('Bay Co', ['San Francisco, CA']), row('Both Co', ['Seattle, WA', 'Dallas, TX']), row('Spelled Co', ['Houston, Texas']), row('Remote Co', ['Remote in USA']), row('WV Co', ['Charleston, WV']), row('VA Co', ['Reston, VA'])]
+  const lk = createLookup(Object.assign({ fetch: fakeFetch([['New-Grad-Positions', JSON.stringify(rows), 200, 'application/json']]) }, instant))
+  const r = await lk.lookup({ kind: 'jobs', query: 'fresh new grad software texas' })
+  assert.deepStrictEqual(r.items.map(it => it.company).sort(), ['Austin Co', 'Both Co', 'Spelled Co'])
+  assert.match(r.text, /, in texas/)
+  // "west virginia" is not Virginia
+  const w = await lk.lookup({ kind: 'jobs', query: 'fresh new grad west virginia' })
+  assert.deepStrictEqual(w.items.map(it => it.company), ['WV Co'])
+  // no state: every US place, as before
+  const all = await lk.lookup({ kind: 'jobs', query: 'fresh new grad software' })
+  assert.strictEqual(all.items.length, 7)
+})
