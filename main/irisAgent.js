@@ -747,10 +747,35 @@ function irisLookup () {
     const ses = session.fromPartition('iris-lookup') // no "persist:" prefix: memory only, nothing shared
     irisLookupInstance = irisLookupLib.createLookup({
       fetch: function (url, opts) { return ses.fetch(url, opts) },
-      never: irisLookupNever()
+      never: irisLookupNever(),
+      // Electron's fetch follows a redirect without saying where it went (no url, no Location; "manual" throws), so a
+      // short link's target comes from net.request (10-27: every go.vansh.nyc link stayed short, applied jobs came back)
+      redirectOf: function (url) { return irisRedirectOf(ses, url) }
     })
   }
   return irisLookupInstance
+}
+
+/* Where one redirect of {url} goes, without following it: '' when it does not redirect or does not answer in 6 s. */
+function irisRedirectOf (ses, url) {
+  return new Promise(function (resolve) {
+    let done = false
+    let req = null
+    const finish = function (to) {
+      if (done) return
+      done = true
+      try { if (req) req.abort() } catch (e) { /* gone already */ }
+      resolve(to || '')
+    }
+    try {
+      req = net.request({ url: url, method: 'HEAD', session: ses, redirect: 'manual' })
+      req.on('redirect', function (status, method, to) { finish(to) })
+      req.on('response', function () { finish('') })
+      req.on('error', function () { finish('') })
+      setTimeout(function () { finish('') }, 6000)
+      req.end()
+    } catch (e) { finish('') }
+  })
 }
 
 function irisLookupNever () {

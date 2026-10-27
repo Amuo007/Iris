@@ -558,6 +558,12 @@ function createLookup (opts) {
   async function longUrl (url) {
     if (longUrls.has(url)) return longUrls.get(url)
     let to = url
+    // the caller's own redirect reader (Electron's fetch does not tell where a redirect went)
+    if (typeof o.redirectOf === 'function') {
+      try { const r = await o.redirectOf(url); if (r && /^https?:\/\//i.test(r)) to = r } catch (e) { /* the short link then */ }
+      longUrls.set(url, to)
+      return to
+    }
     for (const redirect of ['manual', 'follow']) {
       const ctrl = typeof AbortController === 'function' ? new AbortController() : null
       const timer = setTimeout(function () { if (ctrl) ctrl.abort() }, 6000)

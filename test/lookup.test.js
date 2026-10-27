@@ -427,3 +427,15 @@ test('fresh lists leave out US-person-only employers and titles with a clearance
   assert.deepStrictEqual(parseFreshListings(rows, [], 0, []).map(j => j.company).sort(), ['Acme', 'Boeing', 'Microsoft'])
   assert.deepStrictEqual(parseFreshListings(rows, ['spacex'], 0, []).map(j => j.company), ['SpaceX'])
 })
+
+test('fresh new grad: the caller\'s redirect reader resolves short links (Electron\'s fetch cannot)', async () => {
+  const vansh = [{ active: true, is_visible: true, company_name: 'Citi', title: 'New Grad 2027: Software Developer', locations: ['Jacksonville, FL'], url: 'https://go.vansh.nyc/Br', date_posted: -10 },
+    { active: true, is_visible: true, company_name: 'Rilla', title: 'New Grad: Software Engineer', locations: ['New York, NY'], url: 'https://go.vansh.nyc/Vn', date_posted: -20 }]
+  const fetch = async (url) => /vanshb03/.test(url) ? { status: 200, url, headers: { get: () => 'application/json' }, text: async () => JSON.stringify(vansh) } : { status: 200, url, headers: { get: () => 'application/json' }, text: async () => '[]' }
+  const asked = []
+  const redirectOf = async (u) => { asked.push(u); return { 'https://go.vansh.nyc/Br': 'https://citi.wd5.myworkdayjobs.com/2/job/X_261004412', 'https://go.vansh.nyc/Vn': 'https://jobs.ashbyhq.com/rilla/123a6a38-c7f9-4378-b00d-c6ae54688bd5' }[u] || '' }
+  const lk = createLookup(Object.assign({ fetch, redirectOf }, instant))
+  const r = await lk.lookup({ kind: 'jobs', query: 'fresh new grad' }, { annotate: (it) => /citi\.wd5/.test(it.url) ? 'you logged this job "applied"' : null })
+  assert.deepStrictEqual(r.items.map(it => it.url), ['https://jobs.ashbyhq.com/rilla/123a6a38-c7f9-4378-b00d-c6ae54688bd5'])
+  assert.deepStrictEqual(asked.sort(), ['https://go.vansh.nyc/Br', 'https://go.vansh.nyc/Vn'])
+})
