@@ -409,3 +409,12 @@ test('fresh look-up: a state\'s name keeps the jobs there ("fresh new grad softw
   const all = await lk.lookup({ kind: 'jobs', query: 'fresh new grad software' })
   assert.strictEqual(all.items.length, 7)
 })
+
+test('a posting\'s eligibility lines: sponsorship, citizenship, clearance — not equal-opportunity boilerplate', () => {
+  const { eligibilityLines } = require('../iris/agent/lookup')
+  const text = 'Build services in Go.\nWe do not offer any type of employment-based immigration sponsorship for this program. ' +
+    'Must be a U.S. citizen with an active Secret clearance.\nQualified applicants will receive consideration without regard to race, citizenship status or national origin. ' +
+    'We participate in E-Verify.\nBenefits: 401k.'
+  assert.deepStrictEqual(eligibilityLines(text), ['We do not offer any type of employment-based immigration sponsorship for this program.', 'Must be a U.S. citizen with an active Secret clearance.'])
+  assert.deepStrictEqual(eligibilityLines('Build services in Go. Great team.'), [])
+})

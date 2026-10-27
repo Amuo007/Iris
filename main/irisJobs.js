@@ -616,8 +616,12 @@ function irisJobsPrompt (task, mode) {
     '   When the user names boards or job links, work only on those: once every opening there is handled, finish',
     '   with done — do not go looking on other boards or sites you know.',
   ].concat(tailoring ? [
-    '2. Open the posting and read all of it (scroll). Each screen you leave is gone (you see only the newest screenshot),',
-    '   so save its must-haves with "remember", in the posting\'s own words, in the same reply as the scroll.',
+    '2. Read the posting first as text, in one step: {"type":"lookup","kind":"page","query":"<its address>","chars":8000}',
+    '   — the whole posting, its ELIGIBILITY LINES (sponsorship, citizenship, clearance, export control) listed first,',
+    '   from anywhere in it. Skip the job right there when those lines or its level rule it out (log it skipped).',
+    '   (A real night spent a quarter of its steps scrolling postings to their last line.)',
+    '   Only when the look-up cannot read it: open it and read all of it (scroll); each screen you leave is gone (you see',
+    '   only the newest screenshot), so save its must-haves with "remember", in its own words, in the same reply.',
     '3. tailor_resume {"company":str,"title":str,"requirements":str}: requirements = what the POSTING asks for, in its',
     '   own words (skills, tools, years, duties), from your notes and the screen — never what such jobs usually ask,',
     '   nothing about the user. Iris builds a one-page PDF from the profile',
@@ -630,7 +634,12 @@ function irisJobsPrompt (task, mode) {
     '   tailor_resume made — even when one is already attached (sites that remember you show your last one, with the',
     '   same name): remove or replace it.'
   ] : [
-    '2. Open the posting and go straight to its application form (below the posting, or behind an "Apply" button).',
+    '2. Read the posting first as text, in one step: {"type":"lookup","kind":"page","query":"<its address>","chars":8000}',
+    '   — the whole posting, its ELIGIBILITY LINES (sponsorship, citizenship, clearance, export control) listed first,',
+    '   from anywhere in it. Skip the job right there when those lines or its level rule it out (log it skipped).',
+    '   (A real night spent a quarter of its steps scrolling postings to their last line.)',
+    '   Then open it and go straight to its application form (below the posting, or behind an "Apply" button). Only',
+    '   when the look-up cannot read it: read it in the browser (scroll to its end) before you fill anything.',
     '3. No tailor_resume and no fit check: the user turned tailoring off, and their own resume goes out as it is.',
     '4. Jobs you rule out from a list without opening them (wrong place, role or level): log each as skipped with the',
     '   reason, right away — several log_application in one "actions" list, in the same step as you decide.',

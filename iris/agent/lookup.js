@@ -245,6 +245,30 @@ function boardApiUrl (b) {
   return 'https://api.ashbyhq.com/posting-api/job-board/' + encodeURIComponent(b.company)
 }
 
+/* The lines of a posting that decide whether the user may apply at all — sponsorship, visas, citizenship, clearance,
+   export control — wherever they stand (often at the very bottom, past what a short read shows). Equal-opportunity
+   boilerplate ("without regard to … citizenship") is no rule and is left out. */
+const ELIGIBILITY_RE = /sponsor|visa\b|visas\b|citizen|green card|permanent resident|security clearance|\bclearance\b|\bitar\b|export (control|regulation|compliance|administration)|u\.?s\.? persons?\b|authori[sz]ed to work|work authori[sz]ation|\bopt\b|\bcpt\b|h-?1b|immigration|stem opt|i-983/i
+const ELIGIBILITY_NOT = /without regard|regardless of|equal (employment )?opportunity|discriminat|protected (veteran|class|status)|e-verify|affirmative action/i
+function eligibilityLines (text, max) {
+  const out = []
+  const seen = new Set()
+  String(text || '').split(/\n+|(?<=[.!?])\s+(?=[A-Z(•*-])/).forEach(function (raw) {
+    const line = raw.replace(/\s+/g, ' ').trim()
+    if (line.length < 12 || !ELIGIBILITY_RE.test(line) || ELIGIBILITY_NOT.test(line)) return
+    const key = line.toLowerCase().slice(0, 120)
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push(line.length > 300 ? line.slice(0, 297) + '…' : line)
+  })
+  return out.slice(0, max || 6)
+}
+/* A posting's text for the model: its eligibility lines first, then the text from the top, cut at {chars}. */
+function postingText (full, chars) {
+  const elig = eligibilityLines(full)
+  return (elig.length ? 'ELIGIBILITY LINES (from anywhere in the posting): ' + elig.map(function (l) { return '• ' + l }).join(' ') + '\n---\n' : 'ELIGIBILITY LINES: none in the posting (no sponsorship, citizenship or clearance rule found).\n---\n') + clip(full, chars)
+}
+
 /** The board's JSON → [{ title, location, team, url }] */
 function parseBoardJobs (ats, json) {
   if (ats === 'greenhouse') {
@@ -624,7 +648,7 @@ function createLookup (opts) {
     if (!job || !job.descriptionPlain) return null
     const title = String(job.title || '').trim()
     const head = [title, job.location, job.department].filter(Boolean).join(' · ')
-    return { source: 'ashby posting api', items: [{ title: title, url: job.jobUrl || url, text: clip(head + '\n' + job.descriptionPlain, chars || cfg.pageChars) }] }
+    return { source: 'ashby posting api', items: [{ title: title, url: job.jobUrl || url, text: postingText(head + '\n' + job.descriptionPlain, chars || cfg.pageChars) }] }
   }
 
   /* A Workday posting page is built by JavaScript too; the site's own JSON endpoint (/wday/cxs/…) has the text. */
@@ -637,21 +661,66 @@ function createLookup (opts) {
     if (!info || !info.jobDescription) return null
     const title = String(info.title || '').trim()
     const head = [title, info.location, info.timeType].filter(Boolean).join(' · ')
-    const body = readableText('<html><body>' + info.jobDescription + '</body></html>', chars || cfg.pageChars).text
-    return { source: 'workday posting api', items: [{ title: title, url: info.externalUrl || url, text: clip(head + '\n' + body, chars || cfg.pageChars) }] }
+    const body = readableText('<html><body>' + info.jobDescription + '</body></html>', 60000).text
+    return { source: 'workday posting api', items: [{ title: title, url: info.externalUrl || url, text: postingText(head + '\n' + body, chars || cfg.pageChars) }] }
+  }
+
+  /* Greenhouse and Lever postings through their public posting APIs: the whole text, whatever the page needs to show it. */
+  async function greenhousePosting (url, chars) {
+    const m = /^https?:\/\/(?:boards|job-boards)\.greenhouse\.io\/([^/?#]+)\/jobs\/(\d+)/i.exec(url)
+    if (!m) return null
+    const r = await get('https://boards-api.greenhouse.io/v1/boards/' + encodeURIComponent(m[1]) + '/jobs/' + m[2], 'application/json')
+    if (r.status !== 200) return null
+    const job = JSON.parse(r.body) || {}
+    if (!job.content) return null
+    const title = String(job.title || '').trim()
+    const head = [title, job.location && job.location.name].filter(Boolean).join(' · ')
+    const body = readableText('<html><body>' + decodeEntities(job.content) + '</body></html>', 60000).text
+    return { source: 'greenhouse posting api', items: [{ title: title, url: job.absolute_url || url, text: postingText(head + '\n' + body, chars || cfg.pageChars) }] }
+  }
+
+  /* Oracle Cloud's Candidate Experience (JPMorgan, Dell, Oracle, Honeywell, NOV) is built by JavaScript; its own REST
+     endpoint has the posting. */
+  async function oraclePosting (url, chars) {
+    const m = /^https?:\/\/([^/]+\.oraclecloud\.com)\/hcmUI\/CandidateExperience\/[a-z]{2}(?:-[a-z]{2})?\/sites\/([^/?#]+)\/job\/(\d+)/i.exec(url)
+    if (!m) return null
+    const r = await get('https://' + m[1] + '/hcmRestApi/resources/latest/recruitingCEJobRequisitionDetails?expand=all&onlyData=true&finder=ById;Id=%22' + m[3] + '%22,siteNumber=' + encodeURIComponent(m[2]), 'application/json')
+    if (r.status !== 200) return null
+    const job = ((JSON.parse(r.body) || {}).items || [])[0]
+    if (!job || !(job.ExternalDescriptionStr || job.ExternalQualificationsStr)) return null
+    const title = String(job.Title || '').trim()
+    const head = [title, job.PrimaryLocation, job.JobSchedule].filter(Boolean).join(' · ')
+    const html = [job.ExternalDescriptionStr, job.ExternalResponsibilitiesStr, job.ExternalQualificationsStr, job.CorporateDescriptionStr].filter(Boolean).join('\n')
+    const body = readableText('<html><body>' + html + '</body></html>', 60000).text
+    return { source: 'oracle posting api', items: [{ title: title, url: url, text: postingText(head + '\n' + body, chars || cfg.pageChars) }] }
+  }
+
+  async function leverPosting (url, chars) {
+    const m = /^https?:\/\/jobs\.(?:eu\.)?lever\.co\/([^/?#]+)\/([0-9a-f-]{36})/i.exec(url)
+    if (!m) return null
+    const r = await get('https://api.lever.co/v0/postings/' + encodeURIComponent(m[1]) + '/' + m[2], 'application/json')
+    if (r.status !== 200) return null
+    const job = JSON.parse(r.body) || {}
+    if (!job.descriptionPlain && !job.lists) return null
+    const title = String(job.text || '').trim()
+    const cat = job.categories || {}
+    const head = [title, cat.location, cat.commitment].filter(Boolean).join(' · ')
+    const lists = (job.lists || []).map(function (l) { return l.text + '\n' + readableText('<html><body>' + (l.content || '') + '</body></html>', 20000).text }).join('\n')
+    const body = [job.descriptionPlain, lists, job.additionalPlain].filter(Boolean).join('\n')
+    return { source: 'lever posting api', items: [{ title: title, url: job.hostedUrl || url, text: postingText(head + '\n' + body, chars || cfg.pageChars) }] }
   }
 
   async function page (url, chars) {
     if (!/^https?:\/\//i.test(url)) url = 'https://' + String(url).replace(/^\/+/, '')
-    const posting = (await ashbyPosting(url, chars)) || (await workdayPosting(url, chars))
+    const posting = (await ashbyPosting(url, chars)) || (await workdayPosting(url, chars)) || (await greenhousePosting(url, chars)) || (await leverPosting(url, chars)) || (await oraclePosting(url, chars))
     if (posting) return posting
     const r = await get(url)
     if (looksBlocked(r.status, r.body)) throw new Error(hostOf(url) + ' blocks quick reading; open it in the browser instead')
     if (r.status >= 400) throw new Error(hostOf(url) + ' answered ' + r.status)
     if (/pdf/i.test(r.type)) throw new Error('that is a PDF; open or download it in the browser')
-    const rt = readableText(r.body, chars || cfg.pageChars)
+    const rt = readableText(r.body, 60000)
     if (rt.text.length < 200) throw new Error(hostOf(url) + ' shows almost no text without a browser (it needs JavaScript); open it in the browser instead')
-    return { source: hostOf(r.url || url), items: [{ title: rt.title, url: r.url || url, text: rt.text }] }
+    return { source: hostOf(r.url || url), items: [{ title: rt.title, url: r.url || url, text: postingText(rt.text, chars || cfg.pageChars) }] }
   }
 
   /**
@@ -783,4 +852,4 @@ function parseLookups (text, max) {
 }
 
 module.exports = {
-  parseHackerNews, createLookup, parseJobBoardQuery, parseBoardJobs, filterBoardJobs, parseFreshListings, isUSLocation, parseLookups, firstJsonWith, parseDuckDuckGo, parseBing, parseOpenAlex, parseArxiv, readableText, looksBlocked, isNever, KINDS, NEVER }
+  parseHackerNews, createLookup, parseJobBoardQuery, eligibilityLines, parseBoardJobs, filterBoardJobs, parseFreshListings, isUSLocation, parseLookups, firstJsonWith, parseDuckDuckGo, parseBing, parseOpenAlex, parseArxiv, readableText, looksBlocked, isNever, KINDS, NEVER }
