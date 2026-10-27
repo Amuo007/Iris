@@ -620,6 +620,9 @@ function pageValue (key, name) {
     // Yes / No buttons over one hidden box (Ashby): the pressed button
     if (el.querySelectorAll && el.querySelectorAll('input[type=checkbox], input[type=radio]').length <= 1 && el.querySelectorAll('button[aria-pressed]').length >= 2) return [...el.querySelectorAll('button[aria-pressed]')].filter(b => b.getAttribute('aria-pressed') === 'true').map(b => clean(b.innerText)).join(', ');
     if (el.tagName === 'FIELDSET' || el.querySelector) { const boxes = el.querySelectorAll ? [...el.querySelectorAll('input[type=checkbox], input[type=radio]')] : []; if (boxes.length) return boxes.filter(__on).map(b => { const l = __labelFor(b) || b.closest('label'); if (l && clean(l.innerText)) return clean(l.innerText); const bl = b.getAttribute('aria-labelledby'); const bt = bl ? clean(bl.split(' ').map(i => __byId(b, i)).filter(Boolean).map(x => x.innerText).join(' ')) : ''; return bt || clean(b.getAttribute('aria-label') || b.value); }).join(', '); }
+    // a list button (Workday's "Degree"): it shows the pick as its text; its value is an id ("741c9487…", 10-27: every
+    // pick there read back as that id and was reported as not taken)
+    if (el.tagName === 'BUTTON' || /listbox/i.test(el.getAttribute('aria-haspopup') || '')) { const own = clean(el.innerText); return /^(select( an option| one)?\\.{0,3}|choose\\.{0,3}|--+|please select)$/i.test(own) ? '' : own; }
     if (el.type === 'file') { if (el.files && el.files.length) return 'attached'; let n = el; for (let k = 0; k < 6 && n; k++) { n = n.parentElement; if (n && /[\\w)-]\\.(pdf|docx?|txt|rtf)\\b/i.test(n.innerText || '')) return 'attached'; } return ''; }
     return clean(el.value);
   })()`
