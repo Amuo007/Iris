@@ -372,10 +372,10 @@ function irisJobKey (url) {
       const co = ic ? ic[1] : u.hostname.replace(/^(www|jobs|careers)\./i, '').split('.')[0]
       return ('icims/' + co + '/' + icId[1]).toLowerCase()
     }
-    // SuccessFactors' shared portal (career4.successfactors.com/portalcareer?_s.crb=…) shows every company's every job at
+    // SuccessFactors' shared portal (career4.successfactors.com or career41.sapsf.com/portalcareer?_s.crb=…) shows every company's every job at
     // one address with a session token: without its job number it names no posting (a real run's NetApp application
     // there held back Acuity's Apply twice as "already applied", 10-26)
-    if (/(^|\.)successfactors\.(com|eu)$/i.test(u.hostname)) {
+    if (/(^|\.)(successfactors|sapsf)\.(com|eu)$/i.test(u.hostname)) {
       const req = u.searchParams.get('career_job_req_id') || ''
       return req ? (u.hostname + '/job/' + (u.searchParams.get('company') || '') + '/' + req).toLowerCase() : ''
     }
