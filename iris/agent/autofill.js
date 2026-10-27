@@ -436,7 +436,7 @@ const AF_DEEP = "const __deep = (sel, root) => { const out = []; const walk = r 
   " const __text = e => { const c = x => String(x || '').replace(/\\s+/g, ' ').trim(); const own = c(e.innerText); if (own) return own; const al = c(e.getAttribute && (e.getAttribute('aria-label') || e.getAttribute('label') || e.getAttribute('title'))); if (al) return al; if (e.shadowRoot) { const st = c([...e.shadowRoot.querySelectorAll('*')].filter(x => !/^(STYLE|SCRIPT)$/.test(x.tagName) && !x.children.length).map(x => x.textContent).join(' ')); if (st) return st; } return c(e.textContent); };" +
   // the options a dropdown's open list shows: in its own listbox (aria-controls / aria-owns, looked up in the
   // dropdown's own shadow root too), else any drawn on the page, shadow roots included
-  " const __opts = host => { const id = host.getAttribute('aria-controls') || host.getAttribute('aria-owns'); const lb = id && __byId(host, id); let all = lb ? [...lb.querySelectorAll('[role=option]')] : __deep('[role=option]'); if (!all.length) { all = [...(lb || document).querySelectorAll('[id*=\"-option-\"], [class*=\"__option\"]')].filter(o => !o.querySelector('[id*=\"-option-\"], [class*=\"__option\"]')); } return all.filter(o => { const r = o.getBoundingClientRect(); return r.width > 0 && r.height > 0; }); };"
+  " const __opts = host => { const id = host.getAttribute('aria-controls') || host.getAttribute('aria-owns'); const lb = id && (__byId(host, id) || __deep('[id=\"' + CSS.escape(id) + '\"]')[0]); if (id && !lb) return []; let all = lb ? [...lb.querySelectorAll('[role=option]')] : __deep('[role=option]'); if (!all.length) { all = [...(lb || document).querySelectorAll('[id*=\"-option-\"], [class*=\"__option\"]')].filter(o => !o.querySelector('[id*=\"-option-\"], [class*=\"__option\"]')); } return all.filter(o => { const r = o.getBoundingClientRect(); return r.width > 0 && r.height > 0; }); };"
 
 
 /*
@@ -696,7 +696,7 @@ function pageFieldHtml (key) {
     const host = __one('[data-iris-af="${key}"]'); if (!host) return null;
     const cut = (s, n) => String(s || '').replace(/\\s+/g, ' ').slice(0, n);
     const ids = [host.getAttribute('aria-controls'), host.getAttribute('aria-owns')].concat([...host.querySelectorAll('[aria-controls], [aria-owns]')].map(e => e.getAttribute('aria-controls') || e.getAttribute('aria-owns'))).filter(Boolean);
-    const lists = ids.map(id => document.getElementById(id)).filter(Boolean);
+    const lists = ids.map(id => document.getElementById(id) || __deep('[id="' + CSS.escape(id) + '"]')[0]).filter(Boolean);
     const shown = [...document.querySelectorAll('[role=listbox], select, ul[class*="list" i]')].filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
     return { tag: host.tagName, html: cut(host.outerHTML, 1500), parent: cut(host.parentElement && host.parentElement.outerHTML, 600),
       lists: lists.map(l => cut(l.outerHTML, 700)), shown: shown.slice(0, 3).map(l => cut(l.outerHTML, 500)) };
