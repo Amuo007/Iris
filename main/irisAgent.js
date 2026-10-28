@@ -1648,6 +1648,19 @@ IrisComputer.prototype.withNewPassword = function (wc, text) {
     this.newPasswords = this.newPasswords || {}
     // the first {{New password}} after "Forgot password": a fresh one (one made earlier here was never set)
     const forReset = !!(live && site === reset.site && !reset.made)
+    // a site whose saved account works (confirmed, or applied with before) gets no second account: a real night
+    // (10-27, HPE) made a new one over a working account, signed in with it (refused), then had to reset. A reset page
+    // ("…/passwordreset/…", "Forgot password") is where a new password belongs.
+    if (!forReset && !this.newPasswords[site]) {
+      const onReset = /password.?reset|reset.?password|forgot|change.?password|new.?password/i.test(wc.getURL() + ' ' + (wc.getTitle() || ''))
+      const saved = onReset ? null : irisAccountsLoad().find(function (a) { return a.site === site && a.password && !a.unconfirmed })
+      const used = saved && (saved.confirmed || irisApplicationsLoad().some(function (r) { return r.status === 'applied' && irisSiteOf(r.url || '') === site }))
+      if (used) {
+        this.newPasswordRefused = 'not typed — ' + site + ' already has your account (' + saved.username + '), and it worked before: never make a second one. ' +
+          'Sign In with that email and {{account:' + site + '}} in the password box. Only if that is refused: "Forgot password", then {{New password}} on the reset page.'
+        return null
+      }
+    }
     if (forReset) { reset.made = true; delete this.newPasswords[site] }
     if (!this.newPasswords[site]) {
       this.newPasswords[site] = irisNewPassword()
@@ -1982,9 +1995,11 @@ IrisComputer.prototype.act = async function (action) {
         if (action.type === 'fill' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(action.text || '').trim())) this.lastTypedEmail = String(action.text).trim()
         const secret = action.type === 'fill' && /\{\{[^}]+\}\}/.test(String(action.text || ''))
         if (secret) this.noteAccountTyped(action.text)
-        const text = secret ? irisFillSecrets(this.withNewPassword(wc, action.text)) : action.text
-        const unsaved = secret && irisAccountsLib.accountRef(text)
-        r = unsaved ? { ok: false, error: irisNoSavedSignIn(unsaved.site) }
+        const made = secret ? this.withNewPassword(wc, action.text) : action.text
+        const text = secret && made !== null ? irisFillSecrets(made) : action.text
+        const unsaved = secret && made !== null && irisAccountsLib.accountRef(text)
+        r = made === null ? { ok: false, error: this.newPasswordRefused }
+          : unsaved ? { ok: false, error: irisNoSavedSignIn(unsaved.site) }
           : action.type === 'choose' ? await irisChooseField(this, wc, action.field, action.option) : await irisFillField(this, wc, action.field, text)
         // a password or other secret is never read back into the notes (they reach the model and the logs)
         if (secret && r && r.note) r.note = 'Filled "' + String(action.field || '').slice(0, 60) + '" with ' + String(action.text).match(/\{\{[^}]+\}\}/)[0] + ' (a secret: not shown).'
@@ -2263,6 +2278,7 @@ IrisComputer.prototype.act = async function (action) {
   // the e-mail typed on a sign-up page: the new account's username
   if (action.type === 'type' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(action.text || '').trim())) this.lastTypedEmail = String(action.text).trim()
   typed = this.withNewPassword(wc, typed)
+  if (typed === null) return { ok: false, error: this.newPasswordRefused }
   if (action.type === 'type') this.noteAccountTyped(typed)
   let real = action.type === 'type' ? Object.assign({}, action, { text: irisFillSecrets(typed) }, /\{\{[^}]+\}\}/.test(String(typed || '')) ? { secret: true } : {}) : action
   // {{account:site}} with no saved password there: the placeholder itself is never typed (a real night typed
