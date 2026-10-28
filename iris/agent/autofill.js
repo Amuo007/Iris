@@ -711,9 +711,15 @@ function pageFieldHtml (key) {
 function pageSetSelect (key, text) {
   return `(() => {
     ${AF_DEEP}
-    const el = __one('[data-iris-af="${key}"]'); if (!el || el.tagName !== 'SELECT') return false;
+    // the list itself, not a select2 box that copied its attributes (IBM's copies every one, this mark too: the box was
+    // found first and nothing was set, 10-28)
+    let el = __deep('[data-iris-af="${key}"]').find(e => e.tagName === 'SELECT') || __one('[data-iris-af="${key}"]');
+    if (el && el.tagName !== 'SELECT') { const c = el.querySelector('[id^="select2-"][id$="-container"]'); const sid = c && c.id.replace(/^select2-/, '').replace(/-container$/, ''); const box = el.closest('.select2-container'); el = (sid && document.getElementById(sid)) || (box && box.previousElementSibling) || el; }
+    if (!el || el.tagName !== 'SELECT') return false;
     const o = [...el.options].find(o => o.text.replace(/\\s+/g, ' ').trim() === ${JSON.stringify(String(text))}); if (!o) return false;
     el.value = o.value; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
+    // a select2 box that did not redraw on the plain event: jQuery's own change
+    try { const shown = el.id && document.getElementById('select2-' + el.id + '-container'); if (shown && shown.textContent.indexOf(o.text.trim()) < 0 && window.jQuery) window.jQuery(el).trigger('change'); } catch (e) {}
     return true;
   })()`
 }
