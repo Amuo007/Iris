@@ -341,9 +341,22 @@ async function irisAfAnswerRest (computer, wc, fields, title) {
  * own experience, project, number, employer, school or life event that the profile does not support. { ok } or
  * { ok: false, unsupported: [...] }. Fails open (ok) when the model cannot answer — the prompt rules still hold.
  */
+/* The user's own words about themself in the run's task ("Me in short: … my own AI agent projects (an agentic browser,
+   LLM agents); Anthropic Claude API and Claude Code certificates"): facts as true as the profile, though the profile does
+   not hold them (10-28: Lumos's answer about the user's agent work was refused three times and went out without it) */
+function irisTaskSelf () {
+  const task = irisSession ? ((irisSession.items || []).find(function (it) { return it.kind === 'user' }) || {}).text || '' : ''
+  const m = /\b(me in short|about me)\b\s*[:\-—]\s*/i.exec(task)
+  if (!m) return ''
+  let s = task.slice(m.index + m[0].length, m.index + m[0].length + 1500)
+  if (s.lastIndexOf('.') > 0) s = s.slice(0, s.lastIndexOf('.') + 1)
+  return s.split(/(?<=\.)\s+(?=Best titles|Level:|Skip now)/)[0]
+}
+
 async function irisVerifyAnswer (text) {
   try {
     const bank = irisCareerLoad()
+    const self = irisTaskSelf()
     const cfg = irisSettings()
     const messages = [
       { role: 'system', content: 'You check a job-application answer written for the user against their profile. List every statement in ' +
@@ -352,7 +365,7 @@ async function irisVerifyAnswer (text) {
         'project with them, and a fact that is only inferred (when the user moved, what they struggled with, their culture or family) ' +
         'is NOT supported unless the profile states it. Opinions, interests and plans are fine. Reply with JSON only: {"unsupported":["<short quote>", ...]} — an ' +
         'empty list when everything is supported.' },
-      { role: 'user', content: 'PROFILE:\n' + irisCareerLib.bankText(bank, 7000) + '\n\nSAVED ANSWERS:\n' + (bank.answers || []).map(function (a) { return a.label + ': ' + a.value }).join('\n') +
+      { role: 'user', content: 'PROFILE:\n' + irisCareerLib.bankText(bank, 7000) + (self ? '\n\nTHE USER, IN THEIR OWN WORDS (as true as the profile):\n' + self : '') + '\n\nSAVED ANSWERS:\n' + (bank.answers || []).map(function (a) { return a.label + ': ' + a.value }).join('\n') +
         '\n\nANSWER TO CHECK:\n' + String(text).slice(0, 3000) }
     ]
     const model = irisLockedModel(irisModelClient.createModelClient({ provider: cfg.provider, baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0, thinking: 'off', timeoutMs: Math.min(cfg.modelTimeoutMs, 60000) }), cfg.baseUrl)
