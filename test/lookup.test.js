@@ -291,7 +291,7 @@ test('fresh lists: 2 a company, "-company" leaves one out, handled jobs gone (10
   const companies = (r) => r.items.map(it => it.company)
   let r = await lk.lookup({ kind: 'jobs', query: 'fresh new grad software engineer' }, handled)
   assert.deepStrictEqual(companies(r), ['Rotex', 'Rotex', 'Dell', 'Dell', 'Acme', 'Acme', 'Beta'])
-  assert.match(r.text, /24 not handled yet, the newest 15 shown \(2 a company; add "-company" to leave one out\)/)
+  assert.match(r.text, /24 not handled yet, the newest 15 shown \(2 a company; a job you log is left out by itself/)
   r = await lk.lookup({ kind: 'jobs', query: 'fresh new grad software -rotex -dell' }, handled)
   assert.deepStrictEqual(companies(r), ['Acme', 'Acme', 'Beta'])
   assert.match(r.text, /without rotex \/ dell/)

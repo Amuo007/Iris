@@ -797,7 +797,9 @@ function createLookup (opts) {
           shown.push(it)
         })
       }
-      const more = left > shown.length ? ', the newest 15 shown (2 a company; add "-company" to leave one out)' : ''
+      // a job logged is left out by itself: "-company" there hid a company's other jobs (a real run added "-amex
+      // -inworld -welo -ge …" for each job it skipped, 10-27)
+      const more = left > shown.length ? ', the newest 15 shown (2 a company; a job you log is left out by itself — "-company" only for a company none of whose jobs you can take)' : ''
       result = { source: result.source + ' — ' + left + ' not handled yet' + more, items: shown }
     }
     return { ok: true, text: format(kind, query, result, extra), count: result.items.length, items: result.items }
