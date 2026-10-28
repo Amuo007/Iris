@@ -23,6 +23,12 @@ test('the WhatsApp agent sees what Iris is doing, the numbers and what it can do
   assert.ok(/every message here is for Iris/.test(c.contextText({ selfChat: false })))
 })
 
+test('the last 24 hours and the LinkedIn notes are in the facts (a night run spans midnight)', () => {
+  const t = c.contextText({ selfChat: true, run: { status: 'running' }, stats: { today: { applied: 1, needsYou: 0, skipped: 2, failed: 0 }, day: { applied: 20, needsYou: 6, skipped: 106, failed: 0 } }, linkedin: ['Steve', 'Dylan'] })
+  assert.match(t, /today: 1 applied, 0 need the user, 2 skipped, 0 failed; last 24 hours: 20 applied/)
+  assert.match(t, /LinkedIn connection requests with a note, last 24 hours: 2 \(to Steve, Dylan\)/)
+})
+
 test('the conversation is remembered until 20 quiet minutes', () => {
   const h = [
     { from: 'user', text: 'hi', at: T0 },
@@ -83,4 +89,8 @@ test('"now" only when the user says so; a task with a job link is the user\'s jo
   assert.strictEqual(p({ action: 'task', task: 'Summarise https://example.com/post', reply: 'ok' }, 'summarise https://example.com/post').action, 'task', 'a page to read is not a job')
   assert.ok(c.addressesIris('hi iris how are you') && c.addressesIris('Hey Iris, how many today?'))
   assert.ok(!c.addressesIris('buy milk and eggs') && !c.addressesIris('irish stew'))
+  // a question to "you" about the work, with no "Iris" in it (10-28: it got no answer)
+  assert.ok(c.addressesIris('Just quick question how many application have you submitted and how many LinkedIn connections'))
+  assert.ok(c.addressesIris('did you apply to anything in Texas?'))
+  assert.ok(!c.addressesIris('apply to the Google job tomorrow') && !c.addressesIris('call mom, ask how you feel'))
 })

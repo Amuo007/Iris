@@ -41,7 +41,7 @@ const CAN = 'Iris can: find jobs on career sites and job boards and apply to the
 function statsText (st) {
   if (!st) return ''
   const part = function (k, x) { return x ? k + ': ' + x.applied + ' applied, ' + x.needsYou + ' need the user, ' + x.skipped + ' skipped, ' + x.failed + ' failed' : '' }
-  return ['Applications — ' + [part('today', st.today), part('last 7 days', st.week), part('all time', st.all)].filter(Boolean).join('; ') + '.'].join('')
+  return ['Applications — ' + [part('today', st.today), part('last 24 hours', st.day), part('last 7 days', st.week), part('all time', st.all)].filter(Boolean).join('; ') + '.'].join('')
 }
 
 /** What the WhatsApp agent knows, written for the prompt. */
@@ -56,6 +56,7 @@ function contextText (ctx) {
     : r.status === 'paused' ? 'paused' : 'not running' + (r.reason ? ' (' + clean(r.reason, 100) + ')' : '')) + '.')
   if (c.stats) lines.push(statsText(c.stats))
   else if (r.today) lines.push('Today\'s applications: ' + r.today.applied + ' applied, ' + r.today.needsYou + ' need the user, ' + r.today.skipped + ' skipped.')
+  if (c.linkedin) lines.push('LinkedIn connection requests with a note, last 24 hours: ' + c.linkedin.length + (c.linkedin.length ? ' (to ' + c.linkedin.slice(0, 30).join(', ') + ')' : '') + '.')
   if (r.recent && r.recent.length) lines.push('Latest (newest first): ' + r.recent.slice(0, 8).map(function (x) { return clean(x, 140) }).join('; ') + '.')
   if (c.question) lines.push('Iris is WAITING for the user\'s answer to: "' + clean(c.question, 300) + '"')
   if (c.codeFor) lines.push('Iris is WAITING for a code the site sent to the user\'s phone, for: ' + clean(c.codeFor, 160) + '.')
@@ -93,8 +94,14 @@ function conciergeMessages (ctx, message) {
 const URL_RE = /\bhttps?:\/\/[^\s<>"']+/i
 
 /** The message names Iris ("hi iris", "hey Iris, how many…"): a conversation with Iris starts. */
+/* or asks "you" about Iris's own work ("how many applications have you submitted and how many LinkedIn connections",
+   10-28: it named no Iris, so it was taken for a note to self and got no answer) — a note to self rarely says "you" */
+const WORK = '(appl(y|ied|ying|ications?)|submit\\w*|jobs?|linked ?in|connections?|invit\\w*|status|progress|running)'
+const ASKS_IRIS = new RegExp('\\b(you|your|u)\\b[\\s\\S]*\\b' + WORK + '\\b|\\b' + WORK + '\\b[\\s\\S]*\\b(you|your|u)\\b', 'i')
+const QUESTION = /\?|\b(how many|how much|what|did|have|has|are|is|can|could|tell me)\b/i
 function addressesIris (text) {
-  return /\biris\b/i.test(String(text || ''))
+  const t = String(text || '')
+  return /\biris\b/i.test(t) || (ASKS_IRIS.test(t) && QUESTION.test(t))
 }
 
 /* "do it now" only when the user says so (a real model put "now" on "check my gmail", which would have dropped the

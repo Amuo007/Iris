@@ -325,6 +325,29 @@ function irisWhatsAppTask (cmd, reply) {
   return irisWhatsAppSend(reply || ('[Iris] Starting: ' + task.slice(0, 200) + '\nI will write back when it is done.'))
 }
 
+/* The people Iris wrote a LinkedIn connection note to in the runs saved since {since}: one per person and run (a note
+   retyped shorter is one) — the applications log keeps no LinkedIn names */
+function irisWhatsAppLinkedinNotes (since) {
+  const names = []
+  let files = []
+  try { files = fs.readdirSync(irisSessionsDir()).filter(function (f) { return /\.json$/.test(f) }) } catch (e) { return names }
+  files.forEach(function (f) {
+    const p = path.join(irisSessionsDir(), f)
+    let s = null
+    try { if (fs.statSync(p).mtimeMs < since) return; s = JSON.parse(fs.readFileSync(p, 'utf8')) } catch (e) { return }
+    const seen = {}
+    ;(s.items || []).forEach(function (it) {
+      if (it.kind !== 'step' || !/linkedin\.com/i.test(it.url || '')) return
+      ;(it.actions || []).forEach(function (a) {
+        const m = a && a.type === 'type' && /^\s*(?:hi|hello|hey)\s+([^,!.\n]{1,40})/i.exec(a.text || '')
+        const name = m ? m[1].trim() : ''
+        if (name && !seen[name]) { seen[name] = true; names.push(name) }
+      })
+    })
+  })
+  return names
+}
+
 /* The WhatsApp agent's view of now (iris/agent/concierge.js) */
 function irisWhatsAppConciergeContext () {
   const info = irisWhatsAppStatusInfo()
@@ -344,7 +367,9 @@ function irisWhatsAppConciergeContext () {
   return {
     selfChat: irisWhatsAppSelfChat(),
     run: { status: info.status, task: info.task, steps: info.steps, now: info.now, reason: info.reason, today: info.today, recent: recent },
-    stats: { today: count(start.getTime()), week: count(Date.now() - 7 * 24 * 3600 * 1000), all: count(0) },
+    // a night run spans midnight: "so far" at 00:10 is the last 24 hours, not today's ten minutes
+    stats: { today: count(start.getTime()), day: count(Date.now() - 24 * 3600 * 1000), week: count(Date.now() - 7 * 24 * 3600 * 1000), all: count(0) },
+    linkedin: irisWhatsAppLinkedinNotes(Date.now() - 24 * 3600 * 1000),
     question: irisAgentState.status === 'paused' && irisComputer && irisComputer.lastQuestion ? irisComputer.lastQuestion : '',
     codeFor: open.length ? irisChannelsLib.jobName(open[open.length - 1]) : '',
     // the conversation while it goes on: 20 quiet minutes and it is forgotten (the new message is passed on its own)
