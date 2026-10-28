@@ -727,6 +727,16 @@ test('the lookup action returns text on the next step and has a per-task budget'
   assert.match(text, /used all 1 look-ups/)
 })
 
+test('a page look-up keeps the length it asks for', async () => {
+  const asked = []
+  const lookup = async (req) => { asked.push(req); return { ok: true, text: 'Text of x', count: 1 } }
+  const look = json('read the posting', { type: 'lookup', kind: 'page', query: 'https://jobs.example.com/job/1', chars: 8000 })
+  const h = harness([look, json('done', { type: 'done', answer: 'ok' })], {}, { lookup, config: { settleDelayMs: 0, markerDwellMs: 0 } })
+  await h.agent.run('read it')
+  assert.strictEqual(asked.length, 1)
+  assert.strictEqual(asked[0].chars, 8000)
+})
+
 test('a planned run repeats its goal on every step', async () => {
   const h = harness(['Goal: find 3 boots\nHow: shops\nDone when: 3 kept', (ctx) => { h.ctx = ctx; return json('d', { type: 'done', answer: 'x' }) }])
   await h.agent.run('boots', { plan: true, noQuestions: true })

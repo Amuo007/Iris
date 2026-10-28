@@ -844,7 +844,9 @@ function createAgent (opts) {
       }
       lookupsAsked.add(qKey)
       runLookups++
+      // its length too: dropped here, every posting read was 3,500 characters while the prompt asked for 8,000
       const req = { kind: action.kind || 'web', query: action.query }
+      if (action.chars) req.chars = action.chars
       emit('lookup', { step: state.step, kind: req.kind, query: req.query })
       const r = await runLookup(req)
       emit('lookup:result', { step: state.step, kind: req.kind, query: req.query, ok: r.ok, count: r.count, items: r.items })

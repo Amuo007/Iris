@@ -47,7 +47,7 @@ const SPEC = {
   ask_user: { required: ['question'], optional: [] },
   save_account: { required: ['site', 'username'], optional: ['password', 'purpose'] },
   request_code: { required: ['what'], optional: ['company', 'title'] },
-  lookup: { required: ['query'], optional: ['kind'] },
+  lookup: { required: ['query'], optional: ['kind', 'chars'] },
   recall: { required: ['query'], optional: [] },
   judge: { required: ['item', 'keep'], optional: ['why'] },
   update_plan: { required: ['plan'], optional: [] },
@@ -572,6 +572,12 @@ function validateAction (obj, limits) {
         const n = toInteger(value)
         if (n === null || n < 1 || n > 200) errors.push(`tab must be a tab number from the list (got ${JSON.stringify(value)})`)
         else action.tab = n
+        break
+      }
+      // a page look-up's length ("chars":8000, the prompt's posting read): a wrong one is dropped, never an error
+      case 'chars': {
+        const n = toInteger(value)
+        if (n !== null && n > 0) action.chars = Math.min(20000, Math.max(500, n))
         break
       }
       case 'kind': {

@@ -252,6 +252,10 @@ test('lookup keeps a known kind and falls back to web', () => {
   assert.strictEqual(validateAction({ type: 'lookup', query: 'x', kind: 'Papers' }, LIMITS).action.kind, 'papers')
   assert.strictEqual(validateAction({ type: 'lookup', query: 'x', kind: 'google' }, LIMITS).action.kind, 'web')
   assert.strictEqual(validateAction({ type: 'web_search', query: 'x' }, LIMITS).action.type, 'lookup')
+  assert.strictEqual(validateAction({ type: 'lookup', query: 'https://x.com/job/1', kind: 'page', chars: 8000 }, LIMITS).action.chars, 8000)
+  assert.strictEqual(validateAction({ type: 'lookup', query: 'x', kind: 'page', chars: 99999 }, LIMITS).action.chars, 20000)
+  const bad = validateAction({ type: 'lookup', query: 'x', kind: 'page', chars: 'lots' }, LIMITS)
+  assert.ok(bad.ok !== false && bad.action && bad.action.chars === undefined)
 })
 
 test('bookmark can name a URL and remove it', () => {

@@ -786,7 +786,7 @@ function irisLookupNever () {
 settings.listen('irisLookupNever', function () { irisLookupInstance = null })
 
 async function irisDoLookup (req) {
-  const result = await irisLookup().lookup(req, {
+  let result = await irisLookup().lookup(req, {
     annotate: function (it) {
       // a job in the applications log (any day, any status) is handled — the fresh job lists leave it out (a real run
       // was sent to Faraday Future and Axon, applied to days before)
@@ -800,8 +800,24 @@ async function irisDoLookup (req) {
     }
   })
   irisUsageRecord('lookup')
+  // the company and role of each listed job, for the skip log offered when its posting is read
+  if (result && result.ok && req && req.kind === 'jobs') {
+    (result.items || []).forEach(function (it) { if (it.url && it.company) irisListedJobs[irisJobKey(it.url)] = { company: it.company, title: it.role || it.title } })
+  }
+  // a posting read for its eligibility: the skip log, ready to copy. A real night's model wrote "hard skip — log it
+  // skipped" after AmEx's "will not pursue visa sponsorship" and Atlassian's "not eligible for F1", then looked up the
+  // next job instead: nothing was logged, so the lists offered them again, and it left out whole companies with
+  // "-amex -atlassian -paypal" to stop seeing them (10-27).
+  if (result && result.ok && req && req.kind === 'page' && /ELIGIBILITY LINES/.test(result.text || '')) {
+    const url = String(req.query || '').trim()
+    const known = irisListedJobs[irisJobKey(url)] || {}
+    const title = known.title || String((result.items && result.items[0] && result.items[0].title) || '').slice(0, 100)
+    const log = { type: 'log_application', status: 'skipped', company: known.company || irisCompanyGuess(url, '') || '', title: title, url: url, note: '<the line that rules it out>' }
+    result = Object.assign({}, result, { text: result.text + '\n\nIf these lines or its level rule the job out, log it in this same step (a job passed over without a log comes back in every list; never "-company" for one job): ' + JSON.stringify(log) })
+  }
   return result
 }
+var irisListedJobs = {}
 
 /* ------------------------------------------------------------------ *
  * Usage: requests and tokens per day, shown in Settings → Iris AI → Usage
