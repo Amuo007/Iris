@@ -846,6 +846,9 @@ async function irisDoLookup (req) {
   if (result && result.ok && req && req.kind === 'page' && /ELIGIBILITY LINES/.test(result.text || '')) {
     const url = String(req.query || '').trim()
     const known = irisListedJobs[irisJobKey(url)] || {}
+    // what it asks for, for the user's learning list — after this look-up is answered, never in its way
+    const noted = { url: url, company: known.company || irisCompanyGuess(url, '') || '', title: known.title || String((result.items && result.items[0] && result.items[0].title) || ''), text: result.text }
+    setTimeout(function () { irisRequirementsNote(noted) }, 0)
     const title = known.title || String((result.items && result.items[0] && result.items[0].title) || '').slice(0, 100)
     const log = { type: 'log_application', status: 'skipped', company: known.company || irisCompanyGuess(url, '') || '', title: title, url: url, note: '<the line that rules it out>' }
     result = Object.assign({}, result, { text: result.text + '\n\nIf these lines or its level rule the job out, log it in this same step (a job passed over without a log comes back in every list; never "-company" for one job): ' + JSON.stringify(log) })

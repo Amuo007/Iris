@@ -2266,3 +2266,98 @@ body.dark-mode :is(.iris-settings-brand, .iris-about-mark) .iris-stop-4b { stop-
   white-space: nowrap;
   max-width: 260px;
 }
+
+/* What jobs ask for */
+.iris-req-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 4px;
+}
+.iris-req-kind {
+  border: 1px solid var(--s-line);
+  background: var(--s-card);
+  color: var(--s-text-2);
+  border-radius: 999px;
+  padding: 4px 11px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.iris-req-kind:hover {
+  color: var(--s-text);
+  border-color: var(--s-line-strong);
+}
+.iris-req-kind.on {
+  background: var(--s-primary);
+  border-color: var(--s-primary);
+  color: var(--s-primary-ink);
+}
+.iris-req-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 4px;
+}
+.iris-req-chip {
+  background: var(--s-muted);
+  color: var(--s-text);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+.iris-req-asks {
+  margin-top: 8px;
+}
+.iris-req-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.iris-req-group {
+  border: 1px solid var(--s-line);
+  border-radius: 10px;
+  padding: 10px 12px 8px;
+  min-width: 0;
+}
+.iris-req-group-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--s-text-2);
+  margin-bottom: 6px;
+}
+.iris-req-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 2fr) minmax(40px, 1fr) 58px;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  font-size: 12.5px;
+}
+.iris-req-name {
+  color: var(--s-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.iris-req-bar {
+  height: 6px;
+  background: var(--s-muted);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.iris-req-fill {
+  display: block;
+  height: 100%;
+  background: var(--s-text-3);
+  border-radius: 3px;
+}
+.iris-req-row.have .iris-req-fill {
+  background: var(--s-on);
+}
+.iris-req-num {
+  font-size: 11.5px;
+  color: var(--s-text-3);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}

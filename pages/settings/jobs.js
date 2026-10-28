@@ -647,11 +647,77 @@ window.addEventListener('message', function (e) {
     }
   } else if (d.action === 'jobsStart') {
     document.getElementById('iris-jobs-start-help').textContent = r.started ? 'Started in a new tab. Press Stop in the Iris panel to end it.' : (r.error || 'Could not start.')
+  } else if (d.action === 'requirementsSummary') {
+    irisRenderRequirements(r)
   } else if (['applicationsList', 'applicationShow', 'applicationDelete', 'applicationsExport'].indexOf(d.action) !== -1) {
     irisRenderApplications(r)
     if (r.exported) document.getElementById('iris-applications-summary').textContent += ' Exported ' + r.exported + '.'
   }
 })
+
+/* ---------- what jobs ask for: skills counted from the postings Iris read, for the user to learn from ---------- */
+
+var irisReqData = null
+var irisReqKind = 'All'
+var IRIS_REQ_YEARS = ['0–1 years', '2–3 years', '4+ years', 'not stated']
+
+function irisReqPct (n, of) { return Math.round(100 * n / Math.max(1, of)) + '%' }
+
+function irisRenderRequirements (r) {
+  irisReqData = r
+  var summary = document.getElementById('iris-req-summary')
+  var tabs = document.getElementById('iris-req-kinds')
+  var learn = document.getElementById('iris-req-learn')
+  var asks = document.getElementById('iris-req-asks')
+  var groups = document.getElementById('iris-req-groups')
+  tabs.innerHTML = ''; learn.innerHTML = ''; asks.innerHTML = ''; groups.innerHTML = ''
+  if (!r || !r.total) {
+    summary.textContent = 'No postings read yet. As Iris reads job postings, the skills they ask for show up here, counted by kind of job.'
+    return
+  }
+  var kinds = r.kinds || []
+  if (kinds.indexOf(irisReqKind) < 0) irisReqKind = 'All'
+  summary.textContent = 'From ' + r.total + ' job postings Iris read since ' + new Date(r.since).toLocaleDateString([], { month: 'short', day: 'numeric' }) +
+    ', counted from each posting\'s own text — nothing guessed. Green bars are skills already on your profile.'
+  kinds.forEach(function (k) {
+    var b = irisEl('button', 'iris-req-kind' + (k === irisReqKind ? ' on' : ''), k + ' · ' + r.byKind[k].postings)
+    b.type = 'button'
+    b.setAttribute('role', 'tab')
+    b.setAttribute('aria-selected', k === irisReqKind ? 'true' : 'false')
+    b.addEventListener('click', function () { irisReqKind = k; irisRenderRequirements(irisReqData) })
+    tabs.appendChild(b)
+  })
+  var v = r.byKind[irisReqKind]
+  learn.appendChild(irisEl('div', 'iris-row-title iris-subtitle', 'Learn next'))
+  if (v.learn.length) {
+    learn.appendChild(irisEl('div', 'setting-secondary-label', 'Asked most often in these postings, and not on your profile yet:'))
+    var chips = irisEl('div', 'iris-req-chips')
+    v.learn.forEach(function (x) { chips.appendChild(irisEl('span', 'iris-req-chip', x.skill + ' · ' + irisReqPct(x.count, v.postings))) })
+    learn.appendChild(chips)
+  } else {
+    learn.appendChild(irisEl('div', 'setting-secondary-label', 'Nothing asked by two or more of these postings is missing from your profile.'))
+  }
+  var years = IRIS_REQ_YEARS.filter(function (y) { return v.years[y] }).map(function (y) { return y + ' ' + irisReqPct(v.years[y], v.postings) })
+  var degrees = Object.keys(v.degree).sort(function (a, b) { return v.degree[b] - v.degree[a] }).map(function (d) { return d + ' ' + irisReqPct(v.degree[d], v.postings) })
+  asks.appendChild(irisEl('div', 'setting-secondary-label', 'Experience asked: ' + years.join(' · ') + '. Degree: ' + degrees.join(' · ') + '.'))
+  v.groups.forEach(function (g) {
+    var box = irisEl('div', 'iris-req-group')
+    box.appendChild(irisEl('div', 'iris-req-group-title', g.group))
+    g.skills.forEach(function (x) {
+      var row = irisEl('div', 'iris-req-row' + (x.have ? ' have' : ''))
+      row.title = x.skill + ': named in ' + x.count + ' of ' + v.postings + ' postings' + (x.have ? ' (on your profile)' : '')
+      row.appendChild(irisEl('span', 'iris-req-name', x.skill))
+      var bar = irisEl('span', 'iris-req-bar')
+      var fill = irisEl('span', 'iris-req-fill')
+      fill.style.width = Math.max(2, Math.round(100 * x.share)) + '%'
+      bar.appendChild(fill)
+      row.appendChild(bar)
+      row.appendChild(irisEl('span', 'iris-req-num', irisReqPct(x.count, v.postings) + ' · ' + x.count))
+      box.appendChild(row)
+    })
+    groups.appendChild(box)
+  })
+}
 
 function irisCountsText (c) {
   if (!c) return ''
@@ -660,8 +726,10 @@ function irisCountsText (c) {
 
 irisAction('careerGet')
 irisAction('applicationsList')
+irisAction('requirementsSummary')
 // applications change while Iris works: keep the list current while this page is open
 setInterval(function () { if (!document.hidden) irisAction('applicationsList') }, 15000)
+setInterval(function () { if (!document.hidden) irisAction('requirementsSummary') }, 60000)
 
 /* ---------- every day: a scheduled job hunt (Settings → Schedule shows it too) ---------- */
 

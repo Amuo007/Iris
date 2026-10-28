@@ -41,6 +41,7 @@
       <a href="#iris-apply-container">Applying</a>
       <a href="#iris-resume-container">Resume template</a>
       <a href="#iris-applications-container">Applications</a>
+      <a href="#iris-requirements-container">What jobs ask for</a>
       <div class="iris-settings-group">Advanced</div>
       <a href="#proxy-settings-container">Proxy</a>
       <a href="#keymap-settings-container">Keyboard shortcuts</a>
@@ -609,6 +610,18 @@
         <button class="iris-button" id="iris-applications-export" type="button">Export spreadsheet</button>
       </div>
       <div id="iris-applications-list" class="iris-list"></div>
+    </div>
+
+    <div class="settings-container" id="iris-requirements-container">
+      <h3>What jobs ask for</h3>
+      <div class="setting-secondary-label" id="iris-req-summary">
+        The skills and asks in the postings Iris reads, counted by kind of job, for you to learn from. Taken from each
+        posting's own text — nothing guessed.
+      </div>
+      <div class="iris-req-kinds" id="iris-req-kinds" role="tablist" aria-label="Kind of job"></div>
+      <div class="iris-req-learn" id="iris-req-learn"></div>
+      <div class="iris-req-asks" id="iris-req-asks"></div>
+      <div class="iris-req-groups" id="iris-req-groups"></div>
     </div>
 
     <div class="settings-container" id="iris-skills-container">

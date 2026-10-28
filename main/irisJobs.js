@@ -11,6 +11,7 @@
 
 const irisCareerLib = require('./iris/agent/career.js')
 const irisListFileLib = require('./iris/agent/listFile.js')
+const irisRequirementsLib = require('./iris/agent/requirements.js')
 const irisChildProcess = require('child_process')
 
 /* ---------- the career profile ---------- */
@@ -492,6 +493,36 @@ function irisApplicationAlsoAt (rec, url) {
   if (nums.length && theirs.length && !nums.some(function (x) { return theirs.indexOf(x) >= 0 })) return
   items[i] = Object.assign({}, items[i], { alsoAt: (items[i].alsoAt || []).concat([url]) })
   irisApplicationsSave(items)
+}
+
+/* What job postings ask for (Settings → What jobs ask for): one record per posting Iris read, from its own text — see
+   iris/agent/requirements.js. A posting already noted is not noted twice. */
+var irisRequirementsFile = null
+function irisRequirementsStore () {
+  if (!irisRequirementsFile) irisRequirementsFile = irisListFileLib.createListFile({ fs: fs, file: path.join(userDataPath, 'iris-requirements.json'), key: 'items', keep: 3000, log: DBUG })
+  return irisRequirementsFile
+}
+
+function irisRequirementsNote (posting) {
+  try {
+    if (!posting || !posting.url || !irisRequirementsLib.looksLikePosting(posting.text)) return
+    const key = irisJobKey(posting.url) || posting.url
+    const items = irisRequirementsStore().load()
+    if (items.some(function (r) { return r.key === key })) return
+    const rec = irisRequirementsLib.fromPosting(Object.assign({}, posting, { key: key }))
+    if (!rec.skills.length && rec.years === null) return
+    items.push(rec)
+    irisRequirementsStore().save(items)
+  } catch (e) { DBUG('requirements note: ' + e.message) }
+}
+
+/* the page's summary; what the user already lists comes from their career profile, My info and their own words */
+function irisRequirementsSummary () {
+  let mine = ''
+  try { mine = irisCareerLib.bankText(irisCareerLoad(), 20000) } catch (e) { /* no profile yet */ }
+  try { mine += '\n' + JSON.stringify(irisProfileLoad()) } catch (e) { /* none */ }
+  try { mine += '\n' + irisTaskSelf() } catch (e) { /* no run */ }
+  return irisRequirementsLib.summarize(irisRequirementsStore().load(), mine)
 }
 
 function irisApplicationAdd (rec) {
@@ -1059,6 +1090,8 @@ function irisJobsSettingsAction (action, args) {
       })
     case 'applicationsList':
       return Promise.resolve({ items: irisApplicationsForPage(), today: irisAppliedToday() })
+    case 'requirementsSummary':
+      return Promise.resolve(irisRequirementsSummary())
     case 'applicationShow': {
       const a = irisApplicationsLoad().find(function (x) { return x.id === (args && args.id) })
       if (a && a.resume && fs.existsSync(a.resume)) shell.showItemInFolder(a.resume)
