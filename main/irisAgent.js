@@ -791,7 +791,9 @@ async function irisDoLookup (req) {
       // a job in the applications log (any day, any status) is handled — the fresh job lists leave it out (a real run
       // was sent to Faraday Future and Axon, applied to days before)
       // a short link never matches the posting's own address: the company and the job's title tell it then
-      const app = it.url && /^https?:/.test(it.url) ? irisApplicationFind({ url: it.url, company: it.company, title: it.shortLink ? it.role : it.title }) : null
+      // (not by title when the address names the posting: one company's two postings may share a title, IBM's 129784
+      // and 133481 — the posting number with the company does instead, see irisApplicationListed)
+      const app = it.url && /^https?:/.test(it.url) ? irisApplicationFind({ url: it.url, company: it.company, title: it.shortLink ? it.role : it.title }) || irisApplicationListed(it.url, it.company) : null
       if (app) return 'you logged this job "' + app.status + '" on ' + new Date(app.updated || app.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
       const note = irisSeenNote(it.url || '', (it.id || '') + ' ' + (it.title || ''), irisSession && irisSession.id)
       return note ? 'you ' + note : null

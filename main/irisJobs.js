@@ -444,6 +444,56 @@ function irisApplicationAt (url) {
   }) || null
 }
 
+/* a posting number that is a whole part of its address (".../job/298784", "/JobDetail/14018", "?gh_jid=8052122"), not
+   one inside a slug ("…-co-80501/…" is a zip code): too short to name a job alone, it does with the company's name */
+function irisPostingNumbers (url) {
+  const key = irisJobKey(url).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ' ')
+  const out = []
+  const re = /[/=](\d{5,})(?=[/&]|$)/g
+  let m
+  while ((m = re.exec(key))) out.push(m[1])
+  return out
+}
+
+/* A fresh-list job already handled, though the list links it at another address than the one it was logged at: the
+   same company's same posting number on another host (Dell's iawmqy.fa.ocs.oraclecloud.com/…/job/298784 is
+   enterpriseplatform.dell.com/…/job/298784; Two Sigma's twosigma.avature.net is careers.twosigma.com), or an address
+   its page was recognised at by title (alsoAt). A real run planned Two Sigma, Dell and HRT, all applied to, at the
+   start of every round of a night. Only the lists use this: the Submit check still goes by the logged addresses. */
+function irisApplicationListed (url, company) {
+  const nums = irisPostingNumbers(url)
+  const key = irisJobKey(url)
+  const ids = irisJobIds(url)
+  const norm = function (s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() }
+  const co = norm(company)
+  return irisApplicationsLoad().slice().reverse().find(function (a) {
+    if ((a.alsoAt || []).some(function (u) { return irisJobKey(u) === key || (ids.length > 0 && irisJobIds(u).some(function (x) { return ids.indexOf(x) >= 0 })) })) return true
+    const c = norm(a.company)
+    if (!nums.length || co.length < 3 || c.length < 3 || !(c === co || c.indexOf(co + ' ') === 0 || co.indexOf(c + ' ') === 0)) return false
+    return [a.url].concat(a.urls || []).some(function (u) { return u && irisPostingNumbers(u).some(function (x) { return nums.indexOf(x) >= 0 }) })
+  }) || null
+}
+
+/* a page recognised as a logged job by its title, at an address the job was not logged at: the lists know it there
+   from now on (HRT's ?gh_jid=8052122, applied to at /hrt-job/…). Not when that address names another posting
+   number than the job's own (IBM's 129784 and 133481 share a title and are two jobs). */
+function irisApplicationAlsoAt (rec, url) {
+  const key = irisJobKey(url)
+  if (!rec || !rec.id || !key || IRIS_CONFIRM_PAGE.test(url) || /linkedin\.com\/(search|company|in)\//i.test(url)) return
+  const items = irisApplicationsLoad()
+  const i = items.findIndex(function (a) { return a.id === rec.id })
+  if (i < 0) return
+  const own = [items[i].url].concat(items[i].urls || []).filter(Boolean)
+  const all = own.concat(items[i].alsoAt || [])
+  if (all.some(function (u) { return irisJobKey(u) === key }) || (items[i].alsoAt || []).length >= 6) return
+  const nums = irisPostingNumbers(url).concat(irisJobIds(url))
+  const theirs = []
+  own.forEach(function (u) { irisPostingNumbers(u).concat(irisJobIds(u)).forEach(function (x) { theirs.push(x) }) })
+  if (nums.length && theirs.length && !nums.some(function (x) { return theirs.indexOf(x) >= 0 })) return
+  items[i] = Object.assign({}, items[i], { alsoAt: (items[i].alsoAt || []).concat([url]) })
+  irisApplicationsSave(items)
+}
+
 function irisApplicationAdd (rec) {
   const items = irisApplicationsLoad()
   const existing = items.findIndex(function (a) { return irisSameJob(a, rec) })
@@ -502,6 +552,7 @@ function irisApplicationNote (url, pageTitle) {
       const okAfter = !after || after.indexOf('at ') === 0 || after.indexOf(cw) === 0
       return okBefore && okAfter
     }) || null
+    if (hit) irisApplicationAlsoAt(hit, url)
   }
   if (!hit) return null
   const when = new Date(hit.updated || hit.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
