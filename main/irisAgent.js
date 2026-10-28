@@ -785,7 +785,39 @@ function irisLookupNever () {
 }
 settings.listen('irisLookupNever', function () { irisLookupInstance = null })
 
+/* A fresh-list query's "-company" for a company applied to is dropped unless the user's own task names it: its other
+   jobs count (a real run left out EXL, Canonical, Jain Global and FlexAI right after applying there, with Qualcomm,
+   NVIDIA and Intel, hiding Qualcomm's Backend Software Engineer and NVIDIA's Applied ML Engineer, 10-27).
+   Returns { query, kept } — kept: the dropped words. */
+function irisFreshQueryKept (query, task) {
+  const q = String(query || '')
+  if (!/^\s*(fresh|latest|newest)\b/i.test(q)) return { query: q, kept: [] }
+  const squash = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '') }
+  const asked = String(task || '').toLowerCase()
+  const applied = irisApplicationsLoad().filter(function (a) { return a.status === 'applied' && a.company })
+  const leads = {}
+  applied.forEach(function (a) {
+    let lead = ''
+    String(a.company).split(/[\s,]+/).forEach(function (part) { lead += squash(part); if (lead) leads[lead] = true })
+  })
+  const kept = []
+  const out = q.split(/\s+/).filter(function (w) {
+    if (!/^-[^\s,]{2,}$/.test(w)) return true
+    const k = squash(w.slice(1))
+    if (!k || !leads[k] || new RegExp('(^|[^a-z0-9])-?' + w.slice(1).toLowerCase().replace(/[^a-z0-9]+/g, '[^a-z0-9]?') + '([^a-z0-9]|$)').test(asked)) return true
+    kept.push(w.slice(1))
+    return false
+  })
+  return { query: out.join(' '), kept: kept }
+}
+
 async function irisDoLookup (req) {
+  let kept = []
+  if (req && req.kind === 'jobs') {
+    const task = irisSession ? ((irisSession.items || []).find(function (it) { return it.kind === 'user' }) || {}).text : ''
+    const r = irisFreshQueryKept(req.query, task)
+    if (r.kept.length) { req = Object.assign({}, req, { query: r.query }); kept = r.kept }
+  }
   let result = await irisLookup().lookup(req, {
     annotate: function (it) {
       // a job in the applications log (any day, any status) is handled — the fresh job lists leave it out (a real run
@@ -800,6 +832,9 @@ async function irisDoLookup (req) {
     }
   })
   irisUsageRecord('lookup')
+  if (kept.length && result && typeof result.text === 'string') {
+    result = Object.assign({}, result, { text: result.text + '\n(Left in, though you wrote -' + kept.join(' -') + ': you applied there, and their other jobs count — the ones you logged are left out by themselves.)' })
+  }
   // the company and role of each listed job, for the skip log offered when its posting is read
   if (result && result.ok && req && req.kind === 'jobs') {
     (result.items || []).forEach(function (it) { if (it.url && it.company) irisListedJobs[irisJobKey(it.url)] = { company: it.company, title: it.role || it.title } })
