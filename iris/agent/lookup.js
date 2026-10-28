@@ -375,6 +375,8 @@ function parseFreshListings (rows, words, nowSec, not, places) {
     // the lists' categories are loose ("Operations Intern" under Software): the title must be computer work too (the
     // vanshb03 list has no categories: the title alone)
     if (!(x.category == null || FRESH_CS_CATEGORY.test(cat) || /hardware|quant/i.test(cat)) || !FRESH_CS_TITLE.test(x.title || '')) return false
+    // "data" in a title that is no software work (10-27: Iris applied to Tesla's "Data Labeler")
+    if (/\b(label(l)?ers?|labell?ing|annotat\w*|data collection|data entry|operators?|technicians?|trainee)\b/i.test(x.title || '')) return false
     // an internship whose terms are all over (Summer 2026 in October 2026)
     if ((x.terms || []).length && x.terms.every(function (t) { return freshTermOver(t, nowSec) })) return false
     if (!(x.locations || []).some(isUSLocation)) return false

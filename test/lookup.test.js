@@ -439,3 +439,10 @@ test('fresh new grad: the caller\'s redirect reader resolves short links (Electr
   assert.deepStrictEqual(r.items.map(it => it.url), ['https://jobs.ashbyhq.com/rilla/123a6a38-c7f9-4378-b00d-c6ae54688bd5'])
   assert.deepStrictEqual(asked.sort(), ['https://go.vansh.nyc/Br', 'https://go.vansh.nyc/Vn'])
 })
+
+test('fresh lists leave out labeling, data-collection, operator and technician roles', () => {
+  const { parseFreshListings } = require('../iris/agent/lookup.js')
+  const row = (title) => ({ active: true, is_visible: true, category: 'AI/ML/Data', title, company_name: 'Tesla', locations: ['Austin, TX'], url: 'https://x.test/' + encodeURIComponent(title), date_posted: 0 })
+  const rows = ['Data Labeler', 'Data Collection Operator - Optimus', 'Engineering Technician Trainee', 'Data Annotation Specialist', 'Machine Learning Engineer', 'Data Engineer I'].map(row)
+  assert.deepStrictEqual(parseFreshListings(rows, [], 0, []).map(j => j.role).sort(), ['Data Engineer I', 'Machine Learning Engineer'])
+})
