@@ -1072,6 +1072,21 @@ const IRIS_FORM_IDS = `(function () {
    a mostly new set of boxes after an autofill there, a note to autofill first. */
 /* The first look at a site with a saved account, once per run: the prompt lists only the newest 40 of them, and a
    real run made new accounts (overwriting the saved password) on sites whose account had dropped off that list. */
+/* One line on every step on a site with a saved account: the once-per-run note drops out of the model's view, and the
+   prompt's account list shows only the newest 40 — a real night (10-27, HPE: 48th of 183) read that list, decided "No
+   saved HPE account exists", and made a second account over the working one. */
+function irisSiteAccountLine (url) {
+  const site = irisSiteOf(url)
+  if (!site) return ''
+  try {
+    const a = irisAccountsLib.findSite(irisAccountsLoad(), site)
+    if (!a || !a.username) return ''
+    if (a.noAccount) return 'Saved account for this site: ' + a.username + ' — but the site said no account exists for it: make it with that email and {{New password}}.'
+    if (a.refused) return 'Saved account for this site: ' + a.username + ' — its password was refused: use "Forgot password" (then {{New password}} on the reset page).'
+    return 'Saved account for this site: ' + a.username + ' — sign in with it and {{account:' + a.site + '}}; never make a new account here.'
+  } catch (e) { return '' }
+}
+
 IrisComputer.prototype.noteSavedAccount = function (url) {
   const site = irisSiteOf(url)
   if (!site) return
@@ -1443,6 +1458,7 @@ IrisComputer.prototype.screenshot = async function () {
   const obs = this.finishCapture(image, size, crop || bounds, wc, sig)
   irisAttachEvents(this, obs)
   obs.skills = irisSkillsFor(obs.url)
+  if (this.jobsMode) obs.siteAccount = irisSiteAccountLine(obs.url)
   if (this.memory && obs.url && obs.url !== this.lastVisit) {
     this.lastVisit = obs.url
     this.memory.add('visit', obs.title || obs.url, { url: obs.url, title: obs.title })
@@ -3269,7 +3285,7 @@ function irisSystemExtra (mode, task, projectId, sessionId) {
       ? 'When a site needs an account, log in with the user\'s saved email or username and password. Never create new accounts; if logging in fails, use ask_user.'
       : 'When a site needs an account: if Settings → Accounts has one for that site (listed below), log in with its username and its password placeholder. Otherwise sign up with the user\'s saved details (name, email, and anything else the form asks that you know); for the password type {{New password}} — Iris makes a strong password just for that site, types the same one into "confirm password", and saves it. Accept the usual terms, then continue the task. Never guess personal details (country, address, birthday, phone, gender, job): if My info does not have one a form needs, use ask_user — even when the site suggests a default. After creating an account, record it with save_account (password "{{New password}}").')
     const accounts = irisAccountsLoad()
-    if (accounts.length) parts.push('Accounts Iris made for the user (log in with these): ' + accounts.slice(-40).map(function (a) { return a.site + ' — ' + a.username + ' / {{account:' + a.site + '}}' }).join('; ') + '.')
+    if (accounts.length) parts.push('Accounts Iris made for the user (log in with these' + (accounts.length > 40 ? '; the newest 40 of ' + accounts.length + ' — a site not listed may still have one, and every page of a site with a saved account says so' : '') + '): ' + accounts.slice(-40).map(function (a) { return a.site + ' — ' + a.username + ' / {{account:' + a.site + '}}' }).join('; ') + '.')
     parts.push(irisSettings().emailAccess
       ? 'If a site emails a verification code or link: open a new tab, go to the user\'s email inbox (the "Email inbox URL" in their details, or their usual webmail), sign in with their saved details if needed, open the newest message from that site, read the code or click the link, then close that tab and switch back. Codes sent by text message or phone: ' +
         (irisWhatsAppReady() ? 'request_code (Iris asks the user on WhatsApp; you go on without waiting).' : 'use ask_user.')
