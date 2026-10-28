@@ -302,6 +302,9 @@ function isUSLocation (loc) {
   const low = t.toLowerCase()
   if (US_STATES.some(function (st) { return new RegExp('\\b' + st + '\\b').test(low) }) && !NOT_US.test(t)) return true
   if (US_CITIES.test(t) && !NOT_US.test(t)) return true
+  // "Remote in <place>" names its place: a US one is known above ("Remote in USA", "Remote in Texas"); any other is not
+  // (NewRocket's Europe-only "AI Engineer New Grad" passed on "Remote in Jersey" and "Remote in Monaco", 10-27)
+  if (/\bremote\s+in\s+\S/i.test(t)) return false
   if (/\bremote\b|\banywhere\b/i.test(t) && !NOT_US.test(t)) return true
   return false
 }

@@ -2,7 +2,7 @@
 
 const test = require('node:test')
 const assert = require('node:assert')
-const { createLookup, parseHackerNews, parseLookups, parseDuckDuckGo, parseBing, parseOpenAlex, parseArxiv, readableText, looksBlocked, isNever } = require('../iris/agent/lookup')
+const { createLookup, parseHackerNews, parseLookups, parseDuckDuckGo, parseBing, parseOpenAlex, parseArxiv, readableText, looksBlocked, isNever, isUSLocation } = require('../iris/agent/lookup')
 
 function fakeFetch (routes, log) {
   return async (url) => {
@@ -445,4 +445,9 @@ test('fresh lists leave out labeling, data-collection, operator and technician r
   const row = (title) => ({ active: true, is_visible: true, category: 'AI/ML/Data', title, company_name: 'Tesla', locations: ['Austin, TX'], url: 'https://x.test/' + encodeURIComponent(title), date_posted: 0 })
   const rows = ['Data Labeler', 'Data Collection Operator - Optimus', 'Engineering Technician Trainee', 'Data Annotation Specialist', 'Machine Learning Engineer', 'Data Engineer I'].map(row)
   assert.deepStrictEqual(parseFreshListings(rows, [], 0, []).map(j => j.role).sort(), ['Data Engineer I', 'Machine Learning Engineer'])
+})
+
+test('"Remote in <place>" is US only when the place is', () => {
+  for (const loc of ['Remote in USA', 'Remote in Texas', 'Remote in US', 'Remote', 'Remote (US)', 'Remote in New Jersey']) assert.ok(isUSLocation(loc), loc)
+  for (const loc of ['Remote in Jersey', 'Remote in Monaco', 'Remote in Finland', 'Remote in Guernsey', 'Remote (Canada)']) assert.ok(!isUSLocation(loc), loc)
 })
