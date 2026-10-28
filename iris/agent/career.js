@@ -1792,7 +1792,10 @@ function linkedinLimitShown (peek) {
 /** The model's thought, on a LinkedIn page, says LinkedIn shows the limit — not that a note or the task says so. */
 function linkedinLimitThought (thought) {
   const t = String(thought || '')
-  return LINKEDIN_LIMIT.test(t) && !/\b(per|from|in|by) (the |a |my )?(system |iris |latest |earlier )?notes?\b|\bnoted\b|\btask says\b|\b(reached|seen|hit) (earlier|before)\b/i.test(t)
+  // a thought that only repeats the note is no sighting: "the standing note says LinkedIn weekly limit — skip" on a
+  // LinkedIn page (10-26) kept the limit in force night after night. A sighting says the page shows it.
+  if (/\b(per|from|in|by) (the |a |my )?(standing |system |iris |latest |earlier )?notes?\b|\bnoted\b|\b(task|note|notes) (says|said)\b|\bstanding note\b|\b(reached|seen|hit) (earlier|before)\b/i.test(t)) return false
+  return LINKEDIN_LIMIT.test(t) && /\b(shows?|showing|shown|says|pop-?up|dialog|modal|message|banner|appears|appeared|page)\b|["“']/i.test(t)
 }
 
 /*

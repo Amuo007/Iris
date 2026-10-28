@@ -407,3 +407,11 @@ test('a Workday posting id keeps its number and loses only a copy\'s short endin
   assert.strictEqual(workdayPostingId('Analyst_R-12'), 'R-12')
   assert.notStrictEqual(workdayPostingId('Data-Engineer_R-01372756'), workdayPostingId('Embedded-Controls-Engineer_R-01364234'))
 })
+
+test('LinkedIn limit: a thought repeating the note is no sighting, one that says the page shows it is', () => {
+  const { linkedinLimitThought } = require('../iris/agent/career')
+  assert.ok(!linkedinLimitThought('(high) LinkedIn search returned no results (filters), and the standing note says LinkedIn weekly limit — skip LinkedIn. Log the NOV application.'))
+  assert.ok(!linkedinLimitThought('(medium) LinkedIn at weekly limit, skip it. Log application and continue.'))
+  assert.ok(linkedinLimitThought('(high) LinkedIn shows "You\'ve reached the weekly invitation limit". Skip LinkedIn and go on.'))
+  assert.ok(linkedinLimitThought('(high) A pop-up says I have reached the weekly invitation limit.'))
+})

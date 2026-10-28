@@ -2115,8 +2115,9 @@ IrisComputer.prototype.act = async function (action) {
       this.notes = (this.notes || []).concat('Logged in Settings → Jobs → Applications: ' + label + ' — ' + (rec.title || 'job') + (rec.company ? ' at ' + rec.company : '') + '.' +
         (rec.status === 'applied' ? ' Applications sent today: ' + irisAppliedToday() + '.' : '') +
         (linkedinAsked
-          ? ' Now, before the next job, do the LinkedIn part the user asked for: send a connection request to at least 1 person who works at ' + rec.company +
-            '. If LinkedIn\'s own search is limited, search Google for site:linkedin.com/in ' + rec.company + ' software engineer, open a profile from the results and press Connect there. Then go on to the next job.'
+          ? ' Now, before the next job, do the LinkedIn part the user asked for: connection requests with a personal note to 1-3 people at ' + rec.company +
+            ' — University of Houston people first (the company\'s People tab with ?keywords=University%20of%20Houston), read each profile, then a short note in the user\'s voice about them (see CONNECTING WITH PEOPLE). ' +
+            'If LinkedIn\'s own search is limited, search Google for site:linkedin.com/in "' + rec.company + '" "University of Houston", open a profile from the results and connect there. Then go on to the next job.'
           : rec.status === 'needs_you' ? ' It is the user\'s now: do not open or submit this job again in this run. Go on to the next job.' : ' Go on to the next job.'))
       if (rec.status === 'needs_you') irisNotify('A job application needs you', (rec.title || 'A job') + (rec.company ? ' at ' + rec.company : '') + (rec.note ? ': ' + rec.note : ''))
       broadcastEvent({ type: 'application', item: item, sessionId: this.sessionId })
