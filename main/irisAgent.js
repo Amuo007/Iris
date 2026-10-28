@@ -2012,9 +2012,10 @@ IrisComputer.prototype.act = async function (action) {
         const secret = action.type === 'fill' && /\{\{[^}]+\}\}/.test(String(action.text || ''))
         if (secret) this.noteAccountTyped(action.text)
         const made = secret ? this.withNewPassword(wc, action.text) : action.text
-        const text = secret && made !== null ? irisFillSecrets(made) : action.text
-        const unsaved = secret && made !== null && irisAccountsLib.accountRef(text)
-        r = made === null ? { ok: false, error: this.newPasswordRefused }
+        const refused = secret && made === null
+        const text = secret && !refused ? irisFillSecrets(made) : action.text
+        const unsaved = secret && !refused && irisAccountsLib.accountRef(text)
+        r = refused ? { ok: false, error: this.newPasswordRefused }
           : unsaved ? { ok: false, error: irisNoSavedSignIn(unsaved.site) }
           : action.type === 'choose' ? await irisChooseField(this, wc, action.field, action.option) : await irisFillField(this, wc, action.field, text)
         // a password or other secret is never read back into the notes (they reach the model and the logs)
@@ -2293,8 +2294,11 @@ IrisComputer.prototype.act = async function (action) {
   let typed = action.type === 'type' ? action.text : null
   // the e-mail typed on a sign-up page: the new account's username
   if (action.type === 'type' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(action.text || '').trim())) this.lastTypedEmail = String(action.text).trim()
+  // a {{New password}} refused (the site's saved account works): only a typing action, never a click or a key (which
+  // carry no text: 10-27, every click was refused for an hour)
+  const toType = typed
   typed = this.withNewPassword(wc, typed)
-  if (typed === null) return { ok: false, error: this.newPasswordRefused }
+  if (toType !== null && toType !== undefined && typed === null) return { ok: false, error: this.newPasswordRefused }
   if (action.type === 'type') this.noteAccountTyped(typed)
   let real = action.type === 'type' ? Object.assign({}, action, { text: irisFillSecrets(typed) }, /\{\{[^}]+\}\}/.test(String(typed || '')) ? { secret: true } : {}) : action
   // {{account:site}} with no saved password there: the placeholder itself is never typed (a real night typed
