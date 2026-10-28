@@ -1461,6 +1461,14 @@ IrisComputer.prototype.screenshot = async function () {
   irisAttachEvents(this, obs)
   obs.skills = irisSkillsFor(obs.url)
   if (this.jobsMode) obs.siteAccount = irisSiteAccountLine(obs.url)
+  // the numbers an open email shows (a verification code): typed on the form next, they are no guess (a real run's
+  // onsemi code from Gmail was refused once, 10-27)
+  if (this.jobsMode && /^https:\/\/(mail\.google\.com|outlook\.(live|office|office365)\.com)\//i.test(obs.url || '')) {
+    try {
+      const text = await wc.executeJavaScript('document.body ? document.body.innerText.slice(0, 30000) : ""')
+      this.mailNumbers = { at: Date.now(), nums: String(text || '').match(/\b\d{4,8}\b/g) || [] }
+    } catch (e) { /* the page went away */ }
+  }
   if (this.memory && obs.url && obs.url !== this.lastVisit) {
     this.lastVisit = obs.url
     this.memory.add('visit', obs.title || obs.url, { url: obs.url, title: obs.title })
@@ -2285,7 +2293,8 @@ IrisComputer.prototype.act = async function (action) {
     const known = JSON.stringify([irisCareerLoad(), irisProfileLoad()])
     const inProfile = new RegExp('(^|[^0-9])' + num.replace(/[.,]/g, '[.,]?') + '([^0-9]|$)').test(known)
     const again = this.refusedNumber && this.refusedNumber.text === num && this.refusedNumber.url === wc.getURL()
-    if (!year && !datePart && !inProfile && !again) {
+    const fromMail = !!this.mailNumbers && Date.now() - this.mailNumbers.at < 15 * 60000 && this.mailNumbers.nums.indexOf(digits) >= 0
+    if (!year && !datePart && !inProfile && !again && !fromMail) {
       this.refusedNumber = { text: num, url: wc.getURL() }
       return { ok: false, error: 'not typed — "' + num + '" is a number about you that your profile and saved answers do not give, and numbers about the user are never guessed. ' +
         'If this page or an email shows this exact number (a code, a value printed on the page), type it again. If a required box asks for it and the profile lacks it, log the job needs_you naming that question and go on to the next job.' }
