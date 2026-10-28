@@ -205,8 +205,10 @@ function fromPosting (posting) {
 
 /* is this text a job posting (not a company page or a search)? Iris's own eligibility digest says so, or the words
    postings use */
-function looksLikePosting (text) {
+function looksLikePosting (text, title, url) {
   const t = String(text || '')
+  // a company's list of openings is no posting ("Jobs at Raindrop | Y Combinator", ycombinator.com/companies/x/jobs)
+  if (/^(jobs|careers|open (roles|positions)) at\b|\bjob board\b|search results/i.test(String(title || '')) || /\/companies\/[^/]+\/jobs\/?$|\/jobs\/?$|\/careers\/?$/i.test(String(url || '').split(/[?#]/)[0])) return false
   return /ELIGIBILITY LINES/.test(t) || ((t.match(/\b(responsibilities|qualifications|requirements|what you'?ll do|what we'?re looking for|about the role|you will)\b/gi) || []).length >= 2)
 }
 

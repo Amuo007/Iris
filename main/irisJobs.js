@@ -505,7 +505,7 @@ function irisRequirementsStore () {
 
 function irisRequirementsNote (posting) {
   try {
-    if (!posting || !posting.url || !irisRequirementsLib.looksLikePosting(posting.text)) return
+    if (!posting || !posting.url || !irisRequirementsLib.looksLikePosting(posting.text, posting.title, posting.url)) return
     const key = irisJobKey(posting.url) || posting.url
     const items = irisRequirementsStore().load()
     if (items.some(function (r) { return r.key === key })) return

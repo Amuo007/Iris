@@ -94,4 +94,7 @@ test('a posting is told from other pages', () => {
   assert.ok(r.looksLikePosting('ELIGIBILITY LINES (from anywhere in the posting): none\nWe build'))
   assert.ok(r.looksLikePosting('About the role ... Responsibilities ... Qualifications ...'))
   assert.ok(!r.looksLikePosting('Our company makes great software. Contact us.'))
+  const digest = 'ELIGIBILITY LINES: none\n---\nResponsibilities and qualifications'
+  assert.ok(!r.looksLikePosting(digest, 'Jobs at Raindrop | Y Combinator', 'https://www.ycombinator.com/companies/raindrop/jobs'))
+  assert.ok(r.looksLikePosting(digest, 'Founding Engineer at Raindrop', 'https://www.ycombinator.com/companies/raindrop/jobs/AbC123-founding-engineer'))
 })
