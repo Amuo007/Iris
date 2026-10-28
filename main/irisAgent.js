@@ -2133,9 +2133,16 @@ IrisComputer.prototype.act = async function (action) {
           strict: !!irisAppliedLib.linkedinJobId(logUrl)
         }
         const now = Date.now()
-        const seen = (this.confirmations || []).some(function (c) {
-          return irisAppliedLib.confirmationMatches({ url: c.url, at: c.at, key: keyOf(c.url), ids: idsOf(c.url), site: irisSiteKey(c.url), squashed: squash(c.url) }, log, now)
-        })
+        const self = this
+        const check = function () {
+          return (self.confirmations || []).some(function (c) {
+            return irisAppliedLib.confirmationMatches({ url: c.url, at: c.at, key: keyOf(c.url), ids: idsOf(c.url), site: irisSiteKey(c.url), squashed: squash(c.url) }, log, now)
+          })
+        }
+        let seen = check()
+        // the page may have turned into its thank-you page after the last screenshot: look at it as it is now (Greenhouse's
+        // /confirmation came a moment after the screenshot taken right after Submit — xAI's log was refused once, 10-28)
+        if (!seen && here) { await this.noteConfirmation(wc, here); seen = check() }
         if (!seen) {
           // what the page shows now, for the next fix (10-27: LiveFlow's Ashby "Success" banner was no confirmation)
           try {
