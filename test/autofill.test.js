@@ -72,6 +72,8 @@ test('contact boxes', () => {
   assert.deepStrictEqual(plan('Phone'), { do: 'text', value: '(832) 263-4489' })
   assert.deepStrictEqual(plan('LinkedIn Profile'), { do: 'text', value: 'https://www.linkedin.com/in/x/' })
   assert.deepStrictEqual(plan('Website'), { do: 'text', value: 'https://x.github.io/portfolio/' })
+  assert.deepStrictEqual(plan('Link 1'), { do: 'text', value: 'https://www.linkedin.com/in/x/' })
+  assert.deepStrictEqual(plan('Link 2'), { do: 'text', value: 'https://github.com/x' })
   assert.deepStrictEqual(plan('Current Company'), { do: 'text', value: 'Geometris' })
   assert.strictEqual(plan('Referrer email').do, 'leave')
   assert.strictEqual(plan('School name').do !== 'text' || plan('School name').value !== 'Amrinder Singh', true)

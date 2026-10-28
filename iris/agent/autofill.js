@@ -222,6 +222,10 @@ function rulesFor (f) {
     { test: /^(your )?linkedin\b|linkedin (profile|url)/i, text: f.linkedin, short: true },
     { test: /^(your )?github\b|github (profile|url)/i, text: f.github, short: true },
     { test: /^(your |personal )?(website|portfolio|blog)\b|personal (site|website)/i, skip: /linkedin|github/i, text: f.website, short: true },
+    // Oracle's "Links" boxes have no names ("Link 1", "Link 2"): LinkedIn first, then GitHub (a real run left them, and
+    // the model typed the LinkedIn address cut short, "https://amrinder-singh-uh", 10-27)
+    { test: /^(web )?link ?1$/i, text: f.linkedin, short: true },
+    { test: /^(web )?link ?2$/i, text: f.github || f.website, short: true },
     // ---- place
     { test: /^country\b/i, choose: [/^united states( of america)?(\s*\+1)?$/i, /^united states\b(?!.*(minor|islands))/i, /^usa?$/i], text: f.country, self: true },
     { test: /^(location|current location)\b|location \(city\)|^where are you (currently )?(located|based)/i, place: true, text: f.city && f.state ? f.city + ', ' + f.state : '', self: true },
