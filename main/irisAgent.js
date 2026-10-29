@@ -2364,6 +2364,10 @@ IrisComputer.prototype.act = async function (action) {
   }
   // secrets are filled in here, at the last moment: the model and the panel only see {{Label}}
   let typed = action.type === 'type' ? action.text : null
+  // a LinkedIn note reads like the user typed it: no long dashes (the user, 10-28: "it should sound like human, not AI")
+  const onLinkedin = /(^|\.)linkedin\.com$/i.test(irisSiteOf(wc.getURL()) || '')
+  if (typed && onLinkedin) typed = irisCareerLib.linkedinNoteText(typed)
+  const undashed = typed !== null && typed !== action.text
   // the e-mail typed on a sign-up page: the new account's username
   if (action.type === 'type' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(action.text || '').trim())) this.lastTypedEmail = String(action.text).trim()
   // a {{New password}} refused (the site's saved account works): only a typing action, never a click or a key (which
@@ -2472,7 +2476,7 @@ IrisComputer.prototype.act = async function (action) {
   if (action.type === 'type') {
     // say exactly what went in, so a box that merely looks cut off is not "fixed" by mistake
     const secret = action.text.indexOf('{{') !== -1
-    this.notes = (this.notes || []).concat('Typed ' + (secret ? action.text + ' (' + real.text.length + ' characters, filled in from My info)' : '"' + action.text + '"') +
+    this.notes = (this.notes || []).concat('Typed ' + (secret ? action.text + ' (' + real.text.length + ' characters, filled in from My info)' : '"' + (undashed ? typed : action.text) + '"' + (undashed ? ' (long dashes taken out: the user wants notes without them)' : '')) +
       (sameBox ? ' into the box you had just clicked, without clicking it again (a second click closes an open list).'
         : notTextBox ? ' at (' + action.x + ', ' + action.y + '), but the pointer did not turn into a text cursor there: it may not be a text box, so nothing was selected first. Check that the text went into the right field.'
         : action.clear === false ? ' (added to the existing text).' : ' (replacing what was in the field).'))

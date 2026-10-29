@@ -415,3 +415,16 @@ test('LinkedIn limit: a thought repeating the note is no sighting, one that says
   assert.ok(linkedinLimitThought('(high) LinkedIn shows "You\'ve reached the weekly invitation limit". Skip LinkedIn and go on.'))
   assert.ok(linkedinLimitThought('(high) A pop-up says I have reached the weekly invitation limit.'))
 })
+
+test('a LinkedIn note is typed without long dashes, as a person writes it', () => {
+  const f = career.linkedinNoteText
+  assert.strictEqual(f("I saw you're on the payments team — any advice for someone starting out? Thanks!"),
+    "I saw you're on the payments team. Any advice for someone starting out? Thanks!")
+  assert.strictEqual(f('Hi Sarah — fellow Coog here!'), 'Hi Sarah, fellow Coog here!')
+  assert.strictEqual(f('I built agents — and I loved it — so I applied.'), 'I built agents, and I loved it, so I applied.')
+  assert.strictEqual(f('I work on the platform team – it looks great'), 'I work on the platform team. It looks great')
+  assert.strictEqual(f('Hi Amir! — I am a CS senior.'), 'Hi Amir! I am a CS senior.')
+  assert.strictEqual(f('Interned 2024–2025 on the full-stack team'), 'Interned 2024-2025 on the full-stack team')
+  assert.strictEqual(f('University of Houston'), 'University of Houston')
+  assert.ok(!/[—–]/.test(f('a — b — c — d. e—f')))
+})

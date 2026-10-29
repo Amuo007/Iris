@@ -1798,6 +1798,30 @@ function linkedinLimitThought (thought) {
   return LINKEDIN_LIMIT.test(t) && /\b(shows?|showing|shown|says|pop-?up|dialog|modal|message|banner|appears|appeared|page)\b|["“']/i.test(t)
 }
 
+/**
+ * What Iris types on LinkedIn, as a person types a quick note: no long dashes (the user, 10-28: "no dashes, it doesn't
+ * look good. It should sound like human, not AI"). A dash between two clauses ends the sentence; a short lead-in
+ * ("Hi Sarah — "), a clause that goes on ("— and I…") or a pair around an aside takes commas; a range of numbers keeps
+ * a plain hyphen. Hyphenated words ("full-stack") stay.
+ */
+const NOTE_DASH = /\s*[—–]+\s*|\s+-{1,2}\s+/
+const NOTE_GOES_ON = /^(and|but|so|or|which|who|where|especially|including|like|plus|from|with|since|because|as)\b/i
+function linkedinNoteText (text) {
+  const t = String(text == null ? '' : text)
+  if (!/[—–]|\s-{1,2}\s/.test(t)) return t
+  return t.replace(/(\d)\s*[—–]\s*(\d)/g, '$1-$2').split(/(?<=[.!?])(\s+)/).map(function (s) {
+    const parts = s.split(NOTE_DASH).filter(function (p, i, all) { return p !== '' || (i > 0 && i < all.length - 1) })
+    if (parts.length < 2) return parts.join('')
+    if (parts.length > 2) return parts.join(', ')
+    const lead = parts[0]
+    const rest = parts[1]
+    if (/[.!?]$/.test(lead)) return lead + ' ' + rest.charAt(0).toUpperCase() + rest.slice(1)
+    if (/[,;:]$/.test(lead)) return lead + ' ' + rest
+    if (lead.split(/\s+/).length <= 3 || NOTE_GOES_ON.test(rest)) return lead + ', ' + rest
+    return lead + '. ' + rest.charAt(0).toUpperCase() + rest.slice(1)
+  }).join('').replace(/[ \t]+([,.!?])/g, '$1').replace(/,(\s*,)+/g, ',').replace(/[ \t]{2,}/g, ' ')
+}
+
 /*
  * The model names the file to upload in its own words: "transcript", "my unofficial transcript", "academic record".
  * Those mean the transcript the user saved in Settings → Jobs (a real run left 6 jobs for the user over a transcript
@@ -1824,6 +1848,7 @@ module.exports = {
   linkedinLimitSeen,
   linkedinLimitShown,
   linkedinLimitThought,
+  linkedinNoteText,
   isTranscriptName,
   workdayPostingId,
   SECTION_KINDS,
