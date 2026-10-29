@@ -426,5 +426,9 @@ test('a LinkedIn note is typed without long dashes, as a person writes it', () =
   assert.strictEqual(f('Hi Amir! — I am a CS senior.'), 'Hi Amir! I am a CS senior.')
   assert.strictEqual(f('Interned 2024–2025 on the full-stack team'), 'Interned 2024-2025 on the full-stack team')
   assert.strictEqual(f('University of Houston'), 'University of Houston')
+  assert.strictEqual(f('I just applied for the Flight Software Engineer – Early Career role at Rendezvous.'),
+    'I just applied for the Flight Software Engineer, Early Career role at Rendezvous.')
+  assert.strictEqual(f('I applied for Software Engineer - Product (New Grad) at Julius.'), 'I applied for Software Engineer, Product (New Grad) at Julius.')
+  assert.strictEqual(f('I saw you work on Visa — I built payments too.'), 'I saw you work on Visa. I built payments too.')
   assert.ok(!/[—–]/.test(f('a — b — c — d. e—f')))
 })

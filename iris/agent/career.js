@@ -1801,8 +1801,8 @@ function linkedinLimitThought (thought) {
 /**
  * What Iris types on LinkedIn, as a person types a quick note: no long dashes (the user, 10-28: "no dashes, it doesn't
  * look good. It should sound like human, not AI"). A dash between two clauses ends the sentence; a short lead-in
- * ("Hi Sarah — "), a clause that goes on ("— and I…") or a pair around an aside takes commas; a range of numbers keeps
- * a plain hyphen. Hyphenated words ("full-stack") stay.
+ * ("Hi Sarah — "), a clause that goes on ("— and I…"), a pair around an aside or a job title's own dash take commas;
+ * a range of numbers keeps a plain hyphen. Hyphenated words ("full-stack") stay.
  */
 const NOTE_DASH = /\s*[—–]+\s*|\s+-{1,2}\s+/
 const NOTE_GOES_ON = /^(and|but|so|or|which|who|where|especially|including|like|plus|from|with|since|because|as)\b/i
@@ -1817,7 +1817,8 @@ function linkedinNoteText (text) {
     const rest = parts[1]
     if (/[.!?]$/.test(lead)) return lead + ' ' + rest.charAt(0).toUpperCase() + rest.slice(1)
     if (/[,;:]$/.test(lead)) return lead + ' ' + rest
-    if (lead.split(/\s+/).length <= 3 || NOTE_GOES_ON.test(rest)) return lead + ', ' + rest
+    // a job title's own dash ("Flight Software Engineer – Early Career role"): capitals on both sides, a comma
+    if (lead.split(/\s+/).length <= 3 || NOTE_GOES_ON.test(rest) || (/(^|\s)[A-Z][^\s]*$/.test(lead) && /^[A-Z0-9](?!\s)/.test(rest) && !/^I\b/.test(rest))) return lead + ', ' + rest
     return lead + '. ' + rest.charAt(0).toUpperCase() + rest.slice(1)
   }).join('').replace(/[ \t]+([,.!?])/g, '$1').replace(/,(\s*,)+/g, ',').replace(/[ \t]{2,}/g, ' ')
 }
