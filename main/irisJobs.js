@@ -563,10 +563,33 @@ function irisAppliedToday () {
   return irisApplicationsLoad().filter(function (a) { return a.status === 'applied' && (a.updated || a.at) >= start.getTime() }).length
 }
 
+/* A job link the run's own task lists (the user's list, retries included): what was logged for it before is no reason
+   to pass it over (10-29: ten listed jobs, five marked "(retry)", were left as "handled before … skipped" and the run
+   went straight to searching) */
+var irisTaskListedFor = null
+var irisTaskListedKeys = {}
+function irisTaskListed (url) {
+  if (!url || !/^https?:/.test(url) || !irisSession) return false
+  const task = String(((irisSession.items || []).find(function (it) { return it.kind === 'user' }) || {}).text || '')
+  if (irisTaskListedFor !== task) {
+    irisTaskListedFor = task
+    irisTaskListedKeys = {}
+    ;(task.match(/https?:\/\/[^\s)"'<>]+/g) || []).forEach(function (u) {
+      irisTaskListedKeys[irisJobKey(u)] = true
+      irisPostingNumbers(u).forEach(function (n) { irisTaskListedKeys['#' + n] = true })
+    })
+  }
+  return !!irisTaskListedKeys[irisJobKey(url)] || irisPostingNumbers(url).some(function (n) { return irisTaskListedKeys['#' + n] })
+}
+
 /* "STOP — you already applied …" when Iris lands on a posting it has handled before */
 function irisApplicationNote (url, pageTitle) {
   if (!url || !/^https?:/.test(url)) return null
   let hit = irisApplicationFind({ url: url })
+  // a posting the task lists by its own link is that posting: another one with its title (Akuna's six "Junior
+  // Quantitative Developer" postings) does not stand for it
+  const listed = irisTaskListed(url)
+  if (listed) pageTitle = null
   // the same role on another board or posting number: its page title names the role and the company ("Job Application
   // for Data Scientist, Intern at Duolingo" — a real run applied to it on two Duolingo boards and again tonight)
   if (!hit && pageTitle) {
@@ -592,6 +615,7 @@ function irisApplicationNote (url, pageTitle) {
   if (irisProbablySent(hit)) return 'STOP — this job was most likely already submitted on ' + when + job + ' (Submit was clicked, no confirmation was seen; it is left for the user to check). Do not apply again; find another job.'
   // skipped or unfinished before: worth knowing, but the user may have asked for it on purpose
   const what = { skipped: 'You skipped this job on ' + when + (hit.note ? ' (' + String(hit.note).slice(0, 100) + ')' : ''), needs_you: 'This job was left for the user on ' + when, failed: 'Applying here failed on ' + when }[hit.status] || 'You saw this job on ' + when
+  if (listed) return what + job + '. It is in the task\'s own list again (a retry): read the posting now and apply unless its own text rules you out.'
   return what + job + '. Unless the user asked for this job by name, move on to another.'
 }
 
@@ -916,12 +940,15 @@ function irisJobsPrompt (task, mode) {
   const done = irisApplicationsLoad().slice(-60)
   const name = function (a) { return (a.title || '?') + ' at ' + (a.company || '?') }
   const sent = done.filter(function (a) { return a.status === 'applied' })
-  const open = done.filter(function (a) { return a.status !== 'applied' })
+  // a job the task lists again is to be done, whatever it was logged as (see irisTaskListed)
+  const open = done.filter(function (a) { return a.status !== 'applied' && !irisTaskListed(a.url) })
+  const again = done.filter(function (a) { return a.status !== 'applied' && irisTaskListed(a.url) })
   if (sent.length) live.push('Already applied — never apply to these again: ' + sent.map(name).join('; ') + '.')
   if (open.length) {
     live.push('Handled before but not sent (skipped, needs the user, or failed) — leave them unless the user names them in this task: ' +
       open.map(function (a) { return name(a) + ' (' + a.status + ')' }).join('; ') + '.')
   }
+  if (again.length) live.push('In the task\'s own list again, to do now though logged before: ' + again.map(function (a) { return name(a) + ' (' + a.status + ' before)' }).join('; ') + '. Open each link, read the posting and apply unless its own text rules you out.')
   return { stable: lines.join('\n'), live: live.join('\n') }
 }
 
