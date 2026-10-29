@@ -843,6 +843,7 @@ async function irisDoLookup (req) {
   // skipped" after AmEx's "will not pursue visa sponsorship" and Atlassian's "not eligible for F1", then looked up the
   // next job instead: nothing was logged, so the lists offered them again, and it left out whole companies with
   // "-amex -atlassian -paypal" to stop seeing them (10-27).
+  if (result && result.ok && req && req.kind === 'page') irisPostingRead(String(req.query || '').trim())
   if (result && result.ok && req && req.kind === 'page' && /ELIGIBILITY LINES/.test(result.text || '')) {
     const url = String(req.query || '').trim()
     const known = irisListedJobs[irisJobKey(url)] || {}
@@ -856,6 +857,21 @@ async function irisDoLookup (req) {
   return result
 }
 var irisListedJobs = {}
+// the postings read in this run (a page look-up, or the page open in a tab), by job key and posting number: a skip gives
+// a reason from the posting itself (10-29 00:20: ten jobs from the user's list were logged skipped unread, two with
+// reasons no page said: "Requires 5 years" at Stripe, "US citizenship required" at i360)
+var irisPostingsRead = {}
+function irisPostingRead (url) {
+  if (!url || !/^https?:/i.test(url)) return
+  irisPostingsRead[irisJobKey(url)] = true
+  irisPostingNumbers(url).forEach(function (n) { irisPostingsRead['#' + n] = true })
+}
+function irisPostingWasRead (url) {
+  return !!irisPostingsRead[irisJobKey(url)] || irisPostingNumbers(url).some(function (n) { return irisPostingsRead['#' + n] })
+}
+// a rule-out the title or the log itself shows on its face needs no read: the level, a company the user left out, a
+// closed or handled job, a limit
+const IRIS_SKIP_ON_ITS_FACE = /\b(senior|sr\.?|staff|principal|lead|director|manager|head of|intern(ship)?|co-?op|apprentice|phd|post-?doc|blocked|blocklist|leave[- ]out|left out|never apply|do not apply|limit|already (applied|logged|handled|done)|applied (before|earlier|already)|duplicate|same (job|posting|role)|closed|no longer|expired|filled|not found|404|removed|roblox|amazon)\b/i
 
 /* ------------------------------------------------------------------ *
  * Usage: requests and tokens per day, shown in Settings → Iris AI → Usage
@@ -1529,6 +1545,7 @@ IrisComputer.prototype.screenshot = async function () {
     const seen = irisSeenNote(obs.url, obs.title, this.sessionId)
     // first line, and blunt: a soft hint at the end of the notes was read past
     if (seen) obs.note = 'STOP — you already judged this before: you ' + seen + '. Do not judge or download it again; go back and pick something new.' + (obs.note ? '\n' + obs.note : '')
+    if (this.jobsMode) irisPostingRead(obs.url)
     // the last posting or form seen on each company site: a log sent from its thank-you page is filed under it
     if (this.jobsMode && !IRIS_CONFIRM_PAGE.test(obs.url)) {
       const site = irisSiteKey(obs.url)
@@ -2105,6 +2122,19 @@ IrisComputer.prototype.act = async function (action) {
           return { ok: false, error: 'not logged yet — a refused sign-in or "no such account" on ' + lastIn.site + ' is not a reason for needs_you while the account can still be fixed. ' +
             (known ? 'Do the step Iris gave you for it (reset the password, or make the account), then go on with this application.' : this.offerReset(lastIn.site, lastIn.username)) +
             ' If you already did that and it truly failed, log this again with what happened.' }
+        }
+      }
+      // a skip says what the posting itself rules out: a posting never opened nor read in this run is read first. Asked
+      // twice, a third log goes through (no loop over a page that will not open).
+      if (this.jobsMode && action.status === 'skipped' && /^https?:/i.test(String(action.url || '')) && !irisPostingWasRead(action.url) &&
+          !IRIS_SKIP_ON_ITS_FACE.test(String(action.title || '') + ' ' + String(action.note || ''))) {
+        const k = irisJobKey(action.url)
+        this.unreadSkips = this.unreadSkips || {}
+        this.unreadSkips[k] = (this.unreadSkips[k] || 0) + 1
+        if (this.unreadSkips[k] <= 2) {
+          return { ok: false, error: 'not logged — you have not read this posting in this run, so the reason cannot come from it. Read it first: ' +
+            JSON.stringify({ type: 'lookup', kind: 'page', query: action.url }) + ' — then apply if nothing in its own text rules you out, or log the skip with the line that does. ' +
+            'Never skip a job from its title or company alone: the user would rather apply twice than miss one.' }
         }
       }
       // this job is done: a later job's needs_you is not about that sign-in, nor its reset
