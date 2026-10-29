@@ -581,6 +581,11 @@ function irisTaskListed (url) {
   }
   return !!irisTaskListedKeys[irisJobKey(url)] || irisPostingNumbers(url).some(function (n) { return irisTaskListedKeys['#' + n] })
 }
+// a record of a job the task lists that is still to do: logged before this run, not in it (02:15: i360, re-read and
+// skipped at 01:27, was read again twice more as "in the list again")
+function irisTaskRetry (a) {
+  return !!a && irisTaskListed(a.url) && !(irisSession && ((irisSession.created && (a.updated || a.at || 0) >= irisSession.created) || (a.sessionId && a.sessionId === irisSession.id)))
+}
 
 /* "STOP — you already applied …" when Iris lands on a posting it has handled before */
 function irisApplicationNote (url, pageTitle) {
@@ -615,7 +620,7 @@ function irisApplicationNote (url, pageTitle) {
   if (irisProbablySent(hit)) return 'STOP — this job was most likely already submitted on ' + when + job + ' (Submit was clicked, no confirmation was seen; it is left for the user to check). Do not apply again; find another job.'
   // skipped or unfinished before: worth knowing, but the user may have asked for it on purpose
   const what = { skipped: 'You skipped this job on ' + when + (hit.note ? ' (' + String(hit.note).slice(0, 100) + ')' : ''), needs_you: 'This job was left for the user on ' + when, failed: 'Applying here failed on ' + when }[hit.status] || 'You saw this job on ' + when
-  if (listed) return what + job + '. It is in the task\'s own list again (a retry): read the posting now and apply unless its own text rules you out.'
+  if (listed && irisTaskRetry(hit)) return what + job + '. It is in the task\'s own list again (a retry): read the posting now and apply unless its own text rules you out.'
   return what + job + '. Unless the user asked for this job by name, move on to another.'
 }
 
@@ -941,8 +946,8 @@ function irisJobsPrompt (task, mode) {
   const name = function (a) { return (a.title || '?') + ' at ' + (a.company || '?') }
   const sent = done.filter(function (a) { return a.status === 'applied' })
   // a job the task lists again is to be done, whatever it was logged as (see irisTaskListed)
-  const open = done.filter(function (a) { return a.status !== 'applied' && !irisTaskListed(a.url) })
-  const again = done.filter(function (a) { return a.status !== 'applied' && irisTaskListed(a.url) })
+  const open = done.filter(function (a) { return a.status !== 'applied' && !irisTaskRetry(a) })
+  const again = done.filter(function (a) { return a.status !== 'applied' && irisTaskRetry(a) })
   if (sent.length) live.push('Already applied — never apply to these again: ' + sent.map(name).join('; ') + '.')
   if (open.length) {
     live.push('Handled before but not sent (skipped, needs the user, or failed) — leave them unless the user names them in this task: ' +

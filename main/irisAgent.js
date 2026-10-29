@@ -871,7 +871,7 @@ function irisPostingWasRead (url) {
 }
 // a rule-out the title or the log itself shows on its face needs no read: the level, a company the user left out, a
 // closed or handled job, a limit
-const IRIS_SKIP_ON_ITS_FACE = /\b(senior|sr\.?|staff|principal|lead|director|manager|head of|intern(ship)?|co-?op|apprentice|phd|post-?doc|blocked|blocklist|leave[- ]out|left out|never apply|do not apply|limit|already (applied|logged|handled|done)|applied (before|earlier|already)|duplicate|same (job|posting|role)|closed|no longer|expired|filled|not found|404|removed|roblox|amazon)\b/i
+const IRIS_SKIP_ON_ITS_FACE = /\b(senior|sr\.?|staff|principal|lead|director|manager|head of|intern(ship)?|co-?op|apprentice|phd|post-?doc|blocked|blocklist|leave[- ]out|left out|never apply|do not apply|limit|already (applied|logged|handled|done)|applied (before|earlier|already)|closed|no longer|expired|filled|not found|404|removed|roblox|amazon)\b/i
 
 /* ------------------------------------------------------------------ *
  * Usage: requests and tokens per day, shown in Settings → Iris AI → Usage
