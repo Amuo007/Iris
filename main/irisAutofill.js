@@ -396,7 +396,7 @@ async function irisAfTick (computer, wc, field, index, optionText) {
 async function irisAfUpload (computer, wc, field) {
   // the resume made for this job; while it is still being made the box waits for the upload action at the end
   // (autofill runs on the first look, minutes before the resume service is done)
-  const run = computer.resumeRun
+  const run = computer.resumeRun || (computer.lastJob && irisResumeRunByFile(computer.lastJob.resume)) || null
   if (run && !run.finished && !run.failed) return { left: 'the resume for this job is still being made: fill the rest of this page, then click this box\'s upload button and send {"type":"upload","file":"resume"} before you leave the page (Iris waits for the PDF)' }
   const file = run && run.finished && fs.existsSync(run.file) ? run.file
     : (!run && computer.lastResume && computer.lastJob && computer.lastJob.resume === computer.lastResume && fs.existsSync(computer.lastResume)) ? computer.lastResume

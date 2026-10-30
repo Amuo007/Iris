@@ -1376,7 +1376,8 @@ IrisComputer.prototype.submitGuard = async function (wc, action) {
  * { file, note }; file is null when there is neither.
  */
 IrisComputer.prototype.resumeForUpload = async function () {
-  const run = this.resumeRun
+  const run = this.resumeRun || (this.lastJob && irisResumeRunByFile(this.lastJob.resume)) || null
+  if (run && !this.resumeRun) this.resumeRun = run
   if (run && run.finished && fs.existsSync(run.file)) return { file: run.file }
   // made before Iris restarted (runs live in the app, the PDF in the job's folder)
   if (!run && this.lastJob && this.lastResume && this.lastJob.resume === this.lastResume && fs.existsSync(this.lastResume)) return { file: this.lastResume }
@@ -1384,8 +1385,18 @@ IrisComputer.prototype.resumeForUpload = async function () {
   if (run && !run.failed) {
     const left = Math.max(60000, run.startedAt + 15 * 60000 - Date.now())
     DBUG('upload: waiting up to ' + Math.round(left / 1000) + ' s for the resume of ' + path.basename(run.folder) + ' (' + (run.phase || 'queued') + ')')
-    const r = await Promise.race([run.done, new Promise(function (resolve) { setTimeout(function () { resolve({ ok: false, error: 'not done after 15 minutes' }) }, left) })])
+    const self = this
+    let tick = null
+    // Stop ends the wait at once (it would otherwise hold the run in "stopping" for minutes)
+    const stopped = new Promise(function (resolve) {
+      tick = setInterval(function () {
+        if (irisAgentState.status === 'stopping' || (irisComputer && irisComputer !== self)) resolve({ ok: false, error: 'the run was stopped while the resume was being made', stopped: true })
+      }, 2000)
+    })
+    const r = await Promise.race([run.done, stopped, new Promise(function (resolve) { setTimeout(function () { resolve({ ok: false, error: 'not done after 15 minutes' }) }, left) })])
+    clearInterval(tick)
     if (r.ok && fs.existsSync(r.file)) return { file: r.file, note: 'The resume made for this job is ready: ' + path.basename(r.file) + '.' }
+    if (r.stopped) return { file: null, note: r.error }
     why = r.error
   }
   const fb = irisFallbackResume()
@@ -2031,9 +2042,11 @@ IrisComputer.prototype.act = async function (action) {
       }
       broadcastEvent({ type: 'resume:start', title: job.title, company: job.company, sessionId: this.sessionId })
       // the posting's own words next to Iris's summary of it, when its link can be read (see irisPostingText)
-      const posting = await irisPostingText(job)
-      if (posting) {
-        job.requirements = (job.requirements ? 'Summary while reading it: ' + job.requirements + '\n\n' : '') + 'The posting itself (read from its link):\n' + posting
+      // resuma reads the employer's words as the job description: the posting itself when its link can be read (without
+      // Iris's eligibility digest), else what the model copied from it
+      const posting = irisRequirementsLib.postingBody(await irisPostingText(job)).trim()
+      if (posting.length >= 300) {
+        job.requirements = posting
         DBUG('tailor: posting text ' + posting.length + ' chars from ' + job.url)
       }
       // the user's resume service makes it in the background (5-10 minutes): the upload waits for it (see resumeForUpload)
@@ -2245,7 +2258,7 @@ IrisComputer.prototype.act = async function (action) {
         // now is the list, and two skips from one list must not share it (the second would replace the first)
         url: (job && job.url) || action.url || (action.title ? '' : wc.getURL()),
         note: action.note || '',
-        resume: (job && job.resume && fs.existsSync(job.resume) ? job.resume : '') || (job && job.uploadedFile) || '',
+        resume: (job && job.uploadedFile) || (job && job.resume && fs.existsSync(job.resume) ? job.resume : '') || '',
         fit: job && job.fit !== undefined ? job.fit : null,
         sessionId: this.sessionId || ''
       }
@@ -3567,7 +3580,8 @@ function startAgent (task, options) {
     safety: {
       maxSteps: unlimited ? 0 : cfg.maxSteps * budgetScale,
       maxModelMsPerStep: cfg.modelTimeoutMs + 5000,
-      maxWallClockMs: unlimited ? 0 : Math.max(1, cfg.maxMinutes) * budgetScale * 60 * 1000,
+      // a job run waits for the resume service (5-10 minutes) at the upload: room for one application with it
+      maxWallClockMs: unlimited ? 0 : Math.max(1, cfg.maxMinutes, computer.jobsMode ? 45 : 0) * budgetScale * 60 * 1000,
       // a long run must survive a flaky moment instead of giving up after three errors
       maxConsecutiveFailures: unlimited ? 12 : 4,
       maxRetriesPerStep: unlimited ? 8 : 3,

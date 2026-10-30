@@ -237,35 +237,38 @@ var irisResumeRuns = {}
  */
 async function irisResumeStart (job, hooks) {
   const started = Date.now()
-  const folder = irisJobFolder(job, hooks && hooks.preview)
+  const jd = String(job.requirements || '').trim()
+  // one run per posting: the same job again finds its run; another posting with the same company and title (two
+  // requisitions, two pasted previews) gets its own run and folder ("… (2)")
+  const key = (job.url || '') + '|' + require('crypto').createHash('sha1').update(jd).digest('hex').slice(0, 12)
+  let folder = irisJobFolder(job, hooks && hooks.preview)
+  for (let n = 2; irisResumeRuns[folder] && irisResumeRuns[folder].key !== key && n < 20; n++) {
+    folder = irisJobFolder(job, hooks && hooks.preview) + ' (' + n + ')'
+    fs.mkdirSync(folder, { recursive: true })
+  }
   const known = irisResumeRuns[folder]
   if (known && !known.failed) return known
   const bank = irisCareerLoad()
   // recruiters see the file name: the person's name, not "resume (3).pdf"
   const file = path.join(folder, irisSafeName((bank.basics.name ? bank.basics.name + ' ' : '') + 'Resume', 60) + '.pdf')
-  const jd = String(job.requirements || '').trim()
   if (jd.length < 80) return { ok: false, error: 'the resume service needs the posting\'s own text (got ' + jd.length + ' characters): read the posting and send its requirements in its own words' }
   if (!irisResumaFound()) return { ok: false, error: 'the resume service (resuma) is not found at ' + irisResumaHome() }
   try { fs.writeFileSync(path.join(folder, 'jd.txt'), jd) } catch (e) { /* only a copy for the user */ }
-  // a run still waiting in resuma's queue for a job Iris left is not needed any more (a running one finishes by itself)
-  Object.keys(irisResumeRuns).forEach(function (f) {
-    const r = irisResumeRuns[f]
-    if (f !== folder && !r.finished && !r.failed && !r.preview) irisResuma().call('cancel_job', { job_id: r.jobId }, 20000).catch(function () {})
-  })
   let first
   try {
     first = await irisResuma().call('tailor_resume', {
       jd_text: jd.slice(0, 20000),
       company: irisResumaLib.resumaCompany(job, path.basename(folder).slice(0, 10)),
-      // skills only from the profile: no skill the user does not have goes on a real application
-      mode: 'strict',
+      // resuma's own default (the user, 10-30: "it's supposed to make it, no matter what it takes"): the skills section
+      // may add the posting's skills next to the user's, flagged as gap skills in its report and capped at half the items
+      mode: 'jd_aware',
       wait: false
     }, 90000)
   } catch (e) {
     return { ok: false, error: 'the resume service did not start: ' + e.message }
   }
   if (!first || !first.job_id) return { ok: false, error: 'the resume service gave no job id' }
-  const run = { ok: true, file: file, folder: folder, jobId: first.job_id, queued: first.queue_position || 0, startedAt: started, preview: !!(hooks && hooks.preview) }
+  const run = { ok: true, key: key, file: file, folder: folder, jobId: first.job_id, queued: first.queue_position || 0, startedAt: started, preview: !!(hooks && hooks.preview) }
   DBUG('resuma: run ' + run.jobId + ' for ' + path.basename(folder) + (run.queued ? ' (queued ' + run.queued + ')' : ''))
   run.done = irisResumaLib.waitForJob(irisResuma(), run.jobId, {
     pollMs: 10000,
@@ -309,6 +312,14 @@ async function irisResumeStart (job, hooks) {
   })
   irisResumeRuns[folder] = run
   return run
+}
+
+/* the run that is making (or made) this PDF in this app session: a new agent run of the same chat (a Non-stop restart,
+   the user's next message) carries lastJob over but not the run itself */
+function irisResumeRunByFile (file) {
+  if (!file) return null
+  const f = Object.keys(irisResumeRuns).find(function (k) { return irisResumeRuns[k].file === file })
+  return f ? irisResumeRuns[f] : null
 }
 
 /* The user's own resume PDF (Settings → Jobs → Fallback resume): it goes out only when the resume service could not
