@@ -2348,6 +2348,11 @@ IrisComputer.prototype.act = async function (action) {
         rec.note = (rec.note ? rec.note + ' ' : '') + '(The tailored resume was not uploaded in this run — the site may have kept an older one.)'
       }
       const item = irisApplicationAdd(rec)
+      // a job left after its resume was asked for: the resume service drops its run while it is still queued (see
+      // irisResumeCancel). Only for that very job (not one matched by a shortened title), and never for one left for
+      // the user: they may apply with it.
+      if ((rec.status === 'skipped' || rec.status === 'failed') && job && job.resume && !job.uploaded &&
+          irisSameJob(job, { url: action.url || '', company: rec.company, title: rec.title })) irisResumeCancel(job.resume)
       // logged in this run: its Submit is held back from now on, whatever it was logged as (see submitGuard)
       this.loggedIds = (this.loggedIds || []).concat(item.id).slice(-300)
       const label = { applied: 'Applied', skipped: 'Skipped', needs_you: 'Waiting for the user', failed: 'Could not apply' }[rec.status]

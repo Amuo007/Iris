@@ -322,6 +322,29 @@ function irisResumeRunByFile (file) {
   return f ? irisResumeRuns[f] : null
 }
 
+/* A job left after its resume was asked for (skipped, or failed: its posting closed): its run is cancelled while it
+   still waits in the resume service's queue, so the next job's resume does not wait behind it and the model server
+   (Iris's own as well) is not shared with it. 10-30: the runs for Atlassian, SambaNova and Salesforce went on after
+   their skips. A run already writing cannot be stopped: the service lets it finish. */
+function irisResumeCancel (file) {
+  const run = irisResumeRunByFile(file)
+  if (!run || run.finished || run.failed || !run.jobId) return Promise.resolve(false)
+  return irisResuma().call('cancel_job', { job_id: run.jobId }, 15000).catch(function (e) { return { error: e.message } })
+    .then(function () { return irisResuma().call('get_job', { job_id: run.jobId }, 15000) })
+    .then(function (j) {
+      if (j && j.status === 'cancelled') {
+        run.failed = true
+        run.cancelled = true
+        run.error = 'cancelled: its job was left'
+        DBUG('resuma: run ' + run.jobId + ' cancelled (its job was left)')
+        return true
+      }
+      DBUG('resuma: run ' + run.jobId + ' not cancelled (' + ((j && j.status) || 'no status') + '): a run already writing finishes on its own')
+      return false
+    })
+    .catch(function (e) { DBUG('resuma: cancel ' + run.jobId + ': ' + e.message); return false })
+}
+
 /* The user's own resume PDF (Settings → Jobs → Fallback resume): it goes out only when the resume service could not
    make one for the job, so no application leaves without a resume. '' when none is chosen or the file is gone. */
 function irisFallbackResume (bank) {
@@ -820,6 +843,9 @@ function irisJobsPrompt (task, mode) {
     '   Only when the look-up cannot read it: open it and read all of it (scroll); each screen you leave is gone (you see',
     '   only the newest screenshot), so save its must-haves with "remember", in its own words, in the same reply.',
     '3. As soon as you decide to apply, before you open the form: tailor_resume {"company":str,"title":str,"url":"<the posting\'s own address>","requirements":str}.',
+    '   Only after the whole posting is read (its eligibility lines and level, to its last line) and it is not in the',
+    '   Applications list: a resume asked for and then not used holds up the next job\'s resume, and the same model server',
+    '   makes both (a real morning asked for Atlassian\'s, then read "not eligible for F1 students").',
     '   requirements = the POSTING itself in its own words (its responsibilities and qualifications, as much of it as you',
     '   read), never what such jobs usually ask and nothing about the user. The user\'s resume service rewrites their own',
     '   resume for this posting in the background (5-10 minutes): do not wait for it, go on with the application.',
