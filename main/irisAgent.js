@@ -843,7 +843,10 @@ async function irisDoLookup (req) {
   // skipped" after AmEx's "will not pursue visa sponsorship" and Atlassian's "not eligible for F1", then looked up the
   // next job instead: nothing was logged, so the lists offered them again, and it left out whole companies with
   // "-amex -atlassian -paypal" to stop seeing them (10-27).
-  if (result && result.ok && req && req.kind === 'page') irisPostingRead(String(req.query || '').trim())
+  if (result && result.ok && req && req.kind === 'page') {
+    irisPostingRead(String(req.query || '').trim())
+    irisPostingTextKeep(String(req.query || '').trim(), String((result.items && result.items[0] && result.items[0].title) || ''), result.text)
+  }
   if (result && result.ok && req && req.kind === 'page' && /ELIGIBILITY LINES/.test(result.text || '')) {
     const url = String(req.query || '').trim()
     const known = irisListedJobs[irisJobKey(url)] || {}
@@ -861,6 +864,28 @@ var irisListedJobs = {}
 // a reason from the posting itself (10-29 00:20: ten jobs from the user's list were logged skipped unread, two with
 // reasons no page said: "Requires 5 years" at Stripe, "US citizenship required" at i360)
 var irisPostingsRead = {}
+// the full text of the postings read in this app session (look-ups and pages seen in the browser), newest last: the
+// resume service gets the whole posting, every line, not the model's summary of it (10-30: Zoox's posting was read in
+// full at 05:00, and a minute later only a 990-character summary went to resuma)
+var irisPostingTexts = []
+function irisPostingTextKeep (url, title, text) {
+  const body = irisRequirementsLib.postingBody(text).trim()
+  if (!url || body.length < 300) return
+  irisPostingTexts = irisPostingTexts.filter(function (p) { return p.key !== irisJobKey(url) }).concat({ key: irisJobKey(url), url: url, title: title, text: body, at: Date.now() }).slice(-40)
+}
+/* the kept text of this job's posting: by its link, else the newest one read in the last hour that names its title */
+function irisPostingTextFor (job) {
+  const key = job.url ? irisJobKey(job.url) : ''
+  const nums = job.url ? irisPostingNumbers(job.url) : []
+  const byLink = irisPostingTexts.slice().reverse().find(function (p) { return p.key === key || (nums.length && irisPostingNumbers(p.url).some(function (n) { return nums.indexOf(n) >= 0 })) })
+  if (byLink) return byLink.text
+  const words = (String(job.title || '').toLowerCase().match(/[a-z0-9+#]{3,}/g) || []).filter(function (w) { return !/^(and|the|for|with|senior|junior|new|grad|hrs)$/.test(w) })
+  const hit = irisPostingTexts.slice().reverse().find(function (p) {
+    const t = (p.title + ' ' + p.text.slice(0, 3000)).toLowerCase()
+    return Date.now() - p.at < 3600000 && words.length && words.filter(function (w) { return t.indexOf(w) !== -1 }).length >= Math.min(3, words.length)
+  })
+  return hit ? hit.text : ''
+}
 function irisPostingRead (url) {
   if (!url || !/^https?:/i.test(url)) return
   irisPostingsRead[irisJobKey(url)] = true
@@ -1581,7 +1606,16 @@ IrisComputer.prototype.screenshot = async function () {
     const seen = irisSeenNote(obs.url, obs.title, this.sessionId)
     // first line, and blunt: a soft hint at the end of the notes was read past
     if (seen) obs.note = 'STOP — you already judged this before: you ' + seen + '. Do not judge or download it again; go back and pick something new.' + (obs.note ? '\n' + obs.note : '')
-    if (this.jobsMode) irisPostingRead(obs.url)
+    if (this.jobsMode) {
+      irisPostingRead(obs.url)
+      // a posting opened in the browser: its whole text, for the resume service (see irisPostingTextFor)
+      if (!IRIS_CONFIRM_PAGE.test(obs.url) && /\/(jobs?|careers?|positions?|openings?|postings?)\b|greenhouse|lever\.co|ashbyhq|workday|smartrecruiters|icims|workable|gh_jid=/i.test(obs.url)) {
+        try {
+          const shown = String(await withTimeout(wc.executeJavaScript('document.body ? document.body.innerText.slice(0, 30000) : ""'), 3000, 'page text') || '')
+          if (irisRequirementsLib.looksLikePosting(shown, obs.title, obs.url)) irisPostingTextKeep(obs.url, obs.title || '', shown)
+        } catch (e) { /* the page went away */ }
+      }
+    }
     // the last posting or form seen on each company site: a log sent from its thank-you page is filed under it
     if (this.jobsMode && !IRIS_CONFIRM_PAGE.test(obs.url)) {
       const site = irisSiteKey(obs.url)
@@ -2042,13 +2076,21 @@ IrisComputer.prototype.act = async function (action) {
       }
       broadcastEvent({ type: 'resume:start', title: job.title, company: job.company, sessionId: this.sessionId })
       // the posting's own words next to Iris's summary of it, when its link can be read (see irisPostingText)
-      // resuma reads the employer's words as the job description: the posting itself when its link can be read (without
-      // Iris's eligibility digest), else what the model copied from it
-      const posting = irisRequirementsLib.postingBody(await irisPostingText(job)).trim()
-      if (posting.length >= 300) {
-        job.requirements = posting
-        DBUG('tailor: posting text ' + posting.length + ' chars from ' + job.url)
+      // resuma reads the employer's words as the job description, all of them: the posting as Iris read it earlier, else
+      // read again from its link, else the page as the browser shows it now; the model's summary only when none works
+      let posting = irisPostingTextFor(job)
+      let from = 'kept from an earlier read'
+      if (posting.length < 600) { posting = irisRequirementsLib.postingBody(await irisPostingText(job)).trim(); from = 'read from its link' }
+      if (posting.length < 600) {
+        try {
+          const shown = String(await withTimeout(wc.executeJavaScript('document.body ? document.body.innerText.slice(0, 30000) : ""'), 5000, 'page text') || '').trim()
+          if (shown.length > posting.length) { posting = shown; from = 'the page shown in the browser' }
+        } catch (e) { /* the page went away */ }
       }
+      if (posting.length >= 600) {
+        job.requirements = posting
+        DBUG('tailor: posting text ' + posting.length + ' chars (' + from + ') for ' + (job.url || job.title))
+      } else DBUG('tailor: no posting text, the model\'s ' + String(job.requirements || '').length + ' characters go to resuma')
       // the user's resume service makes it in the background (5-10 minutes): the upload waits for it (see resumeForUpload)
       let run
       try { run = await irisResumeStart(job) } catch (e) { run = { ok: false, error: e.message } }
