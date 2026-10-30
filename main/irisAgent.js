@@ -873,15 +873,20 @@ function irisPostingTextKeep (url, title, text) {
   if (!url || body.length < 300) return
   irisPostingTexts = irisPostingTexts.filter(function (p) { return p.key !== irisJobKey(url) }).concat({ key: irisJobKey(url), url: url, title: title, text: body, at: Date.now() }).slice(-40)
 }
-/* the kept text of this job's posting: by its link, else the newest one read in the last hour that names its title */
+/* the kept text of this job's posting: by its link, else the newest one read in the last hour that names its title
+   (and its company: "Associate Software Engineer" at Morningstar found Exelixis's "Associate Engineer" posting by its
+   words, and Morningstar's resume was made from Exelixis's text, 10-30) */
 function irisPostingTextFor (job) {
   const key = job.url ? irisJobKey(job.url) : ''
   const nums = job.url ? irisPostingNumbers(job.url) : []
   const byLink = irisPostingTexts.slice().reverse().find(function (p) { return p.key === key || (nums.length && irisPostingNumbers(p.url).some(function (n) { return nums.indexOf(n) >= 0 })) })
   if (byLink) return byLink.text
   const words = (String(job.title || '').toLowerCase().match(/[a-z0-9+#]{3,}/g) || []).filter(function (w) { return !/^(and|the|for|with|senior|junior|new|grad|hrs)$/.test(w) })
+  const squash = function (s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '') }
+  const co = squash(String(job.company || '').trim().split(/\s+/)[0])
   const hit = irisPostingTexts.slice().reverse().find(function (p) {
     const t = (p.title + ' ' + p.text.slice(0, 3000)).toLowerCase()
+    if (co.length >= 3 && squash(p.url + ' ' + t).indexOf(co) === -1) return false
     return Date.now() - p.at < 3600000 && words.length && words.filter(function (w) { return t.indexOf(w) !== -1 }).length >= Math.min(3, words.length)
   })
   return hit ? hit.text : ''
@@ -2055,7 +2060,12 @@ IrisComputer.prototype.act = async function (action) {
       this.notes = (this.notes || []).concat('Saved the account for ' + action.site + ' (' + action.username + ') in Settings → Accounts.')
       return { ok: true }
     case 'tailor_resume': {
-      const job = { title: action.title, company: action.company || '', requirements: action.requirements || '', url: action.url || wc.getURL() }
+      // no link given: the page open now, unless a logged job of another title was at it (after a submit Iris tailors
+      // the next job from the last one's page: Exelixis's Candidate Home made Zoom's AI Engineer "already applied", 10-30)
+      let here = action.url ? '' : wc.getURL()
+      const there = here ? irisApplicationAt(here) : null
+      if (there && !irisSameJob(there, { company: action.company || '', title: action.title })) here = ''
+      const job = { title: action.title, company: action.company || '', requirements: action.requirements || '', url: action.url || here }
       const before = irisApplicationFind(job)
       if (before && before.status === 'applied') {
         this.notes = (this.notes || []).concat('You already applied to ' + job.title + (job.company ? ' at ' + job.company : '') + ' on ' +
