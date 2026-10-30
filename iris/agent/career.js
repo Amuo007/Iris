@@ -1807,7 +1807,15 @@ function linkedinLimitThought (thought) {
 const NOTE_DASH = /\s*[—–]+\s*|\s+-{1,2}\s+/
 const NOTE_GOES_ON = /^(and|but|so|or|which|who|where|especially|including|like|plus|from|with|since|because|as)\b/i
 function linkedinNoteText (text) {
+  // the other marks a typed note never has (the user, 10-29: no "special symbol that AI uses"): curly quotes, the
+  // ellipsis sign, arrows, bullets, emoji and odd spaces; a semicolon between clauses ends the sentence
   const t = String(text == null ? '' : text)
+    .replace(/[\u2018\u2019\u201B\u2032]/g, "'").replace(/[\u201C\u201D\u201F\u2033]/g, '"').replace(/\u2026/g, '...')
+    .replace(/[\u00A0\u2002-\u200B\u202F]/g, ' ')
+    .replace(/(\S)\s*[\u2190-\u21FF\u2794\u279C\u27A1]\uFE0F?\s*/g, '$1, ').replace(/\s*[\u2190-\u21FF\u2794\u279C\u27A1\u2022\u25AA-\u25FF\u2600-\u27BF]\uFE0F?\s*/g, ' ')
+    .replace(/\s*(?:\uD83C[\uDF00-\uDFFF]|\uD83D[\uDC00-\uDEFF]|\uD83E[\uDD00-\uDEFF])\uFE0F?/g, '')
+    .replace(/;\s+([a-z])/g, function (m, c) { return '. ' + c.toUpperCase() })
+    .replace(/[ \t]{2,}/g, ' ').trim()
   if (!/[—–]|\s-{1,2}\s/.test(t)) return t
   return t.replace(/(\d)\s*[—–]\s*(\d)/g, '$1-$2').split(/(?<=[.!?])(\s+)/).map(function (s) {
     const parts = s.split(NOTE_DASH).filter(function (p, i, all) { return p !== '' || (i > 0 && i < all.length - 1) })
