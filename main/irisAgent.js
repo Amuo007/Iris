@@ -1402,6 +1402,8 @@ IrisComputer.prototype.submitGuard = async function (wc, action) {
   if (!rec) {
     // the Submit that goes out: Workday's Candidate Home right after it is its confirmation (see noteConfirmation)
     if (/submit/i.test(label)) this.lastSubmit = { url: here, at: Date.now() }
+    // any button that can send an application, by site: an "applied" log with none clicked there sent nothing
+    if (site) { this.sendClicks = this.sendClicks || {}; this.sendClicks[site] = Date.now() }
     return null
   }
   const when = new Date(rec.updated || rec.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -2281,9 +2283,21 @@ IrisComputer.prototype.act = async function (action) {
           if (!this.unconfirmedLog || this.unconfirmedLog.key !== id) this.unconfirmedLog = { key: id, co: log.co, site: log.site, looks: 0, refused: 0 }
           const u = this.unconfirmedLog
           u.refused++
-          // looked again and still none (or a third try): left for the user, never called applied (a real run also took
-          // Lear's "Thank you for expressing your interest" greeting above its unfinished form for a confirmation)
-          if ((u.looks > 0 && u.refused >= 2) || u.refused >= 3) {
+          // no button that sends an application was clicked on this job's site: nothing went out. Such a log is no
+          // "most likely sent" for the user, which would hold back this job's real Submit later (10-30: the model
+          // logged Uncountable and Hitachi "applied" before opening their forms, and both were then never applied to)
+          const sendAt = this.sendClicks && log.site ? this.sendClicks[log.site] : 0
+          if (!sendAt || now - sendAt > 3 * 3600 * 1000) {
+            if (u.refused >= 4) {
+              this.unconfirmedLog = null
+              // (the model's own note stays out: its "submitted" would make the job look sent, see irisProbablySent)
+              action = Object.assign({}, action, { status: 'needs_you', note: 'Iris logged it as applied, but no Submit or Apply click on its site and no confirmation page were seen: check it, and apply if it is not in.' })
+            } else {
+              return { ok: false, error: 'not logged — no button that sends an application (Submit, Apply) was clicked for this job on its site, so it has not been applied to. If you mean to apply: open its posting, tailor_resume for it, fill its form and submit it, and log applied only after its confirmation page. If you meant to skip it, log skipped with the line that rules it out.' }
+            }
+          } else if ((u.looks > 0 && u.refused >= 2) || u.refused >= 3) {
+            // looked again and still none (or a third try): left for the user, never called applied (a real run also
+            // took Lear's "Thank you for expressing your interest" greeting above its unfinished form for a confirmation)
             this.unconfirmedLog = null
             action = Object.assign({}, action, { status: 'needs_you', note: ((action.note ? action.note + ' — ' : '') + 'Iris reported it as submitted, but no confirmation page was seen: check whether it went through.') })
           } else {
