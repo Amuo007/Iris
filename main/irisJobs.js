@@ -483,8 +483,30 @@ function irisSameJob (a, b) {
     const ids = irisJobIds(au)
     if (b.url && ids.length && irisJobIds(b.url).some(function (x) { return ids.indexOf(x) >= 0 })) return true
   }
+  // one title at one company, but each address names its own posting: two jobs (see irisOtherPosting)
+  if (b.url && irisOtherPosting(aUrls, b.url)) return false
   const norm = function (s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() }
   return !!(a.company && b.company && a.title && b.title && norm(a.company) === norm(b.company) && norm(a.title) === norm(b.title))
+}
+
+/* the posting an address names: its long number, Greenhouse number, posting number or Workday requisition
+   ("…/SW-Development-Engineer-1_JR121808") */
+function irisPostingIds (url) {
+  const ids = irisJobIds(url).concat(irisPostingNumbers(url))
+  const wd = /myworkdayjobs\.com\/.*\/job\/[^?#]*_([a-z]*-?\d[\w-]*?)(?:-\d)?(?:\/|$|\?|#)/i.exec(String(url || ''))
+  if (wd) ids.push(wd[1].toLowerCase())
+  return ids
+}
+
+/* addresses that each name their posting and share none are two postings, even with one title at one company:
+   Dexcom's JR121398 and JR121808 are both "SW Development Engineer 1", and the second was skipped as applied (10-30).
+   The user would rather apply twice than miss a job. */
+function irisOtherPosting (urls, url) {
+  const mine = irisPostingIds(url)
+  if (!mine.length) return false
+  const theirs = []
+  urls.forEach(function (u) { if (u) irisPostingIds(u).forEach(function (x) { theirs.push(x) }) })
+  return theirs.length > 0 && !mine.some(function (x) { return theirs.indexOf(x) >= 0 })
 }
 
 function irisApplicationFind (rec) {
@@ -675,6 +697,8 @@ function irisApplicationNote (url, pageTitle) {
       const t = norm(a.title); const c = norm(a.company)
       const i = page.indexOf(t)
       if (t.trim().length < 8 || c.trim().length < 3 || i < 0 || page.indexOf(c) < 0) return false
+      // another posting number than the record's: another posting with this title (see irisOtherPosting)
+      if (irisOtherPosting([a.url].concat(a.urls || []), url)) return false
       // the whole role, not the start of a longer one: "Software Engineer, New Grad" is not "Software Engineer, New
       // Grad - Query Engines" (a real run skipped both of Palantir's new Query Engines postings as already handled)
       const before = page.slice(0, i).trim(); const after = page.slice(i + t.length); const cw = c.trim()
@@ -991,7 +1015,7 @@ function irisJobsPrompt (task, mode) {
   // a job the task lists again is to be done, whatever it was logged as (see irisTaskListed)
   const open = done.filter(function (a) { return a.status !== 'applied' && !irisTaskRetry(a) })
   const again = done.filter(function (a) { return a.status !== 'applied' && irisTaskRetry(a) })
-  if (sent.length) live.push('Already applied — never apply to these again: ' + sent.map(name).join('; ') + '.')
+  if (sent.length) live.push('Already applied — never apply to these postings again (the same title at another posting number is another job): ' + sent.map(name).join('; ') + '.')
   if (open.length) {
     live.push('Handled before but not sent (skipped, needs the user, or failed) — leave them unless the user names them in this task: ' +
       open.map(function (a) { return name(a) + ' (' + a.status + ')' }).join('; ') + '.')
