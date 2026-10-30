@@ -891,6 +891,17 @@ function irisPostingTextFor (job) {
   })
   return hit ? hit.text : ''
 }
+/* the page open now is this job's posting or form: a web page naming the company, not another logged job's. After a
+   submit Iris tailors the next job from the last one's page: Exelixis's Candidate Home made Zoom's AI Engineer "already
+   applied", and Cloudflare's thank-you page gave Dell's resume Cloudflare's posting (10-30) */
+function irisPageIsJob (url, title, job) {
+  if (!/^https?:/i.test(url || '')) return false
+  const squash = function (s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '') }
+  const co = squash(String(job.company || '').trim().split(/\s+/)[0])
+  if (co.length >= 3 && squash(url + ' ' + (title || '')).indexOf(co) === -1) return false
+  const there = irisApplicationAt(url)
+  return !there || irisSameJob(there, { company: job.company || '', title: job.title })
+}
 function irisPostingRead (url) {
   if (!url || !/^https?:/i.test(url)) return
   irisPostingsRead[irisJobKey(url)] = true
@@ -2060,12 +2071,11 @@ IrisComputer.prototype.act = async function (action) {
       this.notes = (this.notes || []).concat('Saved the account for ' + action.site + ' (' + action.username + ') in Settings → Accounts.')
       return { ok: true }
     case 'tailor_resume': {
-      // no link given: the page open now, unless a logged job of another title was at it (after a submit Iris tailors
-      // the next job from the last one's page: Exelixis's Candidate Home made Zoom's AI Engineer "already applied", 10-30)
-      let here = action.url ? '' : wc.getURL()
-      const there = here ? irisApplicationAt(here) : null
-      if (there && !irisSameJob(there, { company: action.company || '', title: action.title })) here = ''
-      const job = { title: action.title, company: action.company || '', requirements: action.requirements || '', url: action.url || here }
+      // no link given: the page open now, only when it is this job's (see irisPageIsJob)
+      let shownTitle = ''
+      try { shownTitle = wc.getTitle() } catch (e) { /* no title */ }
+      const onJob = irisPageIsJob(wc.getURL(), shownTitle, { company: action.company || '', title: action.title })
+      const job = { title: action.title, company: action.company || '', requirements: action.requirements || '', url: action.url || (onJob ? wc.getURL() : '') }
       const before = irisApplicationFind(job)
       if (before && before.status === 'applied') {
         this.notes = (this.notes || []).concat('You already applied to ' + job.title + (job.company ? ' at ' + job.company : '') + ' on ' +
@@ -2091,7 +2101,7 @@ IrisComputer.prototype.act = async function (action) {
       let posting = irisPostingTextFor(job)
       let from = 'kept from an earlier read'
       if (posting.length < 600) { posting = irisRequirementsLib.postingBody(await irisPostingText(job)).trim(); from = 'read from its link' }
-      if (posting.length < 600) {
+      if (posting.length < 600 && onJob) {
         try {
           const shown = String(await withTimeout(wc.executeJavaScript('document.body ? document.body.innerText.slice(0, 30000) : ""'), 5000, 'page text') || '').trim()
           if (shown.length > posting.length) { posting = shown; from = 'the page shown in the browser' }

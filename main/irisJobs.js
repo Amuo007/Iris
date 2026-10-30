@@ -795,7 +795,7 @@ function irisJobsPrompt (task, mode) {
     '   (A real night spent a quarter of its steps scrolling postings to their last line.)',
     '   Only when the look-up cannot read it: open it and read all of it (scroll); each screen you leave is gone (you see',
     '   only the newest screenshot), so save its must-haves with "remember", in its own words, in the same reply.',
-    '3. As soon as you decide to apply, before you open the form: tailor_resume {"company":str,"title":str,"requirements":str}.',
+    '3. As soon as you decide to apply, before you open the form: tailor_resume {"company":str,"title":str,"url":"<the posting\'s own address>","requirements":str}.',
     '   requirements = the POSTING itself in its own words (its responsibilities and qualifications, as much of it as you',
     '   read), never what such jobs usually ask and nothing about the user. The user\'s resume service rewrites their own',
     '   resume for this posting in the background (5-10 minutes): do not wait for it, go on with the application.',
