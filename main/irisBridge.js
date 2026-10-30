@@ -196,9 +196,18 @@ async function irisBridgeHandle (tool, args) {
       return { profile: irisCareerLib.bankText(irisCareerLoad()), prefs: irisCareerLoad().prefs, answers: irisCareerLoad().answers.filter(function (a) { return a.value }) }
     case 'resume': {
       const job = { title: String(args.title || 'Job'), company: String(args.company || ''), requirements: String(args.requirements || '') }
-      const r = await irisTailorResume(job, { picks: args.picks || null, noModel: true })
-      if (r.ok) irisBridgeTarget().lastResume = r.file
-      return r.ok ? { ok: true, file: r.file, pages: r.pages, fill: r.fill, undone: r.undone } : { ok: false, error: r.error }
+      // the user's resume service (5-10 minutes): this call waits for it
+      const run = await irisResumeStart(job)
+      if (!run.ok) return { ok: false, error: run.error }
+      const r = await run.done
+      if (r.ok) {
+        // iris_upload "resume" picks it (see resumeForUpload)
+        const target = irisBridgeTarget()
+        target.resumeRun = run
+        target.lastResume = r.file
+        target.lastJob = { title: job.title, company: job.company, url: '', fit: null, resume: r.file, at: Date.now() }
+      }
+      return r.ok ? { ok: true, file: r.file, coverage: r.coverage, missing: r.missing } : { ok: false, error: r.error }
     }
     case 'cover_letter': {
       if (!args.text) throw new Error('text is required: three short paragraphs, from the career profile only')

@@ -1,9 +1,9 @@
 /*
- * main/irisJobs.js — Jobs: the career profile, the resume template, one tailored PDF per job,
- * and the list of applications. The thinking lives in iris/agent/career.js.
+ * main/irisJobs.js — Jobs: the career profile, one resume per job from the user's resume service (resuma),
+ * cover letters, and the list of applications. The thinking lives in iris/agent/career.js.
  *
- * Everything stays on this Mac: the profile is a user-only file next to My info, PDFs are built
- * by the LaTeX already installed here (no shell escape), and tailoring uses the user's own model.
+ * Everything stays on this Mac: the profile is a user-only file next to My info, resumes come from resuma running
+ * here on the user's own model, and cover letters are built by the LaTeX already installed here (no shell escape).
  *
  * Concatenated into main.build.js after irisAgent.js (shared scope: settings, userDataPath, fs,
  * path, app, irisSettings, irisModelClient, irisActionSchema, irisProfileLoad, DBUG, …).
@@ -13,6 +13,7 @@ const irisCareerLib = require('./iris/agent/career.js')
 const irisListFileLib = require('./iris/agent/listFile.js')
 const irisRequirementsLib = require('./iris/agent/requirements.js')
 const irisChildProcess = require('child_process')
+const irisResumaLib = require('./iris/agent/resuma.js')
 
 /* ---------- the career profile ---------- */
 
@@ -183,7 +184,7 @@ function irisCompileTex (tex, engine) {
   return job
 }
 
-/* ---------- tailoring ---------- */
+/* ---------- resumes ---------- */
 
 function irisResumeDir () {
   return settings.get('irisResumeDir') || path.join(app.getPath('documents'), 'Iris Resumes')
@@ -193,69 +194,128 @@ function irisSafeName (s, max) {
   return String(s || '').replace(/[/\\:*?"<>|\n\r\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max || 60)
 }
 
-/**
- * One resume for one job. Returns what the agent and the panel are told:
- * { ok, file, fit, focus, why, missing, undone, below, cutoff, pages, fill, ms, usedModel, error }
+/*
+ * Resumes come from the user's resume service, resuma (Desktop/Projects/resuma, an MCP server Iris starts and keeps
+ * running): it rewrites the user's own one-page LaTeX resume for the posting with the local model, in 5-10 minutes,
+ * one run at a time. It replaced Iris's own tailoring and the one fixed PDF that went to every job (the user, 10-29).
+ * Each job's papers go in its own folder under Iris Resumes (see irisJobFolder): the resume, the posting (jd.txt) and
+ * resuma's report.
  */
-async function irisTailorResume (job, hooks) {
-  const started = Date.now()
-  const bank = irisCareerLoad()
-  if (irisCareerLib.bankIsEmpty(bank)) return { ok: false, error: 'The career profile is empty. Fill it in Settings → Jobs (skills, jobs, projects) first.' }
-  const cfg = irisSettings()
-  const tailorThinking = settings.get('irisTailorThinking') || 'off'
-  // a coding agent may send its own picks (the same JSON the model would write): then no model runs
-  let text = hooks && hooks.picks ? JSON.stringify(hooks.picks) : ''
-  let modelError = null
-  if (!text && !(hooks && hooks.noModel) && !(process.env.IRIS_FAKE_MODEL || cfg.useFakeModel)) {
-    try {
-      const model = irisLockedModel(irisModelClient.createModelClient({ provider: cfg.provider, baseUrl: cfg.baseUrl, model: cfg.model, apiKey: cfg.apiKey, temperature: 0.2, thinking: tailorThinking, timeoutMs: cfg.modelTimeoutMs }), cfg.baseUrl)
-      const reply = await model.next({ messages: irisCareerLib.tailorMessages(bank, job), thinking: tailorThinking, signal: hooks && hooks.signal })
-      text = typeof reply === 'string' ? reply : (reply && reply.content) || ''
-      if (reply && reply.usage) irisUsageRecord('request', Object.assign({ ms: reply.ms }, reply.usage))
-    } catch (err) {
-      modelError = err.message
-      DBUG('tailor model: ' + err.message)
-    }
-  }
-  const pick = irisCareerLib.parseTailorReply(text, bank, job, irisActionSchema.parseObjectLoose)
-  // below the cutoff the job is skipped: no PDF needed (unless asked for one, as in Settings → Try it)
-  const cutoff0 = bank.prefs.fitCutoff
-  if (!(hooks && hooks.alwaysBuild) && pick.fit !== null && cutoff0 > 0 && pick.fit < cutoff0) {
-    return { ok: true, file: null, fit: pick.fit, focus: pick.focus, why: pick.why, missing: pick.missing, undone: pick.undone, cutoff: cutoff0, below: true, usedModel: pick.usedModel, modelError: modelError, ms: Date.now() - started }
-  }
-  const template = irisTemplateText()
-  const engine = irisTemplateInfo().kind === 'custom' ? (irisTemplateInfo().engine || 'pdflatex') : 'pdflatex'
-  const fitted = await irisCareerLib.fitToPage({ bank: bank, pick: pick, job: job, template: template, compile: function (tex) { return irisCompileTex(tex, engine) } })
-  if (!fitted.ok) return { ok: false, error: 'LaTeX could not build the resume: ' + fitted.error, log: fitted.log }
+function irisResumaHome () {
+  return settings.get('irisResumaDir') || path.join(app.getPath('home'), 'Desktop', 'Projects', 'resuma')
+}
 
-  const folder = irisJobFolder(job, hooks && hooks.preview)
-  // recruiters see the file name: the person's name, not "resume (3).pdf"
-  const fileName = irisSafeName((bank.basics.name ? bank.basics.name + ' ' : '') + 'Resume', 60) + '.pdf'
-  const file = path.join(folder, fileName)
-  fs.writeFileSync(file, fitted.pdfData)
-  fs.writeFileSync(path.join(folder, 'resume.tex'), fitted.tex.replace(/\\par\\typeout\{IRIS-FILL[^\n]*\n/, ''))
-  fs.writeFileSync(path.join(folder, 'job.json'), JSON.stringify({
-    job: job, made: Date.now(), fit: pick.fit, focus: pick.focus, why: pick.why, missing: pick.missing,
-    picked: { experience: fitted.layout.experience, projects: fitted.layout.projects, skills: fitted.layout.skills }, rewrites: pick.rewrite, undone: pick.undone
-  }, null, 1))
-  const cutoff = bank.prefs.fitCutoff
-  return {
-    ok: true,
-    file: file,
-    folder: folder,
-    fit: pick.fit,
-    focus: pick.focus,
-    why: pick.why,
-    missing: pick.missing,
-    undone: pick.undone,
-    cutoff: cutoff,
-    below: pick.fit !== null && cutoff > 0 && pick.fit < cutoff,
-    pages: fitted.pages,
-    fill: fitted.fill,
-    usedModel: pick.usedModel,
-    modelError: modelError,
-    ms: Date.now() - started
+function irisResumaFound () {
+  return fs.existsSync(path.join(irisResumaHome(), '.venv', 'bin', 'python')) && fs.existsSync(path.join(irisResumaHome(), 'resuma'))
+}
+
+var irisResumaClient = null
+function irisResuma () {
+  if (!irisResumaClient) {
+    const home = irisResumaHome()
+    irisResumaClient = irisResumaLib.createResumaClient({
+      spawn: irisChildProcess.spawn,
+      command: path.join(home, '.venv', 'bin', 'python'),
+      args: ['-m', 'resuma', 'serve'],
+      cwd: home,
+      // only the user's own projects: resuma's profile also keeps made-up ones for its website's example resumes.
+      // A GUI app gets no shell PATH, and resuma runs pdflatex.
+      env: Object.assign({}, process.env, { RESUMA_REAL_ONLY: '1', PATH: '/Library/TeX/texbin:/opt/homebrew/bin:/usr/local/bin:' + (process.env.PATH || '/usr/bin:/bin') }),
+      log: DBUG
+    })
   }
+  return irisResumaClient
+}
+
+/* the runs started in this app session, by job folder: the same job again finds its run */
+var irisResumeRuns = {}
+
+/**
+ * Starts the resume for one job and returns at once with its run: { ok, file, folder, jobId, startedAt, done } or
+ * { ok: false, error }. `done` ends with { ok, file, folder, coverage, missing, ms } or { ok: false, error }; until then
+ * `file` does not exist yet. job: { title, company, url, requirements = the posting's own words }.
+ */
+async function irisResumeStart (job, hooks) {
+  const started = Date.now()
+  const folder = irisJobFolder(job, hooks && hooks.preview)
+  const known = irisResumeRuns[folder]
+  if (known && !known.failed) return known
+  const bank = irisCareerLoad()
+  // recruiters see the file name: the person's name, not "resume (3).pdf"
+  const file = path.join(folder, irisSafeName((bank.basics.name ? bank.basics.name + ' ' : '') + 'Resume', 60) + '.pdf')
+  const jd = String(job.requirements || '').trim()
+  if (jd.length < 80) return { ok: false, error: 'the resume service needs the posting\'s own text (got ' + jd.length + ' characters): read the posting and send its requirements in its own words' }
+  if (!irisResumaFound()) return { ok: false, error: 'the resume service (resuma) is not found at ' + irisResumaHome() }
+  try { fs.writeFileSync(path.join(folder, 'jd.txt'), jd) } catch (e) { /* only a copy for the user */ }
+  // a run still waiting in resuma's queue for a job Iris left is not needed any more (a running one finishes by itself)
+  Object.keys(irisResumeRuns).forEach(function (f) {
+    const r = irisResumeRuns[f]
+    if (f !== folder && !r.finished && !r.failed && !r.preview) irisResuma().call('cancel_job', { job_id: r.jobId }, 20000).catch(function () {})
+  })
+  let first
+  try {
+    first = await irisResuma().call('tailor_resume', {
+      jd_text: jd.slice(0, 20000),
+      company: irisResumaLib.resumaCompany(job, path.basename(folder).slice(0, 10)),
+      // skills only from the profile: no skill the user does not have goes on a real application
+      mode: 'strict',
+      wait: false
+    }, 90000)
+  } catch (e) {
+    return { ok: false, error: 'the resume service did not start: ' + e.message }
+  }
+  if (!first || !first.job_id) return { ok: false, error: 'the resume service gave no job id' }
+  const run = { ok: true, file: file, folder: folder, jobId: first.job_id, queued: first.queue_position || 0, startedAt: started, preview: !!(hooks && hooks.preview) }
+  DBUG('resuma: run ' + run.jobId + ' for ' + path.basename(folder) + (run.queued ? ' (queued ' + run.queued + ')' : ''))
+  run.done = irisResumaLib.waitForJob(irisResuma(), run.jobId, {
+    pollMs: 10000,
+    timeoutMs: 25 * 60000,
+    onProgress: function (j) { run.phase = j.phase; run.progress = j.progress; if (hooks && hooks.onProgress) hooks.onProgress(j) }
+  }).then(function (w) {
+    if (!w.ok) {
+      run.failed = true
+      run.error = w.error
+      DBUG('resuma: run ' + run.jobId + ' ' + w.error)
+      return { ok: false, error: w.error }
+    }
+    const res = w.result
+    try {
+      fs.copyFileSync(res.files.pdf, file)
+      ;[['report_md', 'resuma report.md'], ['report_json', 'resuma report.json'], ['tex', 'resume.tex']].forEach(function (k) {
+        if (res.files[k[0]] && fs.existsSync(res.files[k[0]])) fs.copyFileSync(res.files[k[0]], path.join(folder, k[1]))
+      })
+      const about = {
+        job: { title: job.title, company: job.company, url: job.url },
+        made: Date.now(),
+        service: 'resuma',
+        run: res.run,
+        mode: res.mode,
+        pages: res.pages,
+        layoutOk: res.layout_ok,
+        coverage: res.coverage,
+        missing: res.missing_keywords,
+        projects: res.projects_chosen,
+        seconds: res.seconds
+      }
+      fs.writeFileSync(path.join(folder, 'job.json'), JSON.stringify(about, null, 1))
+    } catch (e) {
+      run.failed = true
+      run.error = 'the resume was made but could not be copied: ' + e.message
+      return { ok: false, error: run.error }
+    }
+    run.finished = true
+    DBUG('resuma: run ' + run.jobId + ' done in ' + Math.round((Date.now() - started) / 1000) + ' s: ' + file)
+    return { ok: true, file: file, folder: folder, coverage: res.coverage, missing: res.missing_keywords || [], layoutOk: res.layout_ok, ms: Date.now() - started }
+  })
+  irisResumeRuns[folder] = run
+  return run
+}
+
+/* The user's own resume PDF (Settings → Jobs → Fallback resume): it goes out only when the resume service could not
+   make one for the job, so no application leaves without a resume. '' when none is chosen or the file is gone. */
+function irisFallbackResume (bank) {
+  const f = (bank || irisCareerLoad()).prefs.resumeFile
+  return f && fs.existsSync(f) ? f : ''
 }
 
 /*
@@ -645,16 +705,6 @@ function irisJobsActive (task) {
   return irisCareerLib.isJobTask(task) && !irisCareerLib.bankIsEmpty(irisCareerLoad())
 }
 
-/*
- * The user's own resume PDF when tailoring is off (Settings → Jobs → Applying): its path, '' when tailoring
- * is off but no usable file is chosen, null when Iris tailors a resume for each job.
- */
-function irisOwnResume (bank) {
-  const p = (bank || irisCareerLoad()).prefs
-  if (p.tailor) return null
-  return p.resumeFile && fs.existsSync(p.resumeFile) ? p.resumeFile : ''
-}
-
 /* The user's unofficial transcript (Settings → Jobs), or '' when none is chosen or the file is gone. */
 function irisTranscriptFile (bank) {
   const f = (bank || irisCareerLoad()).prefs.transcriptFile
@@ -665,9 +715,6 @@ function irisJobsPrompt (task, mode) {
   const nonStop = mode === 'continuous'
   const bank = irisCareerLoad()
   const p = bank.prefs
-  const own = irisOwnResume(bank)
-  const tailoring = own === null
-  const ownName = own ? path.basename(own) : ''
   const transcript = irisTranscriptFile(bank)
   const lines = ['JOBS — the user keeps a career profile in Iris (Settings → Jobs). Applying for one job:',
     'THE RULES BELOW ARE DEFAULTS, NOT WALLS. The goal is the application done, honestly. When the usual way does not',
@@ -729,7 +776,7 @@ function irisJobsPrompt (task, mode) {
     '   other fitting jobs count too. A job you pass over: log it skipped. Change source only at 0 not handled yet.',
     '   When the user names boards or job links, work only on those: once every opening there is handled, finish',
     '   with done — do not go looking on other boards or sites you know.',
-  ].concat(tailoring ? [
+  ].concat([
     '2. Read the posting first as text, in one step: {"type":"lookup","kind":"page","query":"<its address>","chars":8000}',
     '   — the whole posting, its ELIGIBILITY LINES (sponsorship, citizenship, clearance, export control) listed first,',
     '   from anywhere in it. Skip the job right there when those lines or its level rule it out (log it skipped).',
@@ -737,32 +784,17 @@ function irisJobsPrompt (task, mode) {
     '   (A real night spent a quarter of its steps scrolling postings to their last line.)',
     '   Only when the look-up cannot read it: open it and read all of it (scroll); each screen you leave is gone (you see',
     '   only the newest screenshot), so save its must-haves with "remember", in its own words, in the same reply.',
-    '3. tailor_resume {"company":str,"title":str,"requirements":str}: requirements = what the POSTING asks for, in its',
-    '   own words (skills, tools, years, duties), from your notes and the screen — never what such jobs usually ask,',
-    '   nothing about the user. Iris builds a one-page PDF from the profile',
-    '   and says how well it fits.',
-    '   No need to judge the job yourself: the fit Iris reports is the decision.',
-    '4. If Iris says the fit is below the cutoff: log_application {"status":"skipped",…} and go to the next job.',
-    '   Jobs you rule out from a list without opening them (wrong place, role or level): log each as skipped with the',
-    '   reason, right away — several log_application in one "actions" list, in the same step as you decide.',
-    '5. Otherwise apply: fill the form from My info and the answers below. When it asks for a resume, upload the PDF',
-    '   tailor_resume made — even when one is already attached (sites that remember you show your last one, with the',
-    '   same name): remove or replace it.'
-  ] : [
-    '2. Read the posting first as text, in one step: {"type":"lookup","kind":"page","query":"<its address>","chars":8000}',
-    '   — the whole posting, its ELIGIBILITY LINES (sponsorship, citizenship, clearance, export control) listed first,',
-    '   from anywhere in it. Skip the job right there when those lines or its level rule it out (log it skipped).',
-    '   A look-up that cannot read the posting is no reason to skip it: open it in the browser and read it there.',
-    '   (A real night spent a quarter of its steps scrolling postings to their last line.)',
-    '   Then open it and go straight to its application form (below the posting, or behind an "Apply" button). Only',
-    '   when the look-up cannot read it: read it in the browser (scroll to its end) before you fill anything.',
-    '3. No tailor_resume and no fit check: the user turned tailoring off, and their own resume goes out as it is.',
+    '3. As soon as you decide to apply, before you open the form: tailor_resume {"company":str,"title":str,"requirements":str}.',
+    '   requirements = the POSTING itself in its own words (its responsibilities and qualifications, as much of it as you',
+    '   read), never what such jobs usually ask and nothing about the user. The user\'s resume service rewrites their own',
+    '   resume for this posting in the background (5-10 minutes): do not wait for it, go on with the application.',
     '4. Jobs you rule out from a list without opening them (wrong place, role or level): log each as skipped with the',
     '   reason, right away — several log_application in one "actions" list, in the same step as you decide.',
-    '5. Apply: fill the form from My info and the answers below. When it asks for a resume, ' + (own
-      ? 'upload the user\'s own PDF with {"type":"upload","file":"resume"} (' + ownName + ')'
-      : 'upload the user\'s resume PDF (no file is chosen in Settings → Jobs: pick the one with the user\'s name from the file picker\'s recent files; none there → needs_you)') +
-      ' — even when one is already attached (sites that remember you show your last one, with the same name): remove or replace it.'
+    '5. Apply: fill the form from My info and the answers below, and leave the resume for last on a one-page form. On a',
+    '   form with steps (Workday and the like), attach it at its own step (Workday: My Experience) before going on. Either',
+    '   way: click its upload button, then {"type":"upload","file":"resume"}: Iris puts in the PDF made for this job (and',
+    '   waits for it first if it is not done yet). Do it even when one is already attached (sites that remember you show',
+    '   your last one, with the same name): remove or replace it.'
   ]).concat([
     '   Work authorization, visa, sponsorship, citizenship, criminal record or other legal questions: read every option',
     '   first and pick the one that matches the answers below word for word in meaning — never "the first option" — and',
@@ -960,14 +992,11 @@ function irisJobsPrompt (task, mode) {
 /* ---------- settings page ---------- */
 
 function irisCareerForPage () {
-  const tex = irisTexStatus()
   return {
     bank: irisCareerLoad(),
     counts: irisCareerLib.bankCounts(irisCareerLoad()),
-    template: irisTemplateInfo(),
-    tex: tex,
-    resumeDir: irisResumeDir(),
-    tailorThinking: settings.get('irisTailorThinking') || 'off'
+    resuma: { home: irisResumaHome(), found: irisResumaFound() },
+    resumeDir: irisResumeDir()
   }
 }
 
@@ -993,7 +1022,10 @@ async function irisResumePreview (args) {
     if (job.company === 'Preview' && named.company) job.company = named.company.slice(0, 60)
   }
   if (!job.title) job.title = 'Software Engineer'
-  const r = await irisTailorResume(job, { alwaysBuild: true, preview: true })
+  // the resume service takes 5-10 minutes: the page waits for it
+  const run = await irisResumeStart(job, { preview: true })
+  if (!run.ok) return run
+  const r = await run.done
   if (r.ok) irisLastPreview = r.file
   return r
 }
@@ -1094,7 +1126,7 @@ function irisJobsSettingsAction (action, args) {
       if (irisIsBusy()) return Promise.resolve({ started: false, error: 'Iris is busy with another task. Stop it first.' })
       if (irisCareerLib.bankIsEmpty(irisCareerLoad())) return Promise.resolve({ started: false, error: 'Fill in your career profile first.' })
       // the browser UI opens a fresh tab and starts it there, like a scheduled task
-      broadcast('iris-agent-scheduled-run', { task: 'Find jobs that match my career profile and apply to them one by one' + (irisOwnResume() === null ? ', with a resume tailored to each' : ', with my own resume') + '. Keep going until I stop you.', mode: 'continuous' })
+      broadcast('iris-agent-scheduled-run', { task: 'Find jobs that match my career profile and apply to them one by one' + ', with a resume made for each' + '. Keep going until I stop you.', mode: 'continuous' })
       return Promise.resolve({ started: true })
     }
     case 'applicationsExport': {

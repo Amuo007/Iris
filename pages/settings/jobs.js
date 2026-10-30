@@ -293,14 +293,14 @@ function irisRenderAnswers () {
 
 var IRIS_PREF_FIELDS = [
   ['iris-pref-roles', 'roles'], ['iris-pref-locations', 'locations'], ['iris-pref-workplace', 'workplace'],
-  ['iris-pref-salary', 'salary'], ['iris-pref-cutoff', 'fitCutoff', 'int'], ['iris-pref-limit', 'dailyLimit', 'int']
+  ['iris-pref-salary', 'salary'], ['iris-pref-limit', 'dailyLimit', 'int']
 ]
 
 function irisRenderPrefs () {
   var p = irisCareer.prefs
   IRIS_PREF_FIELDS.forEach(function (f) { document.getElementById(f[0]).value = p[f[1]] === undefined ? '' : p[f[1]] })
   document.getElementById('iris-pref-submit').value = p.autoSubmit === false ? 'ask' : 'auto'
-  irisRenderTailor()
+  irisRenderFallback()
   irisRenderTranscript()
 }
 
@@ -312,28 +312,15 @@ function irisRenderTranscript () {
   document.getElementById('iris-transcript-show').hidden = !file
 }
 
-/* Tailoring on, or the user's own PDF as it is (then no fit check, so the cutoff does nothing) */
-function irisRenderTailor () {
-  var p = irisCareer.prefs
-  var tailor = p.tailor !== false
-  document.getElementById('checkbox-iris-pref-tailor').checked = tailor
-  document.getElementById('iris-own-resume-row').hidden = tailor
-  var cutoff = document.getElementById('iris-pref-cutoff')
-  cutoff.disabled = !tailor
-  cutoff.title = tailor ? '' : 'Only used when Iris tailors your resume (it rates the fit then)'
-  var file = p.resumeFile || ''
-  var help = document.getElementById('iris-own-resume-help')
-  help.textContent = file ? file.replace(/^\/Users\/[^/]+/, '~') : 'No file chosen yet. Choose the PDF Iris should upload to every application.'
+/* The user's own PDF: it goes out only when the resume service could not make one for a job */
+function irisRenderFallback () {
+  var file = irisCareer.prefs.resumeFile || ''
+  document.getElementById('iris-own-resume-help').textContent = file ? file.replace(/^\/Users\/[^/]+/, '~') + ' (sent only when the resume service could not make one for a job)'
+    : 'No file chosen yet. Choose your own resume PDF: Iris sends it only when the resume service could not make one for a job.'
   document.getElementById('iris-own-resume-choose').textContent = file ? 'Choose another…' : 'Choose PDF…'
   document.getElementById('iris-own-resume-show').hidden = !file
 }
 
-document.getElementById('checkbox-iris-pref-tailor').addEventListener('change', function () {
-  if (!irisCareer) return
-  irisCareer.prefs.tailor = this.checked
-  irisRenderTailor()
-  irisCareerScheduleSave()
-})
 document.getElementById('iris-own-resume-choose').addEventListener('click', function () { irisAction('ownResumeChoose') })
 document.getElementById('iris-own-resume-show').addEventListener('click', function () { irisAction('ownResumeShow') })
 document.getElementById('iris-transcript-choose').addEventListener('click', function () { irisAction('transcriptChoose') })
@@ -442,36 +429,14 @@ function irisMergeImported (bank) {
   return added
 }
 
-/* ---------- resume template ---------- */
+/* ---------- resume service ---------- */
 
 function irisRenderTemplate (data) {
-  var t = data.template || { kind: 'builtin' }
-  var custom = t.kind === 'custom'
-  document.getElementById('iris-template-name').textContent = custom ? 'Your template: ' + t.name : 'Built-in: Classic'
-  document.getElementById('iris-template-help').textContent = custom
-    ? 'Imported ' + new Date(t.imported).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) + '. Iris keeps its look and header, and refills the sections below for each job.'
-    : 'A clean one-page layout. Or use your own LaTeX resume: Iris keeps its look and refills it.'
-  document.getElementById('iris-template-import').textContent = custom ? 'Use another LaTeX file…' : 'Use my LaTeX resume…'
-  document.getElementById('iris-template-builtin').hidden = !custom
-  document.getElementById('iris-template-show').hidden = !custom
-  var report = document.getElementById('iris-template-report')
-  report.innerHTML = ''
-  report.hidden = !custom || !t.report
-  ;(t.report || []).forEach(function (r) {
-    var row = irisEl('div', 'iris-template-row ' + (r.status === 'mapped' ? 'is-mapped' : 'is-kept'))
-    row.appendChild(irisEl('span', 'iris-template-mark', r.status === 'mapped' ? '✓' : '–'))
-    row.appendChild(irisEl('span', 'iris-template-section', r.title))
-    row.appendChild(irisEl('span', 'iris-list-sub', r.status === 'mapped'
-      ? 'Filled in for each job (' + r.kind + ')'
-      : (r.kind === 'other' ? 'Kept as you wrote it' : (r.note || 'Kept as you wrote it') + ' — add markers to the template file to fill it (see docs/RESUME-TEMPLATES.md)')))
-    report.appendChild(row)
-  })
-  var tex = data.tex || {}
-  document.getElementById('iris-tex-status').textContent = tex.found
-    ? 'Found ' + tex.path.replace(/\/pdflatex$/, '') + (tex.xelatex ? ' (pdfLaTeX and XeLaTeX)' : '')
-    : 'LaTeX is not installed. Install MacTeX (tug.org/mactex) so Iris can build PDFs.'
+  var r = data.resuma || {}
+  document.getElementById('iris-resuma-status').textContent = r.found
+    ? 'Found at ' + (r.home || '').replace(/^\/Users\/[^/]+/, '~') + '. Iris starts it when a resume is needed.'
+    : 'Not found at ' + (r.home || '').replace(/^\/Users\/[^/]+/, '~') + ' (it needs its .venv). Until it is there, the fallback resume goes out.'
   document.getElementById('iris-resume-dir').textContent = (data.resumeDir || '').replace(/^\/Users\/[^/]+/, '~')
-  document.getElementById('iris-tailor-thinking').value = data.tailorThinking || 'off'
 }
 
 document.getElementById('iris-career-paste-run').addEventListener('click', function () {
@@ -483,18 +448,14 @@ document.getElementById('iris-career-paste-run').addEventListener('click', funct
   irisAction('careerFromText', { text: text })
 })
 
-document.getElementById('iris-template-import').addEventListener('click', function () { irisAction('templateImport') })
 document.getElementById('iris-career-from-tex').addEventListener('click', function () { irisAction('templateImport') })
-document.getElementById('iris-template-builtin').addEventListener('click', function () { irisAction('templateBuiltin') })
-document.getElementById('iris-template-show').addEventListener('click', function () { irisAction('templateShow') })
 document.getElementById('iris-resume-dir-change').addEventListener('click', function () { irisAction('resumeDirChoose') })
-document.getElementById('iris-tailor-thinking').addEventListener('change', function () { settings.set('irisTailorThinking', this.value) })
 
 document.getElementById('iris-preview-run').addEventListener('click', function () {
   var status = document.getElementById('iris-preview-status')
   if (irisCareerEmpty()) { status.textContent = 'Fill in your career profile first.'; return }
   this.disabled = true
-  status.textContent = document.getElementById('iris-preview-url').value.trim() ? 'Reading the posting, picking what fits, building the PDF…' : 'Picking what fits and building the PDF…'
+  status.textContent = 'The resume service is writing it (5 to 10 minutes)…'
   irisAction('resumePreview', { url: document.getElementById('iris-preview-url').value.trim(), title: document.getElementById('iris-preview-title').value.trim(), requirements: document.getElementById('iris-preview-req').value.trim() })
 })
 
@@ -584,7 +545,7 @@ window.addEventListener('message', function (e) {
   if (d.action === 'ownResumeChoose') {
     if (r.picked && irisCareer) {
       irisCareer.prefs.resumeFile = r.picked
-      irisRenderTailor()
+      irisRenderFallback()
       irisCareerScheduleSave()
     }
     return
@@ -626,7 +587,7 @@ window.addEventListener('message', function (e) {
     irisRenderTemplate(r)
     if (d.action === 'templateImport' && r.imported) {
       var imp = r.imported
-      if (imp.error) { document.getElementById('iris-template-help').textContent = imp.error; return }
+      if (imp.error) { irisCareerStatus.textContent = imp.error; return }
       var n = (imp.bank && (imp.bank.experience.length + imp.bank.projects.length)) || 0
       if (n && (irisCareerEmpty() || confirm('Add what is in this resume that your career profile does not have yet?'))) {
         var added = irisMergeImported(imp.bank)
@@ -641,8 +602,7 @@ window.addEventListener('message', function (e) {
       document.getElementById('iris-preview-open').hidden = !p.ok
       document.getElementById('iris-preview-show').hidden = !p.ok
       document.getElementById('iris-preview-status').textContent = p.ok
-        ? 'Made ' + p.file.split('/').pop() + ' · ' + (p.fit === null || p.fit === undefined ? '' : 'fit ' + p.fit + ' · ') + Math.round((p.fill || 0) * 100) + '% of the page · ' + Math.round(p.ms / 1000) + ' s' +
-          (p.modelError ? ' (the model did not answer, so Iris picked by keywords)' : '')
+        ? 'Made ' + p.file.split('/').pop() + (typeof p.coverage === 'number' ? ' · covers ' + Math.round(p.coverage * 100) + '% of the posting\'s keywords' : '') + ' · ' + Math.round(p.ms / 60000) + ' min'
         : 'Could not make it: ' + (p.error || 'unknown error')
     }
   } else if (d.action === 'jobsStart') {

@@ -9,7 +9,7 @@
  * for the agent, which checks the whole form on the screenshot before it submits.
  *
  * Concatenated into main.build.js after irisJobs.js (shared scope: irisSendInput, irisInputPlan, sleep,
- * withTimeout, irisCareerLoad, irisProfileLoad, irisOwnResume, DBUG, path, fs).
+ * withTimeout, irisCareerLoad, irisProfileLoad, irisFallbackResume, DBUG, path, fs).
  */
 
 const irisAutofillLib = require('./iris/agent/autofill.js')
@@ -394,8 +394,14 @@ async function irisAfTick (computer, wc, field, index, optionText) {
 
 /* the resume, through DevTools like a file the user picked */
 async function irisAfUpload (computer, wc, field) {
-  const file = (computer.lastResume && fs.existsSync(computer.lastResume)) ? computer.lastResume : irisOwnResume()
-  if (!file || !fs.existsSync(file)) return { left: 'no resume file is set in Settings → Jobs' }
+  // the resume made for this job; while it is still being made the box waits for the upload action at the end
+  // (autofill runs on the first look, minutes before the resume service is done)
+  const run = computer.resumeRun
+  if (run && !run.finished && !run.failed) return { left: 'the resume for this job is still being made: fill the rest of this page, then click this box\'s upload button and send {"type":"upload","file":"resume"} before you leave the page (Iris waits for the PDF)' }
+  const file = run && run.finished && fs.existsSync(run.file) ? run.file
+    : (!run && computer.lastResume && computer.lastJob && computer.lastJob.resume === computer.lastResume && fs.existsSync(computer.lastResume)) ? computer.lastResume
+      : irisFallbackResume()
+  if (!file || !fs.existsSync(file)) return { left: 'no resume for this job and no fallback resume in Settings → Jobs' }
   let shownBefore = false
   try {
     if (!wc.debugger.isAttached()) return { left: 'cannot reach the file box: use Attach' }
@@ -412,7 +418,7 @@ async function irisAfUpload (computer, wc, field) {
   for (let i = 0; i < 20; i++) {
     await sleep(400)
     if (await irisAfEval(wc, irisAutofillLib.pageValue(field.key)) || (!shownBefore && await irisAfEval(wc, irisAutofillLib.pageHasText(path.basename(file))))) {
-      if (computer.lastJob) computer.lastJob.uploaded = true
+      if (computer.lastJob) { computer.lastJob.uploaded = true; computer.lastJob.uploadedFile = file }
       return { set: path.basename(file) }
     }
   }

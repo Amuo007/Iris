@@ -1370,6 +1370,31 @@ IrisComputer.prototype.submitGuard = async function (wc, action) {
     'One job is never submitted twice. Go on to the next job.'
 }
 
+/*
+ * The resume to upload for the job in hand: the PDF the resume service made for it, waited for while its run is still
+ * going (up to 15 minutes from its start), else the user's fallback PDF, so no application goes out without one.
+ * { file, note }; file is null when there is neither.
+ */
+IrisComputer.prototype.resumeForUpload = async function () {
+  const run = this.resumeRun
+  if (run && run.finished && fs.existsSync(run.file)) return { file: run.file }
+  // made before Iris restarted (runs live in the app, the PDF in the job's folder)
+  if (!run && this.lastJob && this.lastResume && this.lastJob.resume === this.lastResume && fs.existsSync(this.lastResume)) return { file: this.lastResume }
+  let why = run ? run.error : 'no tailor_resume was sent for this job'
+  if (run && !run.failed) {
+    const left = Math.max(60000, run.startedAt + 15 * 60000 - Date.now())
+    DBUG('upload: waiting up to ' + Math.round(left / 1000) + ' s for the resume of ' + path.basename(run.folder) + ' (' + (run.phase || 'queued') + ')')
+    const r = await Promise.race([run.done, new Promise(function (resolve) { setTimeout(function () { resolve({ ok: false, error: 'not done after 15 minutes' }) }, left) })])
+    if (r.ok && fs.existsSync(r.file)) return { file: r.file, note: 'The resume made for this job is ready: ' + path.basename(r.file) + '.' }
+    why = r.error
+  }
+  const fb = irisFallbackResume()
+  if (this.lastJob) this.lastJob.fallback = why
+  return fb
+    ? { file: fb, note: 'The resume service had no resume for this job (' + why + '): the user\'s own resume ' + path.basename(fb) + ' went in instead.' }
+    : { file: null, note: 'The resume service had no resume for this job (' + why + ') and no fallback resume is chosen in Settings → Jobs: log the job needs_you naming the resume.' }
+}
+
 IrisComputer.prototype.noteConfirmation = async function (wc, url) {
   if (!this.jobsMode || !url) return
   // a mail inbox is no application page: its "Thank you for applying" emails are older applications (a real run's
@@ -1567,8 +1592,8 @@ IrisComputer.prototype.screenshot = async function () {
   if (this.pendingChooser) {
     const files = irisRecentFiles(12)
     obs.note = (obs.note ? obs.note + '\n' : '') + 'A file picker is open (' + (this.pendingChooser.mode === 'selectMultiple' ? 'several files allowed' : 'one file') + '). ' +
-      (this.lastResume && fs.existsSync(this.lastResume) ? 'For the resume, use {"type":"upload","file":"resume"} (' + (this.lastResume === irisOwnResume() ? 'the user\'s own resume, ' : 'the PDF made for this job, ') + path.basename(this.lastResume) + '). '
-        : this.jobsMode && irisOwnResume() ? 'For the resume, use {"type":"upload","file":"resume"} (the user\'s own resume, ' + path.basename(irisOwnResume()) + '). ' : '') +
+      (this.resumeRun && !this.resumeRun.failed ? 'For the resume, use {"type":"upload","file":"resume"} (the PDF made for this job' + (this.resumeRun.finished ? ', ' + path.basename(this.resumeRun.file) : ', still being made: Iris waits for it') + '). '
+        : this.jobsMode && irisFallbackResume() ? 'For the resume, use {"type":"upload","file":"resume"} (the user\'s own resume, ' + path.basename(irisFallbackResume()) + '). ' : '') +
       'Pick a file with {"type":"upload","file":"<name>"}. Recent files: ' + (files.length ? files.map(function (f) { return f.name }).join(', ') : '(none found)') + '.'
   }
   if (!crop) this.lastObservation = obs
@@ -2004,17 +2029,6 @@ IrisComputer.prototype.act = async function (action) {
         this.notes = (this.notes || []).concat('Not logged yet (a resume was made for each): ' + unlogged.map(function (j) { return j.title + (j.company ? ' at ' + j.company : '') }).join('; ') +
           ' — send log_application for each as well (applied, needs_you, skipped or failed).')
       }
-      // tailoring is off (Settings → Jobs → Applying): no model, no PDF, no fit — the user's own resume goes out
-      const own = irisOwnResume()
-      if (own !== null) {
-        this.lastResume = own || null
-        this.lastJob = { title: job.title, company: job.company, url: job.url, fit: null, resume: own, at: Date.now() }
-        this.jobsTailored = (this.jobsTailored || []).filter(function (j) { return !irisSameJob(j, job) }).concat(this.lastJob)
-        this.notes = (this.notes || []).concat('Tailoring is off in Settings → Jobs: nothing to make and no fit check. Apply' +
-          (own ? ' with the user\'s own resume — at the form\'s resume field, click its upload button, then {"type":"upload","file":"resume"} picks ' + path.basename(own) + '.'
-            : '; no resume file is chosen in Settings → Jobs, so pick the user\'s resume PDF from the file picker\'s recent files.'))
-        return { ok: true }
-      }
       broadcastEvent({ type: 'resume:start', title: job.title, company: job.company, sessionId: this.sessionId })
       // the posting's own words next to Iris's summary of it, when its link can be read (see irisPostingText)
       const posting = await irisPostingText(job)
@@ -2022,25 +2036,31 @@ IrisComputer.prototype.act = async function (action) {
         job.requirements = (job.requirements ? 'Summary while reading it: ' + job.requirements + '\n\n' : '') + 'The posting itself (read from its link):\n' + posting
         DBUG('tailor: posting text ' + posting.length + ' chars from ' + job.url)
       }
-      let r
-      try { r = await irisTailorResume(job) } catch (e) { r = { ok: false, error: e.message } }
-      if (!r.ok) {
-        this.notes = (this.notes || []).concat('Could not make the resume: ' + r.error)
-        broadcastEvent({ type: 'resume', ok: false, error: r.error, title: job.title, company: job.company, sessionId: this.sessionId })
+      // the user's resume service makes it in the background (5-10 minutes): the upload waits for it (see resumeForUpload)
+      let run
+      try { run = await irisResumeStart(job) } catch (e) { run = { ok: false, error: e.message } }
+      if (!run.ok) {
+        const fb = irisFallbackResume()
+        this.resumeRun = null
+        this.lastResume = fb || null
+        this.lastJob = { title: job.title, company: job.company, url: job.url, fit: null, resume: fb || '', fallback: run.error, at: Date.now() }
+        this.jobsTailored = (this.jobsTailored || []).filter(function (j) { return !irisSameJob(j, job) }).concat(this.lastJob)
+        this.notes = (this.notes || []).concat('The resume service could not make a resume for this job (' + run.error + ').' +
+          (fb ? ' Apply anyway: {"type":"upload","file":"resume"} puts in the user\'s own resume (' + path.basename(fb) + ').' : ' No fallback resume is chosen in Settings → Jobs: log the job needs_you naming the resume.'))
+        broadcastEvent({ type: 'resume', ok: false, error: run.error, title: job.title, company: job.company, sessionId: this.sessionId })
         return { ok: true }
       }
-      this.lastResume = r.file
-      this.lastJob = { title: job.title, company: job.company, url: job.url, fit: r.fit, resume: r.file || '', at: Date.now() }
+      this.resumeRun = run
+      this.lastResume = run.file
+      this.lastJob = { title: job.title, company: job.company, url: job.url, fit: null, resume: run.file, at: Date.now() }
       this.jobsTailored = (this.jobsTailored || []).filter(function (j) { return !irisSameJob(j, job) }).concat(this.lastJob)
-      let note = (r.file ? 'Made a one-page resume for ' : 'Checked the fit for ') + job.title + (job.company ? ' at ' + job.company : '') + ' (' + (r.fit === null ? 'fit not rated' : 'fit ' + r.fit + '/100') +
-        (r.focus ? ', focus: ' + r.focus : '') + ')' + (r.file ? ': ' + r.file : '') + '.' + (r.missing && r.missing.length ? ' The profile does not show: ' + r.missing.join(', ') + '.' : '')
-      note += r.below
-        ? ' The fit is below the user\'s cutoff (' + r.cutoff + '): do not apply. log_application {"status":"skipped","note":"fit ' + r.fit + '"} and find the next job.'
-        : (r.fit !== null && r.cutoff > 0 ? ' That is at or above the user\'s cutoff (' + r.cutoff + '): apply.' : '') +
-          ' When the form asks for a resume, click its upload button, then {"type":"upload","file":"resume"} picks this PDF —' +
-          ' also when a resume is already attached (a site that remembers you shows the last one, under the same name): replace it.'
-      this.notes = (this.notes || []).concat(note)
-      broadcastEvent({ type: 'resume', ok: true, file: r.file, fit: r.fit, focus: r.focus, why: r.why, missing: r.missing, below: r.below, title: job.title, company: job.company, ms: r.ms, undone: (r.undone || []).length, sessionId: this.sessionId })
+      const self = this
+      run.done.then(function (r) {
+        broadcastEvent({ type: 'resume', ok: r.ok, file: r.file, error: r.error, title: job.title, company: job.company, ms: r.ms, sessionId: self.sessionId })
+      })
+      this.notes = (this.notes || []).concat('The resume service is writing the resume for ' + job.title + (job.company ? ' at ' + job.company : '') +
+        (run.finished ? ' (already done)' : ' now (about 5-10 minutes, in the background)') + ' into ' + run.folder + '. Go on with the application;' +
+        ' when the form asks for the resume, click its upload button, then {"type":"upload","file":"resume"}: Iris waits for the PDF if it is not done yet.')
       return { ok: true }
     }
     case 'cover_letter': {
@@ -2225,7 +2245,7 @@ IrisComputer.prototype.act = async function (action) {
         // now is the list, and two skips from one list must not share it (the second would replace the first)
         url: (job && job.url) || action.url || (action.title ? '' : wc.getURL()),
         note: action.note || '',
-        resume: (job && job.resume) || (action.status === 'applied' && irisOwnResume()) || '',
+        resume: (job && job.resume && fs.existsSync(job.resume) ? job.resume : '') || (job && job.uploadedFile) || '',
         fit: job && job.fit !== undefined ? job.fit : null,
         sessionId: this.sessionId || ''
       }
@@ -2259,6 +2279,7 @@ IrisComputer.prototype.act = async function (action) {
       // the job in progress keeps its resume when another job (one ruled out from the list) is logged
       if (job && (job === this.lastJob || irisSameJob(job, this.lastJob || {}))) {
         this.lastResume = null
+        this.resumeRun = null
         this.lastCover = null
         this.lastJob = null
       }
@@ -2290,11 +2311,19 @@ IrisComputer.prototype.act = async function (action) {
     case 'upload': {
       const chooser = this.pendingChooser
       if (!chooser) return { ok: false, error: 'no file picker is open; click the upload button or "Choose file" first' }
-      // "resume" means the one tailor_resume just made, or the user's own PDF when tailoring is off (long paths get mistyped)
+      // "resume" means the one the resume service made for this job (waited for while it is still being made), or the
+      // fallback PDF when it could not make one (long paths get mistyped)
       const wanted = String(action.file || '').trim()
       let file = null
-      const resumeNow = this.lastResume && fs.existsSync(this.lastResume) ? this.lastResume : irisOwnResume() || null
-      if (resumeNow && (/^(the |my |tailored |own |user'?s )*(resume|cv|résumé)( pdf| file)?$/i.test(wanted) || path.basename(wanted) === path.basename(resumeNow))) file = resumeNow
+      let resumeNow = null
+      const askedResume = /^(the |my |tailored |own |user'?s |new )*(resume|cv|résumé)( pdf| file)?$/i.test(wanted) || (this.lastResume && path.basename(wanted) === path.basename(this.lastResume))
+      if (askedResume) {
+        const got = await this.resumeForUpload()
+        resumeNow = got.file
+        if (got.note) this.notes = (this.notes || []).concat(got.note)
+        if (!resumeNow) return { ok: false, error: got.note || 'no resume to upload: no resume was made for this job and no fallback resume is chosen in Settings → Jobs' }
+        file = resumeNow
+      }
       if (!file && this.lastCover && fs.existsSync(this.lastCover) && (/^(the |my )*cover( letter)?( pdf| file)?$/i.test(wanted) || path.basename(wanted) === path.basename(this.lastCover))) file = this.lastCover
       // "transcript" means the one the user chose in Settings → Jobs; with none chosen, say so (never another file)
       const transcriptNow = irisTranscriptFile()
@@ -2311,7 +2340,7 @@ IrisComputer.prototype.act = async function (action) {
         return { ok: false, error: 'could not choose the file: ' + e.message }
       }
       this.pendingChooser = null
-      if (this.lastJob && file === resumeNow) this.lastJob.uploaded = true
+      if (this.lastJob && file === resumeNow) { this.lastJob.uploaded = true; this.lastJob.uploadedFile = file }
       this.notes = (this.notes || []).concat('Chose the file "' + path.basename(file) + '" in the file picker.')
       return { ok: true, pageChanged: true }
     }

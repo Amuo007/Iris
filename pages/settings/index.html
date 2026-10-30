@@ -39,7 +39,7 @@
       <div class="iris-settings-group">Jobs</div>
       <a href="#iris-career-container">Career profile</a>
       <a href="#iris-apply-container">Applying</a>
-      <a href="#iris-resume-container">Resume template</a>
+      <a href="#iris-resume-container">Resume service</a>
       <a href="#iris-applications-container">Applications</a>
       <a href="#iris-requirements-container">What jobs ask for</a>
       <div class="iris-settings-group">Advanced</div>
@@ -475,10 +475,6 @@
           <input type="text" id="iris-pref-salary" spellcheck="false" placeholder="e.g. 95,000 CAD" />
         </div>
         <div class="iris-setting">
-          <label for="iris-pref-cutoff">Fit needed to apply (0–100)</label>
-          <input type="number" id="iris-pref-cutoff" min="0" max="100" />
-        </div>
-        <div class="iris-setting">
           <label for="iris-pref-submit">Before submitting</label>
           <select id="iris-pref-submit">
             <option value="auto">Submit on its own</option>
@@ -490,16 +486,9 @@
           <input type="number" id="iris-pref-limit" min="0" max="500" />
         </div>
       </div>
-      <div class="iris-row-setting">
+      <div class="iris-row-setting" id="iris-own-resume-row">
         <div>
-          <div class="iris-row-title">Tailor my resume for each job</div>
-          <div class="iris-row-help">On: Iris builds a one-page resume for each posting and checks the fit first. Off: your own PDF goes out as it is, with no fit check.</div>
-        </div>
-        <label class="iris-daily-toggle"><input type="checkbox" id="checkbox-iris-pref-tailor" /> On</label>
-      </div>
-      <div class="iris-row-setting" id="iris-own-resume-row" hidden>
-        <div>
-          <div class="iris-row-title">My resume</div>
+          <div class="iris-row-title">Fallback resume</div>
           <div class="iris-row-help" id="iris-own-resume-help">No file chosen yet.</div>
         </div>
         <div class="iris-row-buttons">
@@ -541,37 +530,16 @@
     </div>
 
     <div class="settings-container" id="iris-resume-container">
-      <h3>Resume template</h3>
+      <h3>Resume service</h3>
       <div class="setting-secondary-label">
-        Iris fills a LaTeX template for each job and makes sure it comes out as exactly one, full page.
+        For each job Iris applies to, your resume service (resuma) rewrites your resume for that posting, using only your
+        real projects and skills. It takes 5 to 10 minutes, so Iris fills in the form meanwhile and uploads it last.
       </div>
       <div class="iris-row-setting">
         <div>
-          <div class="iris-row-title" id="iris-template-name">Built-in: Classic</div>
-          <div class="iris-row-help" id="iris-template-help">A clean one-page layout. Or use your own LaTeX resume: Iris keeps its look and refills it.</div>
+          <div class="iris-row-title">resuma</div>
+          <div class="iris-row-help" id="iris-resuma-status">Checking…</div>
         </div>
-        <div class="iris-row-buttons">
-          <button class="iris-button" id="iris-template-import" type="button">Use my LaTeX resume…</button>
-          <button class="iris-button" id="iris-template-show" type="button" hidden>Show template file</button>
-          <button class="iris-button" id="iris-template-builtin" type="button" hidden>Use the built-in one</button>
-        </div>
-      </div>
-      <div id="iris-template-report" class="iris-template-report" hidden></div>
-      <div class="iris-row-setting">
-        <div>
-          <div class="iris-row-title">LaTeX</div>
-          <div class="iris-row-help" id="iris-tex-status">Checking…</div>
-        </div>
-      </div>
-      <div class="iris-row-setting">
-        <div>
-          <div class="iris-row-title">Tailoring</div>
-          <div class="iris-row-help">How long Iris thinks about each job before picking.</div>
-        </div>
-        <select id="iris-tailor-thinking">
-          <option value="off">Fast (about 25 s)</option>
-          <option value="low">Careful (about a minute)</option>
-        </select>
       </div>
       <div class="iris-row-setting">
         <div>
@@ -596,7 +564,7 @@
         </div>
       </div>
       <div class="setting-section">
-        <button class="iris-button iris-primary" id="iris-preview-run" type="button">Make a resume</button>
+        <button class="iris-button iris-primary" id="iris-preview-run" type="button">Make a resume (5–10 minutes)</button>
         <button class="iris-button" id="iris-preview-open" type="button" hidden>Open PDF</button>
         <button class="iris-button" id="iris-preview-show" type="button" hidden>Show in Finder</button>
         <span class="iris-inline-status" id="iris-preview-status"></span>
