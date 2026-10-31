@@ -523,12 +523,20 @@ function irisPostingIds (url) {
 
 /* addresses that each name their posting and share none are two postings, even with one title at one company:
    Dexcom's JR121398 and JR121808 are both "SW Development Engineer 1", and the second was skipped as applied (10-30).
-   The user would rather apply twice than miss a job. */
+   The user would rather apply twice than miss a job. A job board numbers its own listings: a LinkedIn job id and the
+   employer's Greenhouse number are two numberings of one job, so a board's ids are compared only with the same board's
+   (10-30: Bot Auto and Reddit, applied on Greenhouse, looked new on LinkedIn and were applied to again). An employer's
+   own careers page and its ATS share one numbering (Citi's Job Req Id) and are compared. */
 function irisOtherPosting (urls, url) {
+  const board = function (u) {
+    let h = ''
+    try { h = new URL(u).hostname.replace(/^www\./, '').toLowerCase() } catch (e) { return '' }
+    return /(^|\.)(linkedin\.com|indeed\.com|joinhandshake\.com|glassdoor\.com|ziprecruiter\.com|simplify\.jobs|wellfound\.com|dice\.com)$/.test(h) ? h : ''
+  }
   const mine = irisPostingIds(url)
   if (!mine.length) return false
   const theirs = []
-  urls.forEach(function (u) { if (u) irisPostingIds(u).forEach(function (x) { theirs.push(x) }) })
+  urls.forEach(function (u) { if (u && board(u) === board(url)) irisPostingIds(u).forEach(function (x) { theirs.push(x) }) })
   return theirs.length > 0 && !mine.some(function (x) { return theirs.indexOf(x) >= 0 })
 }
 
