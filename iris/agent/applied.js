@@ -48,6 +48,10 @@ function overlap (a, b) {
 function linkedinConfirmed (peek, url) {
   if (!peek) return false
   if (/\b(your )?application (was )?sent\b|\bapplication submitted\b/i.test(String(peek.dialog || ''))) return true
+  // the newer /jobs/search-results/ page: the pop-up is no role=dialog, and the open job's pane heads "Application status"
+  // once it is in (11-04: a dozen Easy Applies that LinkedIn confirmed were filed needs_you)
+  if (/\byour application was sent to\b/i.test(String(peek.text || ''))) return true
+  if (/[?&]currentJobId=/i.test(String(url || '')) && /\bapplication status\b/i.test(String(peek.heads || ''))) return true
   // a search page lists other jobs beside this one: only the job's own page is read for it
   return /\/jobs\/view\//i.test(String(url || '')) && /\bapplication submitted\b/i.test(String(peek.text || ''))
 }
