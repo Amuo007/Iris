@@ -32,6 +32,7 @@ const irisUsageLib = require('./iris/agent/usage.js')
 const irisContextMeter = require('./iris/agent/contextMeter.js')
 const irisAppliedLib = require('./iris/agent/applied.js')
 const irisRunMemoryLib = require('./iris/agent/runMemory.js')
+const irisFilePickerLib = require('./iris/agent/filePicker.js')
 
 const IRIS_SETTINGS_VERSION = 2
 
@@ -2428,10 +2429,30 @@ IrisComputer.prototype.act = async function (action) {
       if (!file && transcriptNow && path.basename(wanted) === path.basename(transcriptNow)) file = transcriptNow
       if (!file) file = irisFindFile(action.file)
       if (!file) return { ok: false, error: 'no file named "' + action.file + '" in Downloads, Desktop or Documents' }
-      try {
-        await wc.debugger.sendCommand('DOM.setFileInputFiles', { files: [file], backendNodeId: chooser.backendNodeId }, chooser.sessionId)
-      } catch (e) {
-        return { ok: false, error: 'could not choose the file: ' + e.message }
+      // the picker's own file box; the newer system picker names none (Gem's forms, see iris/agent/filePicker.js), and a
+      // box can be gone after minutes of waiting for the resume: then the page's file box itself, found by its words
+      let why = chooser.backendNodeId ? '' : 'the picker names no file box'
+      if (chooser.backendNodeId) {
+        try {
+          await wc.debugger.sendCommand('DOM.setFileInputFiles', { files: [file], backendNodeId: chooser.backendNodeId }, chooser.sessionId)
+        } catch (e) { why = e.message }
+      }
+      if (why) {
+        try {
+          const want = file === resumeNow ? 'resume' : file === this.lastCover ? 'cover' : file === transcriptNow ? 'transcript' : ''
+          const found = await wc.debugger.sendCommand('Runtime.evaluate', { expression: irisFilePickerLib.pageFileBox(want) }, chooser.sessionId)
+          // an error thrown in the page comes back as an object too: only an element is a file box
+          const failed = found && found.exceptionDetails
+          const objectId = !failed && found && found.result && found.result.subtype === 'node' ? found.result.objectId : null
+          if (!objectId) {
+            throw new Error(why + ', and no file box was found on the page' +
+              (failed ? ' (' + String((failed.exception && failed.exception.description) || failed.text || 'script error').split('\n')[0] + ')' : ''))
+          }
+          await wc.debugger.sendCommand('DOM.setFileInputFiles', { files: [file], objectId: objectId }, chooser.sessionId)
+          DBUG('upload: ' + path.basename(file) + ' went into the page\'s file box (' + why + ')')
+        } catch (e) {
+          return { ok: false, error: 'could not choose the file: ' + e.message }
+        }
       }
       this.pendingChooser = null
       if (this.lastJob && file === resumeNow) { this.lastJob.uploaded = true; this.lastJob.uploadedFile = file }
@@ -2944,6 +2965,16 @@ const IRIS_SELECT_CSS = 'select, ::picker(select) { appearance: base-select; }' 
   // the browser's "please fill in this field" bubble is native too: mark invalid fields visibly
   ' :user-invalid { outline: 3px solid #e11d48 !important; outline-offset: 1px !important; }'
 
+/* the newer system file picker, which Iris cannot answer, hidden from every page this tab opens from now on, and
+   refused on the one open now (see iris/agent/filePicker.js). The tab's own pages only: frames from other sites
+   (CAPTCHA widgets, payment forms) keep theirs, and an embedded form that opens it gets its file box found at upload.
+   A failure only leaves the picker as it was. */
+function irisNoFsPicker (wc) {
+  return wc.debugger.sendCommand('Page.addScriptToEvaluateOnNewDocument', { source: irisFilePickerLib.HIDE_FS_PICKER })
+    .then(function () { return wc.debugger.sendCommand('Runtime.evaluate', { expression: irisFilePickerLib.REFUSE_FS_PICKER }) })
+    .catch(function (e) { DBUG('file picker setup failed: ' + e.message) })
+}
+
 IrisComputer.prototype.watch = function (wc) {
   const self = this
   if (this.watched === wc) return
@@ -2985,6 +3016,8 @@ IrisComputer.prototype.watch = function (wc) {
     wc.debugger.on('message', onMessage)
     wc.debugger.sendCommand('Page.enable').then(function () {
       return wc.debugger.sendCommand('Page.setInterceptFileChooserDialog', { enabled: true })
+    }).then(function () {
+      return irisNoFsPicker(wc)
     }).then(function () {
       return wc.debugger.sendCommand('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true })
     }).catch(function (e) { DBUG('debugger setup failed: ' + e.message) })
