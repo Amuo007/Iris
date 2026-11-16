@@ -87,3 +87,53 @@ test('each job gets its own resuma folder name, never a path', () => {
   assert.ok(!/\.\./.test(R.resumaCompany({ company: '../..', title: 'x/y' })))
   assert.ok(!/[/\\]/.test(R.resumaCompany({ company: 'a/b\\c', title: 'd' })))
 })
+
+test('leaving an application cancels its resume, but form, login and email steps preserve it', () => {
+  const job = { company: 'Acme', title: 'Engineer', url: 'https://jobs.acme.com/job/12345', resume: '/resume.pdf', tabId: 'application' }
+  assert.ok(R.moveOnReason(job, { type: 'cancel_resume', reason: 'duplicate' }))
+  assert.ok(R.moveOnReason(job, { type: 'lookup', kind: 'jobs' }))
+  assert.ok(R.moveOnReason(job, { type: 'tailor_resume' }, { sameJob: false }))
+  assert.ok(!R.moveOnReason(job, { type: 'tailor_resume' }, { sameJob: true }))
+  assert.ok(R.moveOnReason(job, { type: 'close_tab' }, { tabId: 'application' }))
+  assert.ok(!R.moveOnReason(job, { type: 'close_tab' }, { tabId: 'email' }))
+  for (const url of ['https://www.ycombinator.com/jobs/role/software-engineer?experience=entry-level', 'https://jobs.acme.com/search-jobs', 'https://www.google.com/search?q=new+grad+jobs']) {
+    assert.ok(R.moveOnReason(job, { type: 'switch_tab' }, { url }), url)
+  }
+  for (const url of ['https://mail.google.com/mail/u/0/', 'https://citi.wd5.myworkdayjobs.com/2/job/New-York/Python-Developer_261002498-1/apply', 'https://login.microsoftonline.com/common/oauth2/authorize', 'https://jobs.acme.com/job/12345/apply', 'https://boards.greenhouse.io/embed/job_app?token=123456']) {
+    assert.ok(!R.moveOnReason(job, { type: 'navigate' }, { url }), url)
+  }
+  assert.ok(!R.moveOnReason(Object.assign({}, job, { resumeCancelled: 'duplicate' }), { type: 'lookup', kind: 'jobs' }))
+  assert.ok(!R.moveOnReason(Object.assign({}, job, { uploaded: true }), { type: 'lookup', kind: 'jobs' }))
+})
+
+test('labelled requisitions match public and ATS postings without confusing companies or distinct jobs', () => {
+  assert.deepStrictEqual(R.requisitionIds('Job Req Id:\n\n261002498\nLocation: New York'), ['261002498'])
+  assert.deepStrictEqual(R.requisitionIds('Requisition ID: JR-121808'), ['jr121808'])
+  assert.deepStrictEqual(R.requisitionIds('Salary $126500.00; posted Oct 29, 2026; 3 years of experience'), [])
+  const records = [{ company: 'Citi', title: 'Python Developer', requisitionIds: ['261002498'] }]
+  const job = { company: 'Citi', title: 'Python Developer', requirements: 'Job Req Id: 261002498' }
+  assert.strictEqual(R.appliedRequisition(job, records, () => []), records[0])
+  assert.strictEqual(R.appliedRequisition(Object.assign({}, job, { requirements: 'Job Req Id: 261002499' }), records, () => []), null)
+  assert.strictEqual(R.appliedRequisition(Object.assign({}, job, { company: 'Citizens Financial Group' }), records, () => []), null)
+  assert.strictEqual(R.appliedRequisition(Object.assign({}, job, { requirements: 'Python Developer, New York' }), records, () => []), null)
+})
+
+test('tailoring sends the company, role and posting with an explicit 90% target', async () => {
+  let received
+  const spawn = fakeSpawn(function (name, args, reply) {
+    received = args
+    reply({ structuredContent: { job_id: 'tailored' } })
+  })
+  const c = R.createResumaClient({ spawn, command: 'py' })
+  const job = { company: 'Acme', title: 'Backend Engineer', requirements: 'Build Python APIs and maintain distributed services.' }
+  await c.call('tailor_resume', R.tailorArgs(job, 'preview'))
+  assert.match(received.jd_text, /^Company: Acme\nRole: Backend Engineer\n/)
+  assert.ok(received.jd_text.endsWith(job.requirements))
+  assert.strictEqual(received.coverage_target, 0.90)
+  assert.strictEqual(received.company, 'Acme - Backend Engineer preview')
+  assert.strictEqual(received.mode, 'jd_aware')
+  assert.strictEqual(received.project_strategy, 'adaptive')
+  assert.strictEqual(received.wait, false)
+  assert.strictEqual(R.tailorArgs(Object.assign({}, job, { requirements: 'x'.repeat(30000) })).jd_text.length, 20000)
+  c.stop()
+})

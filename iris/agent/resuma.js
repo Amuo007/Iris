@@ -112,6 +112,63 @@ function resumaCompany (job, tag) {
   return clean((clean(job && job.company, 40) || 'Company') + ' - ' + (clean(job && job.title, 50) || 'Job') + (tag ? ' ' + clean(tag, 12) : ''), 110)
 }
 
+/* Keep the real company/role in the analysis text; company is also used as a unique output-folder label. */
+function tailorArgs (job, tag) {
+  return {
+    jd_text: ['Company: ' + String(job.company || ''), 'Role: ' + String(job.title || ''), '',
+      'Job posting:', String(job.requirements || '').trim()].join('\n').slice(0, 20000),
+    company: resumaCompany(job, tag),
+    mode: 'jd_aware',
+    project_strategy: 'adaptive',
+    coverage_target: 0.90,
+    wait: false
+  }
+}
+
+/* Employer requisition numbers bridge a public careers URL to its ATS URL.
+   Only explicitly labelled IDs count, never dates, salaries or arbitrary numbers. */
+function requisitionIds (text) {
+  const ids = []
+  const re = /\b(?:job\s*(?:req(?:uisition)?\s*(?:id|number|no\.?|#)?|id|number|no\.?)|req(?:uisition)?\s*(?:id|number|no\.?|#))\s*[:#-]?\s*([a-z]{0,8}[- ]?\d{4,}(?:[-_]\d{1,2})?)\b/gi
+  let m
+  while ((m = re.exec(String(text || '')))) {
+    const id = m[1].toLowerCase().replace(/[^a-z0-9]/g, '')
+    if (ids.indexOf(id) < 0) ids.push(id)
+  }
+  return ids
+}
+
+function appliedRequisition (job, records, idsForRecord) {
+  const normalize = function (s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '') }
+  const company = normalize(job.company)
+  const ids = requisitionIds(job.requirements)
+  if (!company || !ids.length) return null
+  return records.slice().reverse().find(function (rec) {
+    if (normalize(rec.company) !== company) return false
+    return (rec.requisitionIds || []).concat(idsForRecord(rec)).some(function (id) { return ids.indexOf(normalize(id)) >= 0 })
+  }) || null
+}
+
+/* Definite moves away from an application. Login/email tabs and form redirects are
+   deliberately not treated as abandoning it. Other decisions use cancel_resume. */
+function moveOnReason (job, action, target) {
+  if (!job || !job.resume || job.resumeCancelled || job.uploaded) return ''
+  const t = target || {}
+  if (action.type === 'cancel_resume') return action.reason || 'the application was left'
+  if (action.type === 'lookup' && action.kind === 'jobs') return 'searching for another job'
+  if (action.type === 'tailor_resume' && !t.sameJob) return 'starting another job'
+  if (action.type === 'close_tab' && t.active !== false && job.tabId && String(t.tabId) === String(job.tabId)) return 'closed the application tab'
+  if (!['navigate', 'new_tab', 'switch_tab', 'back'].includes(action.type) || !t.url) return ''
+  try {
+    const u = new URL(t.url)
+    const board = /\/(?:search-jobs|jobs\/(?:role|location)|jobs\/search)(?:\/|$)/i.test(u.pathname) ||
+      (/\/(?:jobs|careers|positions|openings)\/?$/i.test(u.pathname) && !u.searchParams.has('gh_jid')) ||
+      (/(^|\.)(google|bing)\.com$/i.test(u.hostname) && u.pathname === '/search' && /job|career|engineer/i.test(u.searchParams.get('q') || ''))
+    if (board) return 'returned to searching job listings'
+  } catch (e) { /* no destination */ }
+  return ''
+}
+
 /* a run until it is done: { ok, result } or { ok: false, error }. onProgress gets each new phase */
 async function waitForJob (client, jobId, opts) {
   const o = opts || {}
@@ -139,4 +196,4 @@ async function waitForJob (client, jobId, opts) {
   return { ok: false, error: 'resuma run not done after ' + Math.round((o.timeoutMs || 15 * 60000) / 60000) + ' minutes', timedOut: true }
 }
 
-module.exports = { createResumaClient, toolResult, resumaCompany, waitForJob }
+module.exports = { createResumaClient, toolResult, resumaCompany, tailorArgs, requisitionIds, appliedRequisition, moveOnReason, waitForJob }

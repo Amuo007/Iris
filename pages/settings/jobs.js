@@ -602,7 +602,10 @@ window.addEventListener('message', function (e) {
       document.getElementById('iris-preview-open').hidden = !p.ok
       document.getElementById('iris-preview-show').hidden = !p.ok
       document.getElementById('iris-preview-status').textContent = p.ok
-        ? 'Made ' + p.file.split('/').pop() + (typeof p.coverage === 'number' ? ' · covers ' + Math.round(p.coverage * 100) + '% of the posting\'s keywords' : '') + ' · ' + Math.round(p.ms / 60000) + ' min'
+        ? 'Made ' + p.file.split('/').pop() + (typeof p.coverage === 'number' ? ' · covers ' + Math.round(p.coverage * 100) + '% of the posting\'s keywords' : '') +
+          (p.targetMet === false ? ' · below the ' + Math.round((p.coverageTarget || 0.90) * 100) + '% target; see the report for gaps' : '') +
+          (p.requirementReview && p.requirementReview.checks && p.requirementReview.checks.length ? (p.requirementReview.complete === false ? ' · requirement review incomplete; see report' : ' · requirement review: ' + p.requirementReview.direct + ' direct, ' + p.requirementReview.transferable + ' transferable, ' + p.requirementReview.missing + ' gaps') : '') +
+          (p.projectDrafts && p.projectDrafts.length ? ' · ' + p.projectDrafts.length + ' generated project drafts to verify in the report' : '') + ' · ' + Math.round(p.ms / 60000) + ' min'
         : 'Could not make it: ' + (p.error || 'unknown error')
     }
   } else if (d.action === 'jobsStart') {

@@ -135,14 +135,34 @@ Put everything you have done in **Settings → Jobs → Career profile** — eve
 project — far more than fits on a page (or start from your LaTeX resume: Iris reads it in). Then
 ask Iris to "apply to jobs for me" (Non-stop keeps it going) or press **Start** under **Applying**.
 
-For each posting Iris reads the requirements and calls `tailor_resume`: the model picks the
-bullets, projects and skills that prove what the job asks for, best first, and may reword a
-bullet toward the job's words. Code then checks every pick: only items from your profile, and a
-rewording that adds a number, a tool or a new claim is undone. The result is built with your own
-LaTeX template (or the built-in one) and made **exactly one full page** — Iris builds it, measures
-how full the page is, and cuts or adds bullets until it fits. Jobs below your fit cutoff are
-skipped; anything only you can do (a CAPTCHA that stays, a missing file) is marked **Needs you**
-and Iris moves on. Tailored PDFs are kept in `~/Documents/Iris Resumes/<date> <company> - <job>/`.
+For each posting Iris sends the company, role and posting text to the local **resuma** service
+(`~/Desktop/Projects/resuma`). The model ranks relevant facts, modestly rewords experience,
+tailors projects and rebuilds skills, aiming for **90% weighted keyword coverage**. The strongest
+role-specific projects get the larger template slots. A separate check looks for evidence in
+experience and project bullets, so listing a keyword in skills does not end the tailoring process.
+A final AI review checks the actual job requirements against the finished content, accepts
+equivalent descriptions of the same work, and proposes focused edits. Its direct matches,
+transferable evidence and gaps include checked quotes from the posting and final resume.
+Experience keeps its original roles, technologies and metrics.
+
+Iris uses adaptive projects: when an existing project cannot fit the role, resuma can replace
+it with a generated project draft, including proposed quantitative outcomes. These are marked
+as **generated drafts requiring verification** in the report; they do not update your saved
+profile. The harness gives replacements the same heading and bullet space, compiles the
+original LaTeX layout and checks that the result remains **exactly one page**. It reports the
+actual coverage and missing requirements even when the target cannot be reached; this score
+measures keywords, not a guaranteed recruiter or ATS rating.
+
+The service runs in the background while Iris fills the form, then Iris uploads its PDF.
+Leaving an application cancels its queued or active resume generation, including the current
+model request. Duplicate applications, closing the application tab and returning to job search
+also cancel unused resume work; signing in or checking email keeps it running.
+Before requesting tailoring, Iris also checks explicitly labelled requisition numbers in the
+posting against application history, so a public careers URL can match its already-applied ATS posting.
+PDFs, posting text, LaTeX and reports are kept in
+`~/Documents/Iris Resumes/<date> <company> - <job>/`. The service changes and regression tests
+are also saved in `resources/resuma-tailoring.patch` for installations where resuma lives
+outside this repository (apply from the resuma directory with `patch -p1`).
 For Greenhouse, Lever and Ashby postings the tailoring also gets the posting's own text from its link
 (read outside the browser; never LinkedIn or a site you have an account on). The fit drops when a
 posting asks for more years than your job dates show; "how many years with X" is answered from the

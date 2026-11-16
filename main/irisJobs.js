@@ -236,6 +236,10 @@ var irisResumeRuns = {}
  * `file` does not exist yet. job: { title, company, url, requirements = the posting's own words }.
  */
 async function irisResumeStart (job, hooks) {
+  if (!(hooks && hooks.preview)) {
+    const before = irisApplicationBeforeTailoring(job)
+    if (before) return { ok: false, alreadyApplied: true, error: 'already applied to this posting; no resume requested' }
+  }
   const started = Date.now()
   const jd = String(job.requirements || '').trim()
   // one run per posting: the same job again finds its run; another posting with the same company and title (two
@@ -256,14 +260,7 @@ async function irisResumeStart (job, hooks) {
   try { fs.writeFileSync(path.join(folder, 'jd.txt'), jd) } catch (e) { /* only a copy for the user */ }
   let first
   try {
-    first = await irisResuma().call('tailor_resume', {
-      jd_text: jd.slice(0, 20000),
-      company: irisResumaLib.resumaCompany(job, path.basename(folder).slice(0, 10)),
-      // resuma's own default (the user, 10-30: "it's supposed to make it, no matter what it takes"): the skills section
-      // may add the posting's skills next to the user's, flagged as gap skills in its report and capped at half the items
-      mode: 'jd_aware',
-      wait: false
-    }, 90000)
+    first = await irisResuma().call('tailor_resume', irisResumaLib.tailorArgs(job, path.basename(folder).slice(0, 10)), 90000)
   } catch (e) {
     return { ok: false, error: 'the resume service did not start: ' + e.message }
   }
@@ -296,8 +293,16 @@ async function irisResumeStart (job, hooks) {
         pages: res.pages,
         layoutOk: res.layout_ok,
         coverage: res.coverage,
+        coverageTarget: res.coverage_target,
+        targetMet: res.target_met,
+        evidenceCoverage: res.evidence_coverage,
+        supportedEvidenceCoverage: res.supported_evidence_coverage,
+        evidenceTargetMet: res.evidence_target_met,
+        missingEvidence: res.missing_evidence,
         missing: res.missing_keywords,
         projects: res.projects_chosen,
+        projectDrafts: res.project_drafts || [],
+        requirementReview: res.requirement_review || {},
         seconds: res.seconds
       }
       fs.writeFileSync(path.join(folder, 'job.json'), JSON.stringify(about, null, 1))
@@ -308,7 +313,21 @@ async function irisResumeStart (job, hooks) {
     }
     run.finished = true
     DBUG('resuma: run ' + run.jobId + ' done in ' + Math.round((Date.now() - started) / 1000) + ' s: ' + file)
-    return { ok: true, file: file, folder: folder, coverage: res.coverage, missing: res.missing_keywords || [], layoutOk: res.layout_ok, ms: Date.now() - started }
+    return {
+      ok: true,
+      file: file,
+      folder: folder,
+      coverage: res.coverage,
+      coverageTarget: res.coverage_target,
+      targetMet: res.target_met,
+      evidenceCoverage: res.evidence_coverage,
+      missingEvidence: res.missing_evidence || [],
+      projectDrafts: res.project_drafts || [],
+      requirementReview: res.requirement_review || {},
+      missing: res.missing_keywords || [],
+      layoutOk: res.layout_ok,
+      ms: Date.now() - started
+    }
   })
   irisResumeRuns[folder] = run
   return run
@@ -322,10 +341,8 @@ function irisResumeRunByFile (file) {
   return f ? irisResumeRuns[f] : null
 }
 
-/* A job left after its resume was asked for (skipped, or failed: its posting closed): its run is cancelled while it
-   still waits in the resume service's queue, so the next job's resume does not wait behind it and the model server
-   (Iris's own as well) is not shared with it. 10-30: the runs for Atlassian, SambaNova and Salesforce went on after
-   their skips. A run already writing cannot be stopped: the service lets it finish. */
+/* Cancel both queued and running work for an abandoned application. The service
+   aborts the active HTTP request and does not start another tailoring stage. */
 function irisResumeCancel (file) {
   const run = irisResumeRunByFile(file)
   if (!run || run.finished || run.failed || !run.jobId) return Promise.resolve(false)
@@ -339,7 +356,7 @@ function irisResumeCancel (file) {
         DBUG('resuma: run ' + run.jobId + ' cancelled (its job was left)')
         return true
       }
-      DBUG('resuma: run ' + run.jobId + ' not cancelled (' + ((j && j.status) || 'no status') + '): a run already writing finishes on its own')
+      DBUG('resuma: run ' + run.jobId + ' not cancelled (' + ((j && j.status) || 'no status') + ')')
       return false
     })
     .catch(function (e) { DBUG('resuma: cancel ' + run.jobId + ': ' + e.message); return false })
@@ -474,6 +491,13 @@ function irisJobKey (url) {
       const req = u.searchParams.get('career_job_req_id') || ''
       return req ? (u.hostname + '/job/' + (u.searchParams.get('company') || '') + '/' + req).toLowerCase() : ''
     }
+    // Indeed's Easy Apply form (smartapply.indeed.com/beta/indeedapply/form/review-module) has one address for every job,
+    // and its search page shows any job at indeed.com/jobs?…&vjk=…: without the job's jk or vjk they name no posting (a
+    // real run's EnerSys application on the form held back six other jobs' Submit as "already applied", 11-06)
+    if (/^smartapply\.indeed\.com$/i.test(u.hostname) || (/(^|\.)indeed\.com$/i.test(u.hostname) && /^\/jobs\/?$/i.test(u.pathname))) {
+      const jk = u.searchParams.get('jk') || u.searchParams.get('vjk') || ''
+      return jk ? ('indeed.com/viewjob?jk=' + jk).toLowerCase() : ''
+    }
     // only the parameters that name a job stay ("?gh_jid=…", Greenhouse's embed "?for=…&token=…"): "?embed=true" on an
     // Ashby link made a real run see Quora, applied to an hour before, as a new job
     const keep = new URLSearchParams()
@@ -542,6 +566,16 @@ function irisOtherPosting (urls, url) {
 
 function irisApplicationFind (rec) {
   return irisApplicationsLoad().slice().reverse().find(function (a) { return irisSameJob(a, rec) }) || null
+}
+
+/* Run again after the full posting is read, before any resume-service call. Citi's
+   public URL has a marketing ID; its labelled Job Req Id names the applied Workday job. */
+function irisApplicationBeforeTailoring (job) {
+  const sent = irisApplicationsLoad().filter(function (a) { return a.status === 'applied' || irisProbablySent(a) })
+  const same = sent.slice().reverse().find(function (a) { return irisSameJob(a, job) })
+  return same || irisResumaLib.appliedRequisition(job, sent, function (rec) {
+    return [rec.url].concat(rec.urls || [], rec.alsoAt || []).filter(Boolean).flatMap(irisPostingIds)
+  })
 }
 
 /* A job left for the user (or failed) after a Submit that showed no confirmation was most likely sent: its note says
@@ -857,6 +891,8 @@ function irisJobsPrompt (task, mode) {
     '   requirements = the POSTING itself in its own words (its responsibilities and qualifications, as much of it as you',
     '   read), never what such jobs usually ask and nothing about the user. The user\'s resume service rewrites their own',
     '   resume for this posting in the background (5-10 minutes): do not wait for it, go on with the application.',
+    '   If you decide to leave this application, send cancel_resume {"reason":"<why>"} before moving on.',
+    '   This stops its active resume generation too. Never leave an unused resume running while searching for another job.',
     '4. Jobs you rule out from a list without opening them (wrong place, role or level): log each as skipped with the',
     '   reason, right away — several log_application in one "actions" list, in the same step as you decide.',
     '5. Apply: fill the form from My info and the answers below, and leave the resume for last on a one-page form. On a',

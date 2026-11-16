@@ -54,6 +54,7 @@ const SPEC = {
   bookmark: { required: [], optional: ['title', 'url', 'remove'] },
   bookmarks: { required: [], optional: ['query'] },
   tailor_resume: { required: ['title'], optional: ['company', 'requirements', 'url'] },
+  cancel_resume: { required: [], optional: ['reason'] },
   cover_letter: { required: ['title'], optional: ['company', 'requirements'] },
   log_application: { required: ['status'], optional: ['company', 'title', 'url', 'note'] },
   autofill: { required: [], optional: [] },
@@ -799,6 +800,7 @@ function describeAction (action) {
     case 'lookup': return 'Look up (' + (action.kind || 'web') + ') "' + action.query + '"'
     case 'bookmarks': return action.query ? `Look up bookmarks for "${action.query}"` : 'List bookmarks'
     case 'tailor_resume': return 'Tailor the resume for ' + action.title + (action.company ? ' at ' + action.company : '')
+    case 'cancel_resume': return 'Stop the unused resume' + (action.reason ? ': ' + action.reason : '')
     case 'cover_letter': return 'Write a cover letter for ' + action.title + (action.company ? ' at ' + action.company : '')
     case 'autofill': return 'Autofill the form from the profile'
     case 'choose': return 'Choose "' + action.option + '" in "' + action.field + '"'
@@ -833,6 +835,7 @@ const ACTION_SPEC_TEXT = [
   'goes straight to results, or where a hidden button is. Only real, reusable shortcuts; you will see them next visit.',
   '',
   'Actions. x/y are pixel positions in the screenshot, from its top-left corner:',
+  '  cancel_resume {"reason":str}                     (stop resume generation when leaving an application)',
   '  click        {"x":int,"y":int}',
   '  double_click {"x":int,"y":int}',
   '  right_click  {"x":int,"y":int}',

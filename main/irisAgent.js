@@ -813,6 +813,7 @@ function irisFreshQueryKept (query, task) {
 }
 
 async function irisDoLookup (req) {
+  if (irisComputer && req && req.kind === 'jobs') await irisComputer.abandonResume('searching for another job')
   let kept = []
   if (req && req.kind === 'jobs') {
     const task = irisSession ? ((irisSession.items || []).find(function (it) { return it.kind === 'user' }) || {}).text : ''
@@ -872,7 +873,15 @@ var irisPostingTexts = []
 function irisPostingTextKeep (url, title, text) {
   const body = irisRequirementsLib.postingBody(text).trim()
   if (!url || body.length < 300) return
+  if (!irisPostingTexts.some(function (p) { return p.key === irisJobKey(url) && p.text === body })) irisPostingSave(url, title, body)
   irisPostingTexts = irisPostingTexts.filter(function (p) { return p.key !== irisJobKey(url) }).concat({ key: irisJobKey(url), url: url, title: title, text: body, at: Date.now() }).slice(-40)
+}
+/* every posting read goes on disk too, skipped jobs included, for the user's own job statistics; it is only a copy,
+   so a failed write changes nothing in the run */
+function irisPostingSave (url, title, text) {
+  try {
+    fs.appendFile(path.join(userDataPath, 'iris-postings.jsonl'), JSON.stringify({ at: Date.now(), url: url, title: title, text: text }) + '\n', function () {})
+  } catch (e) { /* see above */ }
 }
 /* the kept text of this job's posting: by its link, else the newest one read in the last hour that names its title
    (and its company: "Associate Software Engineer" at Morningstar found Exelixis's "Associate Engineer" posting by its
@@ -880,7 +889,7 @@ function irisPostingTextKeep (url, title, text) {
 function irisPostingTextFor (job) {
   const key = job.url ? irisJobKey(job.url) : ''
   const nums = job.url ? irisPostingNumbers(job.url) : []
-  const byLink = irisPostingTexts.slice().reverse().find(function (p) { return p.key === key || (nums.length && irisPostingNumbers(p.url).some(function (n) { return nums.indexOf(n) >= 0 })) })
+  const byLink = irisPostingTexts.slice().reverse().find(function (p) { return (key && p.key === key) || (nums.length && irisPostingNumbers(p.url).some(function (n) { return nums.indexOf(n) >= 0 })) })
   if (byLink) return byLink.text
   const words = (String(job.title || '').toLowerCase().match(/[a-z0-9+#]{3,}/g) || []).filter(function (w) { return !/^(and|the|for|with|senior|junior|new|grad|hrs)$/.test(w) })
   const squash = function (s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '') }
@@ -895,6 +904,24 @@ function irisPostingTextFor (job) {
 /* the page open now is this job's posting or form: a web page naming the company, not another logged job's. After a
    submit Iris tailors the next job from the last one's page: Exelixis's Candidate Home made Zoom's AI Engineer "already
    applied", and Cloudflare's thank-you page gave Dell's resume Cloudflare's posting (10-30) */
+/* a job board (LinkedIn, Indeed, Handshake …) shows many postings on one page, and its address and title never name
+   the one in hand: its own posting id does (LinkedIn's Easy Apply sits on /jobs/search?currentJobId=<id>). true: the
+   job in hand is open there, false: another posting is, null: cannot tell (not a board, or no ids). 10-30: LinkedIn
+   Easy Apply resumes were cancelled as "left" right after they were asked for, about 30 times, and those jobs went
+   out with the user's own resume. */
+const IRIS_JOB_BOARD = /(^|\.)(linkedin\.com|indeed\.com|joinhandshake\.com|glassdoor\.com|ziprecruiter\.com|simplify\.jobs|wellfound\.com|dice\.com)$/i
+function irisBoardJobId (url) {
+  const u = String(url || '')
+  const m = /[?&](?:currentJobId|vjk|jk|jobId)=([\w-]+)/i.exec(u) || /\/(?:jobs\/view|viewjob|job-search|jobs)\/(\d{5,})/i.exec(u)
+  return m ? m[1] : ''
+}
+function irisBoardPageIsJob (url, job) {
+  const site = irisSiteOf(url) || ''
+  if (!IRIS_JOB_BOARD.test(site) || !job || irisSiteOf(job.url) !== site) return null
+  const here = irisBoardJobId(url)
+  const theirs = irisBoardJobId(job.url)
+  return here && theirs ? here === theirs : null
+}
 function irisPageIsJob (url, title, job) {
   if (!/^https?:/i.test(url || '')) return false
   const squash = function (s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '') }
@@ -1407,6 +1434,7 @@ IrisComputer.prototype.submitGuard = async function (wc, action) {
     if (site) { this.sendClicks = this.sendClicks || {}; this.sendClicks[site] = Date.now() }
     return null
   }
+  if (this.lastJob && irisPageIsJob(here, wc.getTitle(), this.lastJob)) await this.abandonResume('this application was already handled')
   const when = new Date(rec.updated || rec.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   DBUG('submit held back: "' + label + '" on ' + here + ' (' + rec.status + ': ' + rec.company + ' / ' + rec.title + ')')
   return 'not clicked — "' + label + '" would send an application for a job that is already in the Applications list: ' +
@@ -1419,7 +1447,39 @@ IrisComputer.prototype.submitGuard = async function (wc, action) {
  * going (up to 15 minutes from its start), else the user's fallback PDF, so no application goes out without one.
  * { file, note }; file is null when there is neither.
  */
+IrisComputer.prototype.abandonResume = async function (reason, job) {
+  job = job || this.lastJob
+  if (!job || !job.resume || job.resumeCancelled) return false
+  job.resumeCancelled = reason || 'the application was left'
+  const stopped = await irisResumeCancel(job.resume)
+  if (job === this.lastJob) { this.resumeRun = null; this.lastResume = null }
+  this.notes = (this.notes || []).concat('Left ' + job.title + ': ' + job.resumeCancelled + '. ' + (stopped ? 'Its unused resume generation was cancelled.' : 'Cancellation requested; it may already be finished.'))
+  return stopped
+}
+
+IrisComputer.prototype.noteResumeDestination = async function (obs) {
+  const job = this.lastJob
+  if (!this.jobsMode || !job || job.resumeCancelled) return
+  // the board's page with this very job open is the application going on, not a return to the listings
+  if (irisBoardPageIsJob(obs.url, job) === true) { job.tabId = this.tabId; return }
+  const same = irisPageIsJob(obs.url, obs.title, job)
+  const rec = irisApplicationAt(obs.url)
+  if (same && rec && (rec.status === 'applied' || irisProbablySent(rec))) {
+    await this.abandonResume('this application was already handled')
+    return
+  }
+  // A different requisition on the same employer's site is another job, even
+  // when both have the same title. Cross-site Apply redirects are preserved.
+  let anotherPosting = false
+  try { anotherPosting = new URL(job.url).origin === new URL(obs.url).origin && irisOtherPosting([job.url], obs.url) } catch (e) {}
+  if (anotherPosting) { await this.abandonResume('opened another job posting'); return }
+  const leaving = irisResumaLib.moveOnReason(job, { type: 'navigate' }, { url: obs.url })
+  if (leaving) await this.abandonResume(leaving)
+  else if (same && !IRIS_MAIL_SITE.test(irisSiteOf(obs.url) || '')) job.tabId = this.tabId
+}
+
 IrisComputer.prototype.resumeForUpload = async function () {
+  if (this.lastJob && this.lastJob.resumeCancelled) return { file: null, note: 'This application was left and its resume cancelled. Request tailor_resume for this job again before uploading.' }
   const run = this.resumeRun || (this.lastJob && irisResumeRunByFile(this.lastJob.resume)) || null
   if (run && !this.resumeRun) this.resumeRun = run
   if (run && run.finished && fs.existsSync(run.file)) return { file: run.file }
@@ -1619,6 +1679,7 @@ IrisComputer.prototype.screenshot = async function () {
       this.mailNumbers = { at: Date.now(), nums: String(text || '').match(/\b\d{4,8}\b/g) || [] }
     } catch (e) { /* the page went away */ }
   }
+  await this.noteResumeDestination(obs)
   if (this.memory && obs.url && obs.url !== this.lastVisit) {
     this.lastVisit = obs.url
     this.memory.add('visit', obs.title || obs.url, { url: obs.url, title: obs.title })
@@ -1631,7 +1692,10 @@ IrisComputer.prototype.screenshot = async function () {
       if (!IRIS_CONFIRM_PAGE.test(obs.url) && /\/(jobs?|careers?|positions?|openings?|postings?)\b|greenhouse|lever\.co|ashbyhq|workday|smartrecruiters|icims|workable|gh_jid=/i.test(obs.url)) {
         try {
           const shown = String(await withTimeout(wc.executeJavaScript('document.body ? document.body.innerText.slice(0, 30000) : ""'), 3000, 'page text') || '')
-          if (irisRequirementsLib.looksLikePosting(shown, obs.title, obs.url)) irisPostingTextKeep(obs.url, obs.title || '', shown)
+          if (irisRequirementsLib.looksLikePosting(shown, obs.title, obs.url)) {
+            irisPostingTextKeep(obs.url, obs.title || '', shown)
+            if (this.lastJob && irisBoardPageIsJob(obs.url, this.lastJob) !== true && !irisPageIsJob(obs.url, obs.title, this.lastJob)) await this.abandonResume('opened another job posting')
+          }
         } catch (e) { /* the page went away */ }
       }
     }
@@ -1958,6 +2022,16 @@ IrisComputer.prototype.act = async function (action) {
   const self = this
   const view = this.view()
   const wc = view.webContents
+  const target = {}
+  if (action.type === 'navigate' || action.type === 'new_tab') target.url = action.url
+  if (action.type === 'switch_tab' || action.type === 'close_tab') {
+    const tabs = irisTabList()
+    const tab = action.tab ? tabs[action.tab - 1] : tabs.find(function (t) { return t.active })
+    if (tab) { target.url = tab.url; target.tabId = tab.id; target.active = tab.active }
+  }
+  if (action.type === 'tailor_resume' && this.lastJob) target.sameJob = irisSameJob(this.lastJob, action)
+  const leaving = target.url && irisBoardPageIsJob(target.url, this.lastJob) === true ? '' : irisResumaLib.moveOnReason(this.lastJob, action, target)
+  if (leaving) await this.abandonResume(leaving)
   // typing with no place given goes wherever the cursor is: right after a click in the same step that is the
   // field just clicked, otherwise often the wrong one (real run: "2026" landed in Email). Ask for the place.
   const prevAct = this.lastActType
@@ -1968,6 +2042,8 @@ IrisComputer.prototype.act = async function (action) {
   }
 
   switch (action.type) {
+    case 'cancel_resume':
+      return { ok: true }
     case 'navigate': {
       try { wc.stopFindInPage('clearSelection') } catch (e) { /* nothing to clear */ }
       let url = irisResolveUrl(action.url)
@@ -2079,8 +2155,8 @@ IrisComputer.prototype.act = async function (action) {
       try { shownTitle = wc.getTitle() } catch (e) { /* no title */ }
       const onJob = irisPageIsJob(wc.getURL(), shownTitle, { company: action.company || '', title: action.title })
       const job = { title: action.title, company: action.company || '', requirements: action.requirements || '', url: action.url || (onJob ? wc.getURL() : '') }
-      const before = irisApplicationFind(job)
-      if (before && before.status === 'applied') {
+      const before = irisApplicationBeforeTailoring(job)
+      if (before) {
         this.notes = (this.notes || []).concat('You already applied to ' + job.title + (job.company ? ' at ' + job.company : '') + ' on ' +
           new Date(before.updated || before.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + '. Skip it and find another job.')
         return { ok: true }
@@ -2097,7 +2173,6 @@ IrisComputer.prototype.act = async function (action) {
         this.notes = (this.notes || []).concat('Not logged yet (a resume was made for each): ' + unlogged.map(function (j) { return j.title + (j.company ? ' at ' + j.company : '') }).join('; ') +
           ' — send log_application for each as well (applied, needs_you, skipped or failed).')
       }
-      broadcastEvent({ type: 'resume:start', title: job.title, company: job.company, sessionId: this.sessionId })
       // the posting's own words next to Iris's summary of it, when its link can be read (see irisPostingText)
       // resuma reads the employer's words as the job description, all of them: the posting as Iris read it earlier, else
       // read again from its link, else the page as the browser shows it now; the model's summary only when none works
@@ -2114,14 +2189,28 @@ IrisComputer.prototype.act = async function (action) {
         job.requirements = posting
         DBUG('tailor: posting text ' + posting.length + ' chars (' + from + ') for ' + (job.url || job.title))
       } else DBUG('tailor: no posting text, the model\'s ' + String(job.requirements || '').length + ' characters go to resuma')
+      // Posting text can reveal the requisition shared by two different public/ATS URLs.
+      const duplicate = irisApplicationBeforeTailoring(job)
+      if (duplicate) {
+        if (this.lastJob && irisSameJob(this.lastJob, job)) await this.abandonResume('already applied to this requisition')
+        this.notes = (this.notes || []).concat('Already applied to this posting: ' + duplicate.title + ' at ' + duplicate.company + '. No resume was requested. Move on to another job.')
+        DBUG('tailor: refused duplicate requisition for ' + job.company + ' / ' + job.title)
+        return { ok: true }
+      }
+      const requisitions = irisResumaLib.requisitionIds(job.requirements)
+      broadcastEvent({ type: 'resume:start', title: job.title, company: job.company, sessionId: this.sessionId })
       // the user's resume service makes it in the background (5-10 minutes): the upload waits for it (see resumeForUpload)
       let run
       try { run = await irisResumeStart(job) } catch (e) { run = { ok: false, error: e.message } }
+      if (run.alreadyApplied) {
+        this.notes = (this.notes || []).concat(run.error + '. Move on to another job.')
+        return { ok: true }
+      }
       if (!run.ok) {
         const fb = irisFallbackResume()
         this.resumeRun = null
         this.lastResume = fb || null
-        this.lastJob = { title: job.title, company: job.company, url: job.url, fit: null, resume: fb || '', fallback: run.error, at: Date.now() }
+        this.lastJob = { title: job.title, company: job.company, url: job.url, requisitionIds: requisitions, tabId: this.tabId, fit: null, resume: fb || '', fallback: run.error, at: Date.now() }
         this.jobsTailored = (this.jobsTailored || []).filter(function (j) { return !irisSameJob(j, job) }).concat(this.lastJob)
         this.notes = (this.notes || []).concat('The resume service could not make a resume for this job (' + run.error + ').' +
           (fb ? ' Apply anyway: {"type":"upload","file":"resume"} puts in the user\'s own resume (' + path.basename(fb) + ').' : ' No fallback resume is chosen in Settings → Jobs: log the job needs_you naming the resume.'))
@@ -2130,7 +2219,7 @@ IrisComputer.prototype.act = async function (action) {
       }
       this.resumeRun = run
       this.lastResume = run.file
-      this.lastJob = { title: job.title, company: job.company, url: job.url, fit: null, resume: run.file, at: Date.now() }
+      this.lastJob = { title: job.title, company: job.company, url: job.url, requisitionIds: requisitions, tabId: this.tabId, fit: null, resume: run.file, at: Date.now() }
       this.jobsTailored = (this.jobsTailored || []).filter(function (j) { return !irisSameJob(j, job) }).concat(this.lastJob)
       const self = this
       run.done.then(function (r) {
@@ -2337,6 +2426,7 @@ IrisComputer.prototype.act = async function (action) {
         note: action.note || '',
         resume: (job && job.uploadedFile) || (job && job.resume && fs.existsSync(job.resume) ? job.resume : '') || '',
         fit: job && job.fit !== undefined ? job.fit : null,
+        requisitionIds: job ? job.requisitionIds || [] : [],
         sessionId: this.sessionId || ''
       }
       // sent from a thank-you or candidate-home page: filed under the posting seen on that site (a real run logged Brown &
@@ -2349,11 +2439,10 @@ IrisComputer.prototype.act = async function (action) {
         rec.note = (rec.note ? rec.note + ' ' : '') + '(The tailored resume was not uploaded in this run — the site may have kept an older one.)'
       }
       const item = irisApplicationAdd(rec)
-      // a job left after its resume was asked for: the resume service drops its run while it is still queued (see
-      // irisResumeCancel). Only for that very job (not one matched by a shortened title), and never for one left for
-      // the user: they may apply with it.
-      if ((rec.status === 'skipped' || rec.status === 'failed') && job && job.resume && !job.uploaded &&
-          irisSameJob(job, { url: action.url || '', company: rec.company, title: rec.title })) irisResumeCancel(job.resume)
+      // Any logged application has been left. Stop an unused resume even when
+      // handing the job to the user; a later retry can request tailoring again.
+      if (job && job.resume && !job.uploaded &&
+          irisSameJob(job, { url: action.url || '', company: rec.company, title: rec.title })) await this.abandonResume('application logged ' + rec.status, job)
       // logged in this run: its Submit is held back from now on, whatever it was logged as (see submitGuard)
       this.loggedIds = (this.loggedIds || []).concat(item.id).slice(-300)
       const label = { applied: 'Applied', skipped: 'Skipped', needs_you: 'Waiting for the user', failed: 'Could not apply' }[rec.status]
