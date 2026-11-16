@@ -195,18 +195,30 @@ function irisSafeName (s, max) {
 }
 
 /*
- * Resumes come from the user's resume service, resuma (Desktop/Projects/resuma, an MCP server Iris starts and keeps
- * running): it rewrites the user's own one-page LaTeX resume for the posting with the local model, in 5-10 minutes,
- * one run at a time. It replaced Iris's own tailoring and the one fixed PDF that went to every job (the user, 10-29).
+ * Resumes come from the user's resume service, resuma (an MCP server Iris starts and keeps running): it rewrites the
+ * user's own one-page LaTeX resume for the posting with the local model, in 5-10 minutes, one run at a time. It
+ * replaced Iris's own tailoring and the one fixed PDF that went to every job (the user, 10-29). Its code is this
+ * repository's resuma/ folder (scripts/setupResuma.sh makes its .venv). The folder chosen in Settings comes first,
+ * then ~/Desktop/Projects/resuma, where it lived before it joined the repository, then the repository's own copy.
  * Each job's papers go in its own folder under Iris Resumes (see irisJobFolder): the resume, the posting (jd.txt) and
  * resuma's report.
  */
 function irisResumaHome () {
-  return settings.get('irisResumaDir') || path.join(app.getPath('home'), 'Desktop', 'Projects', 'resuma')
+  const chosen = settings.get('irisResumaDir')
+  if (chosen) return chosen
+  const desktop = path.join(app.getPath('home'), 'Desktop', 'Projects', 'resuma')
+  // main.build.js sits in the repository root; the packaged app (Resources/app) carries no resuma/ folder
+  const inRepo = path.join(__dirname, 'resuma')
+  return [desktop, inRepo].find(irisResumaAt) || (fs.existsSync(path.join(inRepo, 'resuma')) ? inRepo : desktop)
+}
+
+/* resuma is usable in a folder when its .venv is made and its package is there */
+function irisResumaAt (home) {
+  return fs.existsSync(path.join(home, '.venv', 'bin', 'python')) && fs.existsSync(path.join(home, 'resuma'))
 }
 
 function irisResumaFound () {
-  return fs.existsSync(path.join(irisResumaHome(), '.venv', 'bin', 'python')) && fs.existsSync(path.join(irisResumaHome(), 'resuma'))
+  return irisResumaAt(irisResumaHome())
 }
 
 var irisResumaClient = null

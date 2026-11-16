@@ -7,3 +7,14 @@ build/
 
 # generated icon sources
 /build/
+
+# the resume service (resuma/): its environment, runs and the user's own profile stay on this Mac
+resuma/.venv/
+resuma/output/
+resuma/.env
+resuma/data/profile.json
+resuma/data/original.tex
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/

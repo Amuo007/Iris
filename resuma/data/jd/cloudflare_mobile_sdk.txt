@@ -1,0 +1,15 @@
+Desirable Skills, Knowledge, and Experience:
+* Deep experience building production software for either iOS with Swift or Android with Kotlin, and enough familiarity with the other ecosystem to guide shared architectural decisions
+* Experience designing or owning customer-distributed SDKs, libraries, or similarly constrained developer-facing products
+* Experience with mobile platform security concepts, including app and device integrity, secure key storage, application signing, authentication, and secure communications
+* Familiarity with native mobile networking stacks, HTTP APIs, and the integration challenges introduced by different application architectures and networking libraries
+* Experience diagnosing production issues that cross application, SDK, network, and service boundaries, while designing safe diagnostics that do not expose sensitive data
+* Understanding of mobile package distribution, source and binary compatibility, dependency management, and reliable release practices
+* Experience writing technical designs and aligning decisions across product, client, backend, edge, and security teams
+* Experience mentoring engineers and raising a team's technical bar through design review, code review, and knowledge sharing
+* Empathetic, proactive, and constructive written and verbal communication skills
+* Proven ability to operate within strict mobile performance budgets, including binary size, battery use, startup time, and main-thread overhead
+
+Bonus Points:
+* Familiarity with how native SDKs are consumed by cross-platform frameworks such as React Native and Flutter is a plus
+* Familiarity with lower-level languages like C++ or Rust for high-performance, cross-platform security modules is a plus

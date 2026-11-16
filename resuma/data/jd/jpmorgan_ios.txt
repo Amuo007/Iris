@@ -1,0 +1,22 @@
+Required qualifications, capabilities, and skills:
+
+* Formal training or certification in software engineering and 5+ years of applied experience.
+* Experience in system design, application development, testing, and maintaining operational stability.
+* Hands-on experience using enterprise-authorized AI-assisted software development tools within the work environment (e.g., for coding, test creation, troubleshooting, or documentation) with demonstrated ability to critically evaluate, validate, and refine AI-generated outputs for correctness, performance, and security.
+* Understanding of responsible AI use in engineering workflows, including data sensitivity considerations, secure handling of inputs/outputs, and adherence to resiliency and security expectations; ability to guide peers on safe and effective usage within team practices.
+* Proficiency in at least one programming language relevant to mobile development.
+* Strong knowledge of mobile development frameworks, including iOS, Swift, Objective-C, UIKit, Cocoa, SwiftUI
+* Familiarity with iOS design patterns (MVVM, MVC, MVP, VIPER, MVI, etc.).
+* Experience integrating native features such as Camera, Push Notifications, GPS, CoreML, and VisionKit.
+* Understanding of mobile application security, including device registration, biometrics, encryption, and data protection.
+* Experience with API integration and use of development tools like Xcode.
+* Proficiency with Git, source code management, and Agile software development methodologies.
+
+Preferred qualifications, capabilities, and skills:
+
+* Experience working with copilot or other related tools.
+* Familiarity with build automation tools and frameworks for static and dynamic analysis.
+* Ability to assess technology risks, perform threat modeling, and communicate risk to stakeholders.
+* Experience building relationships with cross-functional teams, including technology, business, audit, and risk partners.
+* Knowledge of OAuth, SSO, and NFC technologies.
+* Experience building and releasing apps to the App Store or enterprise stores using CI/CD pipelines.

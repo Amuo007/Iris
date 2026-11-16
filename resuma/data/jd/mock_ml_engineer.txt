@@ -1,0 +1,19 @@
+Machine Learning Engineer, Applied AI (Mock Labs)
+
+About the role
+We build retrieval-augmented generation (RAG) systems and LLM-powered search for enterprise customers. You will own pipelines end-to-end: data ingestion, chunking, embeddings, vector search, reranking, evaluation and serving.
+
+Responsibilities
+* Build and tune RAG pipelines: document chunking, embedding models, vector databases (FAISS, Qdrant, Pinecone, pgvector), hybrid search and rerankers
+* Serve LLMs efficiently (vLLM, Ollama, quantization) on constrained hardware and in the cloud; optimize latency, throughput and cost
+* Design evaluation harnesses for retrieval quality and answer faithfulness (hallucination rate, recall@k, LLM-as-judge)
+* Productionize models with Python, FastAPI and Docker; stream responses (SSE/WebSockets) to web clients
+* Fine-tune or prompt-engineer open models (Llama, Qwen, Mistral); work with PyTorch and Hugging Face
+* Collaborate with product and platform teams; write clear technical docs
+
+Requirements
+* Strong Python; experience with PyTorch or similar frameworks
+* Hands-on experience with embeddings, semantic search and vector databases
+* Experience deploying ML systems: Docker, Kubernetes, CI/CD, monitoring
+* Solid understanding of data structures, algorithms and probability
+* Nice to have: CUDA/GPU programming, edge deployment (Raspberry Pi, Jetson), SQL and caching strategies

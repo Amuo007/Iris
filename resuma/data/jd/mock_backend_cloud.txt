@@ -1,0 +1,19 @@
+Software Engineer II, Backend Platform (Mock Co)
+
+What you'll do
+* Design, build and operate Python services (FastAPI/Django) that power our public REST APIs at scale
+* Own PostgreSQL schemas, query performance and caching strategies (Redis) for high-throughput workloads
+* Ship containerized services with Docker and Kubernetes on AWS (EKS, RDS, S3, Lambda) through CI/CD pipelines (GitHub Actions)
+* Instrument services with metrics, logs and traces (Prometheus, Grafana, OpenTelemetry) and participate in an on-call rotation
+* Write unit and integration tests, review code, and document designs for cross-team consumers
+
+What we're looking for
+* 2+ years building backend services in Python; Go or TypeScript a plus
+* Strong knowledge of relational databases, SQL and data modeling; experience with NoSQL (MongoDB) welcome
+* Experience with Docker, Kubernetes and infrastructure-as-code (Terraform)
+* Understanding of distributed systems concepts: idempotency, rate limiting, retries, message queues (Kafka, SQS)
+* Familiarity with OAuth 2.0 / OIDC, API security and secret management
+* Experience with Agile development, Git and code review culture
+Nice to have
+* Exposure to LLM-powered features, vector databases or RAG pipelines in production
+* Experience optimizing API latency and cost (p95, caching, connection pooling)

@@ -1,0 +1,16 @@
+[project]
+name = "resuma"
+version = "0.1.0"
+description = "Harness that tailors a fixed LaTeX resume template to a job description with a local LLM, keeping the layout pixel-identical."
+requires-python = ">=3.11"
+dependencies = ["jinja2", "httpx", "pydantic>=2", "python-dotenv", "pymupdf", "mcp>=2.3"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools]
+packages = ["resuma"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

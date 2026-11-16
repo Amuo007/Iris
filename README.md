@@ -31,6 +31,7 @@ LinkedIn connection requests to people at that company. Real moments at 2× spee
 export PATH=~/.nvm/versions/node/v22.19.0/bin:$PATH
 
 npm install
+npm run setupResuma    # the resume service's Python environment (see Jobs below)
 npm run build
 npx electron . --development-mode
 ```
@@ -136,7 +137,8 @@ project — far more than fits on a page (or start from your LaTeX resume: Iris 
 ask Iris to "apply to jobs for me" (Non-stop keeps it going) or press **Start** under **Applying**.
 
 For each posting Iris sends the company, role and posting text to the local **resuma** service
-(`~/Desktop/Projects/resuma`). The model ranks relevant facts, modestly rewords experience,
+(the `resuma/` folder of this repository; see *Setting up the resume service* below). The model
+ranks relevant facts, modestly rewords experience,
 tailors projects and rebuilds skills, aiming for **90% weighted keyword coverage**. The strongest
 role-specific projects get the larger template slots. A separate check looks for evidence in
 experience and project bullets, so listing a keyword in skills does not end the tailoring process.
@@ -160,15 +162,30 @@ also cancel unused resume work; signing in or checking email keeps it running.
 Before requesting tailoring, Iris also checks explicitly labelled requisition numbers in the
 posting against application history, so a public careers URL can match its already-applied ATS posting.
 PDFs, posting text, LaTeX and reports are kept in
-`~/Documents/Iris Resumes/<date> <company> - <job>/`. The service changes and regression tests
-are also saved in `resources/resuma-tailoring.patch` for installations where resuma lives
-outside this repository (apply from the resuma directory with `patch -p1`).
+`~/Documents/Iris Resumes/<date> <company> - <job>/`. The tailoring changes made for Iris are
+part of `resuma/` already; `resources/resuma-tailoring.patch` keeps them for an older copy of
+resuma outside this repository (apply from that directory with `patch -p1`).
 For Greenhouse, Lever and Ashby postings the tailoring also gets the posting's own text from its link
 (read outside the browser; never LinkedIn or a site you have an account on). The fit drops when a
 posting asks for more years than your job dates show; "how many years with X" is answered from the
 jobs that mention X; answers you give on a form are saved for the next one; every job ends up in
 **Settings → Jobs → Applications** (applied, skipped, needs you).
 LaTeX must be installed (MacTeX). How each part works: [docs/TECHNIQUES.md](docs/TECHNIQUES.md).
+
+#### Setting up the resume service
+
+resuma is a Python program in [`resuma/`](resuma/) (its own README is there). After cloning, run
+
+```bash
+npm run setupResuma
+```
+
+It makes `resuma/.venv` with Python 3.11 or newer, installs resuma's dependencies and copies
+`resuma/.env.example` to `resuma/.env` (the local model's address; edit it for yours). Iris
+starts resuma from the folder chosen in Settings → Jobs, else from `~/Desktop/Projects/resuma`
+when that older install exists, else from this `resuma/` folder. Your own `data/profile.json`
+and `data/original.tex` are not in the repository: they are yours, so they stay on your Mac.
+`npm run test:resuma` runs resuma's tests.
 
 ### Use Iris from a coding agent (MCP)
 

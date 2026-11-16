@@ -76,6 +76,10 @@ module.exports = function (platform, extraOptions) {
       '!**/._*',
       '!**/icons/source',
       '!dist/app',
+      // the resume service is set up next to the repository's code, not inside the app (see scripts/setupResuma.sh)
+      '!resuma/',
+      '!**/__pycache__',
+      '!**/.pytest_cache',
       // this is copied during the build
       '!**/icons/icon.icns',
       // localization files are compiled and copied to dist
