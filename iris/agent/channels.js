@@ -16,15 +16,15 @@ const WAIT_MS = 15 * 60 * 1000 // how long a code request stays open
 const PER_HOUR = 6 // code requests sent per hour at most
 const KEEP_MS = 24 * 3600 * 1000 // finished requests are kept this long (to answer a late reply)
 
-/** A phone number as WhatsApp writes it: country code and number, digits only ("+1 (832) 263-4489" → "18322634489"). */
+/** A phone number as WhatsApp writes it: country code and number, digits only ("+1 (555) 010-2234" → "15550102234"). */
 function normalizeNumber (text) {
   const digits = String(text || '').replace(/[^\d]/g, '').replace(/^00/, '')
   return digits.length >= 8 && digits.length <= 15 ? digits : ''
 }
 
 /**
- * The user's number with its country code: a number typed without one ("832 263 4489") that is the end of the linked
- * number ("18322634489") is that number (a real setup saved 10 digits and every message went to an address that does
+ * The user's number with its country code: a number typed without one ("555 010 2234") that is the end of the linked
+ * number ("15550102234") is that number (a real setup saved 10 digits and every message went to an address that does
  * not exist). Otherwise as normalizeNumber.
  */
 function completeNumber (typed, linked) {
@@ -40,7 +40,7 @@ function jidFor (number) {
   return n ? n + '@s.whatsapp.net' : ''
 }
 
-/* the phone digits of a WhatsApp address ("18322634489:12@s.whatsapp.net" → "18322634489"); a hidden-number (LID)
+/* the phone digits of a WhatsApp address ("15550102234:12@s.whatsapp.net" → "15550102234"); a hidden-number (LID)
    address has none */
 function phoneOf (jid) {
   const m = /^(\d{8,15})(?::\d+)?@s\.whatsapp\.net$/.exec(String(jid || ''))

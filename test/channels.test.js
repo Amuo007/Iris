@@ -9,23 +9,23 @@ const T0 = Date.UTC(2026, 9, 24, 17, 0)
 const tiktok = { company: 'TikTok', title: 'Backend Engineer Graduate (Social Foundation)', what: 'TikTok sent a 6-digit code to your phone', url: 'https://lifeattiktok.com/resume/1/apply', tabId: 7 }
 
 test('numbers and chat addresses', () => {
-  assert.strictEqual(ch.normalizeNumber('+1 (832) 263-4489'), '18322634489')
+  assert.strictEqual(ch.normalizeNumber('+1 (555) 010-2234'), '15550102234')
   assert.strictEqual(ch.normalizeNumber('0091 98765 43210'), '919876543210')
   assert.strictEqual(ch.normalizeNumber('12345'), '', 'too short to be a phone number')
-  assert.strictEqual(ch.jidFor('+1 832 263 4489'), '18322634489@s.whatsapp.net')
-  assert.strictEqual(ch.phoneOf('18322634489:12@s.whatsapp.net'), '18322634489')
+  assert.strictEqual(ch.jidFor('+1 555 010 2234'), '15550102234@s.whatsapp.net')
+  assert.strictEqual(ch.phoneOf('15550102234:12@s.whatsapp.net'), '15550102234')
   assert.strictEqual(ch.phoneOf('123456789012345@lid'), '', 'a hidden-number address carries no phone number')
 })
 
 test('only the user\'s own number is listened to', () => {
-  const user = '+1 832 263 4489'
-  assert.ok(ch.isFromUser({ remoteJid: '18322634489@s.whatsapp.net' }, user))
+  const user = '+1 555 010 2234'
+  assert.ok(ch.isFromUser({ remoteJid: '15550102234@s.whatsapp.net' }, user))
   // WhatsApp may name the sender by a hidden id and give the number only as the alternative address
-  assert.ok(ch.isFromUser({ remoteJid: '98765432101234@lid', remoteJidAlt: '18322634489@s.whatsapp.net' }, user))
+  assert.ok(ch.isFromUser({ remoteJid: '98765432101234@lid', remoteJidAlt: '15550102234@s.whatsapp.net' }, user))
   assert.ok(!ch.isFromUser({ remoteJid: '98765432101234@lid' }, user), 'not provably the user: ignored')
   assert.ok(!ch.isFromUser({ remoteJid: '15550001111@s.whatsapp.net' }, user), 'someone else')
-  assert.ok(!ch.isFromUser({ remoteJid: '18322634489@s.whatsapp.net', fromMe: true }, user), 'Iris\'s own message')
-  assert.ok(!ch.isFromUser({ remoteJid: '18322634489@s.whatsapp.net' }, ''), 'no number set: nobody')
+  assert.ok(!ch.isFromUser({ remoteJid: '15550102234@s.whatsapp.net', fromMe: true }, user), 'Iris\'s own message')
+  assert.ok(!ch.isFromUser({ remoteJid: '15550102234@s.whatsapp.net' }, ''), 'no number set: nobody')
   assert.strictEqual(ch.messageText({ conversation: ' 482913 ' }), '482913')
   assert.strictEqual(ch.messageText({ extendedTextMessage: { text: 'code 482913' } }), 'code 482913')
   assert.strictEqual(ch.messageText({ imageMessage: {} }), '')
@@ -98,26 +98,26 @@ test('what the model is told names the code and the tab to go to', () => {
 })
 
 test('a number saved without its country code is completed from the linked number', () => {
-  assert.strictEqual(ch.completeNumber('832 263 4489', '18322634489'), '18322634489')
-  assert.strictEqual(ch.completeNumber('(832) 263-4489', '18322634489'), '18322634489')
-  assert.strictEqual(ch.completeNumber('+1 832 263 4489', '18322634489'), '18322634489')
-  assert.strictEqual(ch.completeNumber('+44 7700 900123', '18322634489'), '447700900123', 'another number is left as typed')
-  assert.strictEqual(ch.completeNumber('832 263 4489', ''), '8322634489', 'nothing linked yet: as typed')
-  assert.strictEqual(ch.completeNumber('', '18322634489'), '')
+  assert.strictEqual(ch.completeNumber('555 010 2234', '15550102234'), '15550102234')
+  assert.strictEqual(ch.completeNumber('(555) 010-2234', '15550102234'), '15550102234')
+  assert.strictEqual(ch.completeNumber('+1 555 010 2234', '15550102234'), '15550102234')
+  assert.strictEqual(ch.completeNumber('+44 7700 900123', '15550102234'), '447700900123', 'another number is left as typed')
+  assert.strictEqual(ch.completeNumber('555 010 2234', ''), '5550102234', 'nothing linked yet: as typed')
+  assert.strictEqual(ch.completeNumber('', '15550102234'), '')
 })
 
 test('linked to the user\'s own number: replies in "Message yourself" count, Iris\'s own messages do not', () => {
-  const self = { me: '18322634489', meLid: '205611111111111:7@lid', sentIds: new Set(['IRIS1']) }
+  const self = { me: '15550102234', meLid: '205611111111111:7@lid', sentIds: new Set(['IRIS1']) }
   // the user types a code in "Message yourself" on the phone
-  assert.ok(ch.isFromUser({ fromMe: true, id: 'PHONE1', remoteJid: '18322634489@s.whatsapp.net' }, '18322634489', self))
-  assert.ok(ch.isFromUser({ fromMe: true, id: 'PHONE2', remoteJid: '205611111111111@lid' }, '18322634489', self), 'self chat by hidden id')
+  assert.ok(ch.isFromUser({ fromMe: true, id: 'PHONE1', remoteJid: '15550102234@s.whatsapp.net' }, '15550102234', self))
+  assert.ok(ch.isFromUser({ fromMe: true, id: 'PHONE2', remoteJid: '205611111111111@lid' }, '15550102234', self), 'self chat by hidden id')
   // what Iris sent there itself
-  assert.ok(!ch.isFromUser({ fromMe: true, id: 'IRIS1', remoteJid: '18322634489@s.whatsapp.net' }, '18322634489', self))
+  assert.ok(!ch.isFromUser({ fromMe: true, id: 'IRIS1', remoteJid: '15550102234@s.whatsapp.net' }, '15550102234', self))
   // the user writing to someone else from the phone is not for Iris
-  assert.ok(!ch.isFromUser({ fromMe: true, id: 'PHONE3', remoteJid: '15550001111@s.whatsapp.net' }, '18322634489', self))
+  assert.ok(!ch.isFromUser({ fromMe: true, id: 'PHONE3', remoteJid: '15550001111@s.whatsapp.net' }, '15550102234', self))
   // a second number for Iris: the user's messages are never "from me"
-  assert.ok(!ch.isFromUser({ fromMe: true, id: 'X', remoteJid: '18322634489@s.whatsapp.net' }, '18322634489', { me: '15550002222', sentIds: new Set() }))
-  assert.ok(ch.isFromUser({ id: 'Y', remoteJid: '18322634489@s.whatsapp.net' }, '18322634489', { me: '15550002222', sentIds: new Set() }))
+  assert.ok(!ch.isFromUser({ fromMe: true, id: 'X', remoteJid: '15550102234@s.whatsapp.net' }, '15550102234', { me: '15550002222', sentIds: new Set() }))
+  assert.ok(ch.isFromUser({ id: 'Y', remoteJid: '15550102234@s.whatsapp.net' }, '15550102234', { me: '15550002222', sentIds: new Set() }))
 })
 
 test('Iris never reads its own messages as replies', () => {

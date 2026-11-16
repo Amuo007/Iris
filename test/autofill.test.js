@@ -6,7 +6,7 @@ const af = require('../iris/agent/autofill')
 
 /* the user's real profile shape (values shortened where they do not matter) */
 const bank = {
-  basics: { name: 'Amrinder Singh', email: 'a@example.com', phone: '(832) 263-4489', location: 'Houston, TX 77084', links: [{ label: 'LinkedIn', url: 'https://www.linkedin.com/in/x/' }, { label: 'GitHub', url: 'https://github.com/x' }, { label: 'Portfolio', url: 'https://x.github.io/portfolio/' }] },
+  basics: { name: 'Amrinder Singh', email: 'a@example.com', phone: '(555) 010-2234', location: 'Houston, TX 77084', links: [{ label: 'LinkedIn', url: 'https://www.linkedin.com/in/x/' }, { label: 'GitHub', url: 'https://github.com/x' }, { label: 'Portfolio', url: 'https://x.github.io/portfolio/' }] },
   education: [{ school: 'University of Houston', degree: 'Bachelor of Science, Computer Science', dates: 'Expected December 2026' }],
   experience: [{ title: 'Software Developer', company: 'Geometris (IoT Telematics)' }],
   prefs: { salary: 'Open to negotiation (entry level). If a number is required: the low end.' },
@@ -69,7 +69,7 @@ test('contact boxes', () => {
   assert.deepStrictEqual(plan('Last Name'), { do: 'text', value: 'Singh' })
   assert.deepStrictEqual(plan('Please provide your full legal name as it appears on your government ID'), { do: 'text', value: 'Amrinder Singh' })
   assert.deepStrictEqual(plan('Email'), { do: 'text', value: 'a@example.com' })
-  assert.deepStrictEqual(plan('Phone'), { do: 'text', value: '(832) 263-4489' })
+  assert.deepStrictEqual(plan('Phone'), { do: 'text', value: '(555) 010-2234' })
   assert.deepStrictEqual(plan('LinkedIn Profile'), { do: 'text', value: 'https://www.linkedin.com/in/x/' })
   assert.deepStrictEqual(plan('Website'), { do: 'text', value: 'https://x.github.io/portfolio/' })
   assert.deepStrictEqual(plan('Link 1'), { do: 'text', value: 'https://www.linkedin.com/in/x/' })
@@ -81,7 +81,7 @@ test('contact boxes', () => {
 
 test('a filled box is left alone unless a sure fact differs; essays and number boxes go to the agent', () => {
   assert.strictEqual(plan('First Name', 'text', null, { value: 'Amrinder' }).do, 'leave')
-  assert.strictEqual(plan('Phone', 'text', null, { value: '8322634489' }).do, 'leave')
+  assert.strictEqual(plan('Phone', 'text', null, { value: '5550102234' }).do, 'leave')
   assert.deepStrictEqual(plan('City', 'text', null, { value: 'Katy' }), { do: 'text', value: 'Houston', replace: 'Katy' })
   assert.deepStrictEqual(plan('Zip Code', 'text', null, { value: '77449' }), { do: 'text', value: '77084', replace: '77449' })
   assert.strictEqual(plan('Current Company', 'text', null, { value: 'Acme' }).do, 'leave')
