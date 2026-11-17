@@ -1,0 +1,14 @@
+.git
+node_modules
+dist
+data
+.env
+resuma/.venv
+resuma/output
+resuma/.env
+resuma/data/profile.json
+resuma/data/original.tex
+**/__pycache__
+**/.pytest_cache
+**/*.egg-info
+**/.DS_Store

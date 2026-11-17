@@ -18,3 +18,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.egg-info/
+
+# a Docker install (docs/docker.md): its data folder and its settings (VNC password) stay on that machine
+/data/
+/.env

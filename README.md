@@ -47,6 +47,16 @@ The package is ad-hoc signed (`codesign -s -`), which is fine for your own machi
 notarised, so if you copy it to another Mac, allow it once in *System Settings → Privacy &
 Security*.
 
+### Run it 24/7 in Docker (a NAS or any Linux box)
+
+```bash
+docker compose up -d --build         # then watch and use it at http://<host>:6080
+```
+
+One container holds Iris on a virtual screen, resuma with LaTeX, and the run tools. Your data stays in
+`data/` next to the compose file. [docs/docker.md](docs/docker.md) covers the password for the
+screen viewer, copying your data from a Mac (`scripts/copyToDocker.sh`) and signing in once.
+
 ### Watch the agent work without a model server
 
 Iris ships a scripted model so the whole pipeline can be exercised offline:

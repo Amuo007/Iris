@@ -1,0 +1,21 @@
+# Iris on a NAS or any always-on Linux box: docker compose up -d --build (see docs/docker.md).
+# Watch and use it at http://<host>:6080. Your data stays in ./data, which git and the image leave out.
+services:
+  iris:
+    build: .
+    image: iris:latest
+    container_name: iris
+    restart: unless-stopped
+    shm_size: 2gb
+    ports:
+      - "6080:6080"
+    environment:
+      TZ: ${TZ:-America/Chicago}
+      VNC_PASSWORD: ${VNC_PASSWORD:-}
+      IRIS_AUTOSTART: ${IRIS_AUTOSTART:-1}
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+    volumes:
+      - ./data/userdata:/home/iris/.config/Iris
+      - ./data/iris-run:/home/iris/ai/iris-run
+      - ./data/resuma:/data/resuma
