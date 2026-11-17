@@ -539,11 +539,17 @@ function irisSiteOf (url) {
   try { return new URL(url).hostname.replace(/^www\./, '') || null } catch (e) { return null }
 }
 
+/* a tip is for every later run; "linkedin.com: weekly invitation limit reached this run" (saved 11-14) was about one
+   run, and on 11-16 it still kept the LinkedIn step off after a new week had started */
+function irisTipLasts (tip) {
+  return !/\bthis run\b|\b(weekly|invitation) limit\b/i.test(String(tip || ''))
+}
+
 function irisSkillsFor (url) {
   const site = irisSiteOf(url)
   if (!site) return null
   const all = irisSkillsLoad()
-  const tips = (all[site] || []).map(function (t) { return t.tip })
+  const tips = (all[site] || []).map(function (t) { return t.tip }).filter(irisTipLasts)
   return tips.length ? { site: site, tips: tips } : null
 }
 
@@ -566,7 +572,7 @@ function irisSkillsForTask (task) {
     const parts = site.split('.')
     const name = parts.length > 1 ? parts[parts.length - 2] : site
     if (name.length >= 3 && words.indexOf(name) !== -1) {
-      ;(all[site] || []).forEach(function (t) { lines.push('- ' + site + ': ' + t.tip) })
+      ;(all[site] || []).forEach(function (t) { if (irisTipLasts(t.tip)) lines.push('- ' + site + ': ' + t.tip) })
     }
   })
   return lines.length ? 'Skills you learned before for this task:\n' + lines.slice(0, 15).join('\n') : ''
@@ -581,7 +587,7 @@ function irisLearn (url, tip) {
     const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('; '))
     text = end > 120 ? cut.slice(0, end + 1) : cut.replace(/\s+\S*$/, '') + '…'
   }
-  if (!site || !text) return
+  if (!site || !text || !irisTipLasts(text)) return
   const all = irisSkillsLoad()
   let list = all[site] || []
   if (list.some(function (t) { return t.tip.toLowerCase() === text.toLowerCase() })) return
