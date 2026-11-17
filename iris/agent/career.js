@@ -1794,7 +1794,8 @@ function linkedinLimitThought (thought) {
   const t = String(thought || '')
   // a thought that only repeats the note is no sighting: "the standing note says LinkedIn weekly limit — skip" on a
   // LinkedIn page (10-26) kept the limit in force night after night. A sighting says the page shows it.
-  if (/\b(per|from|in|by) (the |a |my )?(standing |system |iris |latest |earlier )?notes?\b|\bnoted\b|\b(task|note|notes) (says|said)\b|\bstanding note\b|\b(reached|seen|hit) (earlier|before)\b/i.test(t)) return false
+  // "my notes say the weekly invitation limit was reached" on a "Page isn't available" page (11-16) is the note too.
+  if (/\b(per|from|in|by) (the |a |my )?(standing |system |iris |latest |earlier )?notes?\b|\bnoted\b|\b(task|note|notes|rules?) (say|says|said)\b|\bstanding note\b|\b(reached|seen|hit) (earlier|before)\b/i.test(t)) return false
   return LINKEDIN_LIMIT.test(t) && /\b(shows?|showing|shown|says|pop-?up|dialog|modal|message|banner|appears|appeared|page)\b|["“']/i.test(t)
 }
 

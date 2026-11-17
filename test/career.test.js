@@ -375,6 +375,7 @@ test('LinkedIn weekly limit comes from a real sighting, not from the notes that 
   assert.ok(linkedinLimitThought('(high) LinkedIn shows "You\'ve reached the weekly invitation limit". Skip LinkedIn and go on.'))
   assert.ok(!linkedinLimitThought('(high) LinkedIn skipped (weekly limit per system note). Open the next job.'))
   assert.ok(!linkedinLimitThought('(medium) Weekly invitation limit was reached earlier; go on.'))
+  assert.ok(!linkedinLimitThought("(high) LinkedIn shows 'This LinkedIn Page isn't available' and my notes say the weekly invitation limit was reached this run. Per the rules, leave LinkedIn for the rest of this run."))
   assert.ok(!linkedinLimitThought('(high) Connect clicked; invitation sent.'))
 })
 
